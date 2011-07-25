@@ -1,0 +1,8 @@
+.DS_Store
+*.xcodeproj
+*.pyc
+/src/mozc_build_tools
+/src/mozc_version.txt
+/src/protobuf/files
+/src/third_party/*
+/src/out_*
