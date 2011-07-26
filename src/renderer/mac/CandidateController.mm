@@ -91,6 +91,25 @@ renderer::Rect GetNearestDisplayRect(int x, int y) {
     }
   }
 
+  // Make a visible rect which doesn't include Dock and menu bar area.
+  CGRect mainDisplayRect = CGDisplayBounds(CGMainDisplayID());
+  for (NSScreen *screen in [NSScreen screens]) {
+    // Lookup NSScreen for the specific displayID.
+    NSDictionary *deviceDescription = [screen deviceDescription];
+    NSNumber *screenNumber = [deviceDescription objectForKey:@"NSScreenNumber"];
+    if (screenNumber &&
+        displayID == (CGDirectDisplayID)[screenNumber intValue]) {
+      // This NSRect is using the left-bottom of main screen as its origin.
+      // renderer::Rect is using top-left, so need to convert it.
+      NSRect rect = [screen visibleFrame];
+      CGFloat y = mainDisplayRect.size.height - rect.origin.y -
+	              rect.size.height;
+      return renderer::Rect(rect.origin.x, y,
+                            rect.size.width, rect.size.height);
+    }
+  }
+
+  // should not reach here.
   CGRect display_rect = CGDisplayBounds(displayID);
   return renderer::Rect(display_rect.origin.x, display_rect.origin.y,
                         display_rect.size.width, display_rect.size.height);
