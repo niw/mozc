@@ -119,7 +119,7 @@ void RendererBaseWindow::InitWindow() {
   DLOG(INFO) << "RendererBaseWindow::InitWindow";
   // Creating Window
   ::Rect rect;
-  SetRect(&rect, 0, 0, 1, 1);
+  rect.top = 0; rect.left = 0; rect.right = 1; rect.bottom = 1;
   CreateNewWindow(kUtilityWindowClass,
                   kWindowNoTitleBarAttribute | kWindowCompositingAttribute |
                   kWindowStandardHandlerAttribute, &rect, &window_);
