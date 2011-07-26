@@ -917,12 +917,10 @@
       ],
     },
   ],
+  'includes': [
+    'qt_target_defaults.gypi',
+  ],
   'conditions': [
-    ['use_qt=="YES"', {
-      'includes': [
-        'qt_target_defaults.gypi',
-      ],
-    }],
     ['OS=="win"', {
       'targets': [
         {
