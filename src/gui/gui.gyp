@@ -995,9 +995,6 @@
       ],
     },
   ],
-  'includes': [
-    'qt_target_defaults.gypi',
-  ],
   'conditions': [
     ['OS=="win"', {
       'targets': [
