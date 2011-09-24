@@ -16,4 +16,13 @@ Extra steps to the original Build Instructions
 
  1. Checkout source code from this repository using `git` command.
  1. Run `checkout_externals.sh` instead of runing gclient command described in [the original instructions](http://code.google.com/p/mozc/wiki/MacBuildInstructions).
- 1. Follow instructions.
+ 1. Follow instructions. My build instraction is:
+
+        % ./checkout_externals.sh
+        % cd src
+        % python build_mozc.py clean && python build_mozc.py gyp --no-qt
+        % python build_mozc.py build_tools -c Debug
+        % python build_mozc.py build -c Debug mac/mac.gyp:GoogleJapaneseInput mac/mac.gyp:gen_launchd_confs
+        # Then, install Mozc into /Library then kill existing processes.
+        # which requires root priviledge.
+        % sudo sh ../install_mac.sh
