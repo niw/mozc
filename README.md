@@ -23,7 +23,7 @@ Extra steps to the original Build Instructions
          
         # Build Mozc itself.
         % cd src
-        % python build_mozc.py clean && python build_mozc.py gyp --no-qt
+        % python build_mozc.py clean && python build_mozc.py gyp --noqt
         % python build_mozc.py build_tools -c Debug
         % python build_mozc.py build -c Debug mac/mac.gyp:GoogleJapaneseInput mac/mac.gyp:gen_launchd_confs
          
