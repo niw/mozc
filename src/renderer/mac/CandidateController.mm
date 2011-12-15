@@ -106,8 +106,8 @@ mozc::Rect GetNearestDisplayRect(int x, int y) {
       NSRect rect = [screen visibleFrame];
       CGFloat y = mainDisplayRect.size.height - rect.origin.y -
 	              rect.size.height;
-      return renderer::Rect(rect.origin.x, y,
-                            rect.size.width, rect.size.height);
+      return mozc::Rect(rect.origin.x, y,
+                        rect.size.width, rect.size.height);
     }
   }
 
