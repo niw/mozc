@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -92,7 +92,7 @@ bool MozcConnection::TrySendKeyEvent(
   translator_->Translate(key, preedit_method_, &event);
 
   if ((composition_mode == mozc::commands::DIRECT) &&
-      !mozc::config::ImeSwitchUtil::IsTurnOnInDirectMode(event)) {
+      !mozc::config::ImeSwitchUtil::IsDirectModeCommand(event)) {
     VLOG(1) << "In DIRECT mode. Not consumed.";
     return false;  // not consumed.
   }

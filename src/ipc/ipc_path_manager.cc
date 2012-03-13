@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -137,11 +137,11 @@ void CreateIPCKey(char *value) {
   }
 #endif
 
-  // use rand() for failsafe
+  // use random value for failsafe
   if (error) {
     LOG(ERROR) << "make random key with rand()";
     for (size_t i = 0; i < sizeof(buf); ++i) {
-      buf[i] = static_cast<char>(rand() % 256);
+      buf[i] = static_cast<char>(Util::Random(256));
     }
   }
 

@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -82,6 +82,20 @@ class OAuth2Util {
   // Change the scope of authentification.
   // This method is used only in tests.
   void set_scope(const string &scope);
+
+  // Following getter functions are used in only unit tests.
+  string authenticate_uri_for_unittest() {
+    return authenticate_uri_;
+  }
+  string redirect_uri_for_unittest() {
+    return redirect_uri_;
+  }
+  string request_token_uri_for_unittest() {
+    return request_token_uri_;
+  }
+  string scope_for_unittest() {
+    return scope_;
+  }
 
  private:
   const OAuth2Client *client_;

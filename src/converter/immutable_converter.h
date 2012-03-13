@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -61,12 +61,10 @@ class ImmutableConverterImpl: public ImmutableConverterInterface {
   FRIEND_TEST(ImmutableConverterTest, DummyCandidatesCost);
   FRIEND_TEST(ImmutableConverterTest, PredictiveNodesOnlyForConversionKey);
   FRIEND_TEST(ImmutableConverterTest, AddPredictiveNodes);
-  FRIEND_TEST(ImmutableConverterTest, PromoteUserDictionaryCandidate);
 
   void ExpandCandidates(NBestGenerator *nbest, Segment *segment,
                         Segments::RequestType request_type,
                         size_t expand_size) const;
-  void PromoteUserDictionaryCandidate(Segment *segment) const;
   void InsertDummyCandidates(Segment *segment, size_t expand_size) const;
   Node *Lookup(const int begin_pos, const int end_pos,
                bool is_reverse,

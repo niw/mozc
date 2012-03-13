@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -51,6 +51,13 @@ class RbxArrayBuilder {
 
   // Build array
   void Build();
+
+  // Returns a byte array of the image.
+  // The instance owns the returned object.
+  const char *GetImageBody() const;
+
+  // Returns the size of the image.
+  int GetImageSize() const;
 
   // Write image of array
   void WriteImage(OutputFileStream *ofs) const;

@@ -1,4 +1,4 @@
-# Copyright 2010-2011, Google Inc.
+# Copyright 2010-2012, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -202,21 +202,12 @@
           ],
         }, {  # OS=="linux"
           'conditions': [
-            ['use_libgtest==0', {
+            ['use_libprotobuf==0', {
               'includes' : [
                 '../gyp/install_build_tool.gypi',
               ],
             }],
           ],
-        }],
-        ['OS=="win"', {
-          'msvs_settings': {
-            'VCCLCompilerTool': {
-              'DisableSpecificWarnings': [
-                '<@(msvc_disabled_warnings_for_protoc)'
-              ],
-            },
-          },
         }],
       ],
     },

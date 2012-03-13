@@ -1,4 +1,4 @@
-# Copyright 2010-2011, Google Inc.
+# Copyright 2010-2012, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -52,10 +52,12 @@
         'number_rewriter_test.cc',
         'normalization_rewriter_test.cc',
         'remove_redundant_candidate_rewriter_test.cc',
+        'rewriter_test.cc',
         'symbol_rewriter_test.cc',
         'transliteration_rewriter_test.cc',
         'unicode_rewriter_test.cc',
         'user_boundary_history_rewriter_test.cc',
+        'user_dictionary_rewriter_test.cc',
         'user_segment_history_rewriter_test.cc',
         'variants_rewriter_test.cc',
         'version_rewriter_test.cc'
@@ -63,6 +65,7 @@
       'dependencies': [
         '../base/base.gyp:base',
         '../converter/converter.gyp:converter',
+        '../session/session_base.gyp:request_test_util',
         '../testing/testing.gyp:gtest_main',
         'calculator/calculator.gyp:calculator_mock',
         'rewriter.gyp:rewriter',
@@ -87,6 +90,7 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
+        '../session/session_base.gyp:request_test_util',
         '../testing/testing.gyp:gtest_main',
         'rewriter.gyp:rewriter',
       ],

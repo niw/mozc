@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -174,6 +174,7 @@ bool UserBoundaryHistoryRewriter::Reload() {
                               kValueSize, kLRUSize, kSeedValue)) {
     LOG(WARNING) << "cannot initialize UserBoundaryHistoryRewriter";
     storage_.reset(NULL);
+    g_lru_storage = NULL;
     return false;
   }
 
@@ -185,7 +186,7 @@ bool UserBoundaryHistoryRewriter::Reload() {
   return true;
 }
 
-//TODO(taku): split Reize/Insert into different functions
+// TODO(taku): split Reize/Insert into different functions
 bool UserBoundaryHistoryRewriter::ResizeOrInsert(Segments *segments,
                                                  int type) const {
   bool result = false;

@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -39,13 +39,16 @@
 #include "session/session_usage_observer.h"
 #include "usage_stats/usage_stats.h"
 
+#ifdef ENABLE_CLOUD_SYNC
+#include "sync/sync_handler.h"
+#endif  // ENABLE_CLOUD_SYNC
 
 namespace {
 const int kNumConnections = 10;
 const int kTimeOut = 5000;  // 5000msec
 const char kSessionName[] = "session";
 const char kEventName[] = "session";
-}
+}  // namespace
 
 namespace mozc {
 
@@ -70,6 +73,10 @@ SessionServer::SessionServer()
       &UsageStats::Send,
       NULL));
 
+#ifdef ENABLE_CLOUD_SYNC
+  Scheduler::AddJob(
+      sync::SyncHandler::GetSchedulerJobSetting());
+#endif  // ENABLE_CLOUD_SYNC
 
   // Send a notification event to the UI.
   NamedEventNotifier notifier(kEventName);

@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -47,11 +47,18 @@ class UserDictionary : public DictionaryInterface {
   UserDictionary();
   virtual ~UserDictionary();
 
-  virtual Node *LookupPredictive(const char *str, int size,
-                                 NodeAllocatorInterface *allocator) const;
+  virtual Node *LookupPredictiveWithLimit(
+      const char *str, int size, const Limit &limit,
+      NodeAllocatorInterface *allocator) const;
+  virtual Node *LookupPredictive(
+      const char *str, int size,
+      NodeAllocatorInterface *allocator) const;
   virtual Node *LookupPrefixWithLimit(
       const char *str, int size,
       const Limit &limit,
+      NodeAllocatorInterface *allocator) const;
+  virtual Node *LookupPrefix(
+      const char *str, int size,
       NodeAllocatorInterface *allocator) const;
   virtual Node *LookupReverse(const char *str, int size,
                               NodeAllocatorInterface *allocator) const;
@@ -85,6 +92,9 @@ class UserDictionary : public DictionaryInterface {
 
   vector<UserPOS::Token *> tokens_;
   mutable scoped_ptr<UserDictionaryReloader> reloader_;
+
+  const Limit empty_limit_;
+
   DISALLOW_COPY_AND_ASSIGN(UserDictionary);
 };
 }  // namespace mozc

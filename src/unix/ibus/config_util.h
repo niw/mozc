@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -62,7 +62,7 @@ class ConfigUtil {
   // Find the related field in |result| message by |name| and update
   // its value to |value|.  This function does not take ownership of
   // the |value|.
-  static void SetFieldForName(const gchar *name,
+  static bool SetFieldForName(const gchar *name,
 #if IBUS_CHECK_VERSION(1, 3, 99)
                               GVariant *value,
 #else

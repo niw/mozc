@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -128,7 +128,7 @@ bool SVM::Train(const vector<double> &y,  // label
       PGmax_new = max(PGmax_new, PG);
       PGmin_new = min(PGmin_new, PG);
 
-      if (abs(PG) > 1.0e-12) {
+      if (fabs(PG) > 1.0e-12) {
         const double alpha_old = alpha[i];
         alpha[i] = min(max(alpha[i] - G/QD[i], 0.0), C);
         const double d = (alpha[i] - alpha_old)* y[i];

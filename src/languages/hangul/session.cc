@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -42,7 +42,7 @@
 #include "base/singleton.h"
 #include "base/util.h"
 #include "config/config_handler.h"
-#include "session/internal/keymap.h"
+#include "session/key_event_util.h"
 #include "session/key_parser.h"
 
 using mozc::commands::KeyEvent;
@@ -88,7 +88,7 @@ bool SetPreeditToOutput(const string &text, commands::Output *output) {
     return false;
   }
   // In hangul, count of segment is always 1.
-  DCHECK(output->preedit().segment_size() == 0);
+  DCHECK_EQ(0, output->preedit().segment_size());
   const size_t unicode_length = Util::CharsLen(text);
   commands::Preedit::Segment *segment =
       output->mutable_preedit()->add_segment();
@@ -152,7 +152,7 @@ class HangulConfigMap {
   }
 
   static bool AddKeySetByKeyString(string key_string,
-                                   set<keymap::Key> *key_set) {
+                                   set<KeyInformation> *key_set) {
     DCHECK(key_set);
 
     if (key_string.empty()) {
@@ -165,8 +165,8 @@ class HangulConfigMap {
       return false;
     }
 
-    keymap::Key key;
-    if (!keymap::GetKey(key_event, &key)) {
+    KeyInformation key;
+    if (!KeyEventUtil::GetKeyInformation(key_event, &key)) {
       return false;
     }
 
@@ -393,6 +393,7 @@ void Session::UpdateCandidate(CandidateOperation candidate_operation,
 
   candidates->set_focused_index(hanja_index_);
   candidates->set_direction(commands::Candidates::HORIZONTAL);
+  candidates->set_position(0);
 }
 
 // TODO(nona): make backspace key customizable.
@@ -754,8 +755,8 @@ bool Session::SendKey(commands::Command *command) {
     key_event->clear_special_key();
   }
 
-  keymap::Key key;
-  keymap::GetKey(command->input().key(), &key);
+  KeyInformation key;
+  KeyEventUtil::GetKeyInformation(command->input().key(), &key);
   if (hanja_key_set_.find(key) != hanja_key_set_.end()) {
     key_event->clear_key_code();
     key_event->clear_modifiers();
@@ -820,6 +821,9 @@ bool Session::SendCommand(commands::Command *command) {
           break;
       }
       hanja_lock_preedit_.clear();
+      // status is never used in hangul, followin value is dummy.
+      command->mutable_output()->mutable_status()->set_mode(commands::HIRAGANA);
+      command->mutable_output()->mutable_status()->set_activated(true);
       break;
     default:
       // do nothing.

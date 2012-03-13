@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -28,12 +28,6 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "base/scheduler.h"
-
-#ifdef OS_WINDOWS
-#include <time.h>  // time()
-#else
-#include <sys/time.h>  // time()
-#endif
 
 #include <cstdlib>
 #include <map>
@@ -140,7 +134,7 @@ class Job {
 class SchedulerImpl : public Scheduler::SchedulerInterface {
  public:
   SchedulerImpl() {
-    srand(static_cast<uint32>(time(NULL)));
+    Util::SetRandomSeed(static_cast<uint32>(Util::GetTime()));
   }
 
   virtual ~SchedulerImpl() {
@@ -241,7 +235,7 @@ class SchedulerImpl : public Scheduler::SchedulerInterface {
   uint32 CalcDelay(const Scheduler::JobSetting &job_setting) {
     uint32 delay = job_setting.delay_start();
     if (job_setting.random_delay() != 0) {
-      const uint64 r = rand();
+      const uint64 r = Util::Random(RAND_MAX);
       const uint64 d = job_setting.random_delay() * r;
       const uint64 random_delay = d / RAND_MAX;
       delay += random_delay;

@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -27,29 +27,31 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include "session/commands.pb.h"
-#include "session/mock_session_handler.h"
-#include "session/session_handler_interface.h"
-#include "testing/base/public/gunit.h"
-#include "testing/base/public/googletest.h"
+// This header file intentionally does not have include guard because
+// the purpose of this header file is embedding boilerplate code and
+// you may want to use this header file multiple times from a file.
 
-namespace mozc {
-bool IsGoodSession(SessionHandlerInterface *handler, uint64 id) {
-  commands::Command command;
-  command.mutable_input()->set_id(id);
-  command.mutable_input()->set_type(commands::Input::SEND_KEY);
-  command.mutable_input()->mutable_key()->set_special_key(
-      commands::KeyEvent::SPACE);
-  handler->EvalCommand(&command);
-  return (command.output().error_code() == commands::Output::SESSION_SUCCESS);
-}
+// This header file provides a generic way to restore compiler's warning
+// settings saved by "push_warning_settings.h" so that you can disable
+// some unavoidable warnings temporarily.
+// Currently Visual C++, GCC 4.6 and later, and clang are supported.
+// On GCC 4.5 and prior, this header does nothing.
+//
+// Usage example:
+//   #include "base/push_warning_settings.h"
+//   #if defined(__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__ >= 405)
+//   #pragma GCC diagnostic ignored "-Wconversion-null"
+//   #endif  // GCC 4.5 and greater
+//   EXPECT_EQ(false, false);
+//   #include "base/pop_warning_settings.h"
 
-TEST(MockSessionHandlerTest, BaseTest) {
-  {
-    MockSessionHandler handler;
-    // Mock session handler returns successful responses
-    // for SEND_KEY requests with any session id.
-    EXPECT_TRUE(IsGoodSession(&handler, 1));
-  }
-}
-}  // namespace mozc
+#if defined(_MSC_VER)
+  // Visual C++
+  #pragma warning(pop)
+#elif defined(__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__ >= 406)
+  // G++ 4.6 and greater
+  #pragma GCC diagnostic pop
+#elif defined(__clang__)
+  // Clang
+  #pragma clang diagnostic pop
+#endif

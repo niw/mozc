@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -29,6 +29,10 @@
 
 #include "renderer/win32/window_manager.h"
 
+#undef min
+#undef max
+#include <limits>
+
 #define _ATL_NO_AUTOMATIC_NAMESPACE
 #define _WTL_NO_AUTOMATIC_NAMESPACE
 
@@ -50,7 +54,7 @@ namespace win32 {
 using WTL::CPoint;
 using WTL::CRect;
 namespace {
-const int kHideWindowDelay = 500;  // msec
+const uint32 kHideWindowDelay = 500;  // msec
 const POINT kInvalidMousePosition = {-65535, -65535};
 
 CRect GetPreeditRect(const commands::RendererCommand &command) {
@@ -322,7 +326,7 @@ void WindowManager::UpdateLayout(
             working_area);
   }
 
-  DWORD set_windows_pos_flags = SWP_NOACTIVATE | SWP_SHOWWINDOW;
+  const DWORD set_windows_pos_flags = SWP_NOACTIVATE | SWP_SHOWWINDOW;
   main_window_->SetWindowPos(HWND_TOPMOST,
                              main_window_rect.Left(),
                              main_window_rect.Top(),
@@ -366,19 +370,34 @@ void WindowManager::UpdateLayout(
                                  TRUE);
     infolist_window_->SetWindowPos(HWND_TOPMOST, 0, 0, 0, 0,
         SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+
+    const int mode =
+        Singleton<LayoutManager>().get()->GetCompatibilityMode(app_info);
+
+    // If SHOW_INFOLIST_IMMEDIATELY flag is set, we should show the InfoList
+    // without delay. See the comment of SHOW_INFOLIST_IMMEDIATELY in
+    // win32_renderer_util.h or b/5824433 for details.
+    uint32 maximum_delay = numeric_limits<int32>::max();
+    if ((mode & SHOW_INFOLIST_IMMEDIATELY) == SHOW_INFOLIST_IMMEDIATELY) {
+      maximum_delay = 0;
+    }
+
+    const uint32 hide_window_delay = min(maximum_delay, kHideWindowDelay);
     if (candidates.has_focused_index() && candidates.candidate_size() > 0) {
       const int focused_row =
         candidates.focused_index() - candidates.candidate(0).index();
       if (candidates.candidate_size() >= focused_row &&
           candidates.candidate(focused_row).has_information_id()) {
-        const int32 delay =
-            max(0, command.output().candidates().usages().delay());
+        const uint32 raw_delay =
+            max(static_cast<uint32>(0),
+                command.output().candidates().usages().delay());
+        const uint32 delay = min(maximum_delay, raw_delay);
         infolist_window_->DelayShow(delay);
       } else {
-        infolist_window_->DelayHide(kHideWindowDelay);
+        infolist_window_->DelayHide(hide_window_delay);
       }
     } else {
-      infolist_window_->DelayHide(kHideWindowDelay);
+      infolist_window_->DelayHide(hide_window_delay);
     }
   } else {
     // Hide infolist window immediately.

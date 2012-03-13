@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -78,7 +78,6 @@ bool DictionaryMockTest::SearchMatchingNode(const string &key,
 
 Token *DictionaryMockTest::CreateToken(const string &key, const string &value) {
   Token *token = new Token;
-  memset(token, 0, sizeof(*token));
   token->key = key;
   token->value = value;
   return token;

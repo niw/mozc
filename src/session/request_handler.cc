@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -27,55 +27,25 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Normalizer of key events
+// Handler of mozc clients' request.
 
-#ifndef MOZC_SESSION_KEY_EVENT_NORMALIZER_H_
-#define MOZC_SESSION_KEY_EVENT_NORMALIZER_H_
+#include "session/request_handler.h"
 
-#include "base/base.h"
+#include "session/commands.pb.h"
 
 namespace mozc {
 namespace commands {
-class KeyEvent;
+
+Request RequestHandler::request_;
+
+// return current Request
+const Request &RequestHandler::GetRequest() {
+  return request_;
 }
 
-class KeyEventNormalizer {
- public:
-  static bool ToUint64(const commands::KeyEvent &key_event, uint64 *key) {
-    const uint16 modifier_keys = GetModifiers(key_event);
-    const uint16 special_key = key_event.has_special_key() ?
-      key_event.special_key() : commands::KeyEvent::NO_SPECIALKEY;
-    const uint32 key_code = key_event.has_key_code() ?
-      key_event.key_code() : 0;
-
-    // Make sure the translation from the obsolete spesification.
-    // key_code should no longer contain control characters.
-    if (0 < key_code && key_code <= 32) {
-      return false;
-    }
-
-    // uint64 = |Modifiers(16bit)|SpecialKey(16bit)|Unicode(32bit)|.
-    *key = (static_cast<uint64>(modifier_keys) << 48) +
-      (static_cast<uint64>(special_key) << 32) + static_cast<uint64>(key_code);
-    return true;
-  }
- private:
-  static uint16 GetModifiers(const commands::KeyEvent &key_event) {
-    uint16 modifiers = 0;
-    if (key_event.has_modifiers()) {
-      modifiers = key_event.modifiers();
-    } else {
-      for (size_t i = 0; i < key_event.modifier_keys_size(); ++i) {
-        modifiers |= key_event.modifier_keys(i);
-      }
-    }
-    return modifiers;
-  }
-
-  // Should never been allocated.
-  DISALLOW_COPY_AND_ASSIGN(KeyEventNormalizer);
-};
-
+// set request
+void RequestHandler::SetRequest(const Request &request) {
+  request_.CopyFrom(request);
+}
+}  // namespace commands
 }  // namespace mozc
-
-#endif  // MOZC_SESSION_KEY_EVENT_NORMALIZER_H_

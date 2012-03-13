@@ -1,4 +1,4 @@
-# Copyright 2010-2011, Google Inc.
+# Copyright 2010-2012, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,31 @@
       'dependencies': [
         'handwriting_manager_test',
       ],
+      'conditions': [
+        ['enable_cloud_handwriting==1', {
+          'dependencies': [
+            'cloud_handwriting_test',
+          ],
+        }],
+      ],
     },
+  ],
+  'conditions': [
+    ['enable_cloud_handwriting==1', {
+      'targets': [
+        {
+          'target_name': 'cloud_handwriting_test',
+          'type': 'executable',
+           'sources': [
+            'cloud_handwriting_test.cc',
+          ],
+          'dependencies': [
+            '../base/base.gyp:base',
+            '../testing/testing.gyp:gtest_main',
+            'handwriting.gyp:cloud_handwriting',
+          ],
+        },
+      ],
+    }],
   ],
 }

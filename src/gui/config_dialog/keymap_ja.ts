@@ -36,6 +36,10 @@
         <translation>キャンセル</translation>
     </message>
     <message>
+        <source>CancelAndIMEOff</source>
+        <translation>キャンセル後 IME を無効化</translation>
+    </message>
+    <message>
         <source>Revert</source>
         <translation>最後の学習をキャンセル</translation>
     </message>
@@ -242,10 +246,6 @@
     <message>
         <source>Undo</source>
         <translation>確定取り消し</translation>
-    </message>
-    <message>
-        <source>SegmentFocusRightOrCommit</source>
-        <translation>文節を右に移動または確定</translation>
     </message>
     <message>
         <source>Reconvert</source>

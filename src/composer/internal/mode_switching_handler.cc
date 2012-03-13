@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -98,6 +98,8 @@ void ModeSwitchingHandler::Reload() {
   AddRule("Google", PREFERRED_ALPHANUMERIC, REVERT_TO_PREVIOUS_MODE);
   AddRule("Chrome", PREFERRED_ALPHANUMERIC, REVERT_TO_PREVIOUS_MODE);
   AddRule("chrome", PREFERRED_ALPHANUMERIC, REVERT_TO_PREVIOUS_MODE);
+  AddRule("Android", PREFERRED_ALPHANUMERIC, REVERT_TO_PREVIOUS_MODE);
+  AddRule("android", PREFERRED_ALPHANUMERIC, REVERT_TO_PREVIOUS_MODE);
   AddRule("http", HALF_ALPHANUMERIC, HALF_ALPHANUMERIC);
   AddRule("www.", HALF_ALPHANUMERIC, HALF_ALPHANUMERIC);
   AddRule("\\\\", HALF_ALPHANUMERIC, HALF_ALPHANUMERIC);

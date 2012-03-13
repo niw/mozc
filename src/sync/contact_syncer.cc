@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -96,7 +96,7 @@ bool ContactSyncer::Sync(bool *reload_required) {
   UserDictionaryStorage dict_storage(dict_file);
   dict_storage.Load();
   UserDictionarySyncUtil::MergeUpdate(remote_update, &dict_storage);
-  if (!UserDictionarySyncUtil::LockAndSaveStorage(&dict_storage)) {
+  if (!UserDictionarySyncUtil::VerifyLockAndSaveStorage(&dict_storage)) {
     return false;
   }
 

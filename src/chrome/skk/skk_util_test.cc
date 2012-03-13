@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -170,8 +170,8 @@ TEST(SkkUtilTest, LookupEntryTest) {
           kDictionaryData_data, kDictionaryData_size);
   ASSERT_TRUE(dictionary != NULL);
 
-  // 'ことのは'
-  const char *kQuery = "\xE3\x81\x93\xE3\x81\xA8\xE3\x81\xAE\xE3\x81\xAF";
+  // 'ことの'
+  const char *kQuery = "\xE3\x81\x93\xE3\x81\xA8\xE3\x81\xAE";
   vector<string> candidates, predictions;
   SkkUtil::LookupEntry(dictionary, kQuery, &candidates, &predictions);
   EXPECT_GT(candidates.size(), 0);

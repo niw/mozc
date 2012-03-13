@@ -1,4 +1,4 @@
-# Copyright 2010-2011, Google Inc.
+# Copyright 2010-2012, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -34,13 +34,6 @@
 # http://src.chromium.org/viewvc/chrome/trunk/src/build/common.gypi
 {
   'variables': {
-    # By default, we build mozc in two passes to avoid unnecessary code
-    # generation. For instance, it takes quite some time to generate
-    # embedded_dictionary_data.h. If we build mozc in one pass, we end up
-    # invoking the code generation every time code used in the code
-    # generation tool is changed. In fact, a comment fix in 'base/util.h'
-    # causes the code generation. We want to avoid that.
-    'two_pass_build%': 1,
     # This variable need to be set to 1 when you build Mozc for Chromium OS.
     'chromeos%': 0,
     # Extra libraries for Linux. This can be used like:
@@ -119,7 +112,7 @@
 
     # use_libprotobuf represents if protobuf library is used or not.
     # This option is only for Linux.
-    'use_libprotobuf%': 1,
+    'use_libprotobuf%': 0,
 
     # use_libzinnia represents if zinnia library is used or not.
     # This option is only for Linux.
@@ -129,6 +122,14 @@
     # This option is only for Linux.
     'use_libxml%': 1,
 
+    # use_libibus represents if ibus library is used or not.
+    # This option is only for Linux.
+    'use_libibus%': 0,
+
+    # use_libscim represents if scim library is used or not.
+    # This option is only for Linux.
+    'use_libscim%': 0,
+
     # a flag whether the current build is dev-channel or not.
     'channel_dev%': '0',
 
@@ -137,6 +138,17 @@
     # (e.g. extra CFLAGS), also creates a new target in the src/chrome
     # project file called "coverage".
     'coverage%': 0,
+
+    # enable_cloud_sync represents if cloud sync feature is enabled or not.
+    'enable_cloud_sync%': 0,
+
+    # enable_cloud_handwriting represents if cloud handwriting feature is
+    # enabled or not.
+    'enable_cloud_handwriting%': 0,
+
+    # enable_webservice_infolist represents if webservice infolist feature is
+    # enabled or not.
+    'enable_webservice_infolist%': 0,
 
     # The pkg-config command to get the cflags/ldflags for Linux
     # builds.  We make it customizable to allow building in a special
@@ -197,6 +209,21 @@
               '<@(linux_ldflags)',
             ],
           }],
+          ['use_separate_connection_data==1', {
+            'defines': ['MOZC_USE_SEPARATE_CONNECTION_DATA'],
+          }],
+          ['use_separate_dictionary==1', {
+            'defines': ['MOZC_USE_SEPARATE_DICTIONARY'],
+          }],
+          ['enable_cloud_sync==1', {
+            'defines': ['ENABLE_CLOUD_SYNC'],
+          }],
+          ['enable_cloud_handwriting==1', {
+            'defines': ['ENABLE_CLOUD_HANDWRITING'],
+          }],
+          ['enable_webservice_infolist==1', {
+            'defines': ['ENABLE_WEBSERVICE_INFOLIST'],
+          }],
         ],
       },
       'x86_Base': {
@@ -231,7 +258,24 @@
             'Optimization': '<(win_optimization_debug)',
             'PreprocessorDefinitions': ['_DEBUG'],
             'BasicRuntimeChecks': '3',
-            'RuntimeLibrary': '<(win_debug_static_crt)',
+            'conditions': [
+              ['use_dynamically_linked_qt=="YES"', {
+                # As a quick workaround, use dynamically-linked version of CRT
+                # if 'use_dynamically_linked_qt' is specified.
+                # As for GoogleJapaneseInput branding build, this is not enough
+                # because we cannot completely depend on dynamic CRT as
+                # described in b/2506385. We should use static CRT for the
+                # following binaries.
+                # - GoogleIMEJaCacheService.exe
+                # - GoogleIMEJaInstallerHelper32.dll
+                # - GoogleIMEJaInstallerHelper64.dll
+                # - any artifacts build in 'build_mozc.py build_tools'
+                # TODO(yukawa): Support GoogleJapaneseInput branding build.
+                'RuntimeLibrary': '<(win_debug_dynamic_crt)',
+              }, {  # else
+                'RuntimeLibrary': '<(win_debug_static_crt)',
+              }],
+            ],
           },
           'VCResourceCompilerTool': {
             'PreprocessorDefinitions': ['_DEBUG'],
@@ -273,7 +317,24 @@
             # are built with /O2.  We use the same optimization option between
             # Mozc and Qt just in case warning C4748 is true.
             'Optimization': '<(win_optimization_release)',
-            'RuntimeLibrary': '<(win_release_static_crt)',
+            'conditions': [
+              ['use_dynamically_linked_qt=="YES"', {
+                # As a quick workaround, use dynamically-linked version of CRT
+                # if 'use_dynamically_linked_qt' is specified.
+                # As for GoogleJapaneseInput branding build, this is not enough
+                # because we cannot completely depend on dynamic CRT as
+                # described in b/2506385. We should use static CRT for the
+                # following binaries.
+                # - GoogleIMEJaCacheService.exe
+                # - GoogleIMEJaInstallerHelper32.dll
+                # - GoogleIMEJaInstallerHelper64.dll
+                # - any artifacts build in 'build_mozc.py build_tools'
+                # TODO(yukawa): Support GoogleJapaneseInput branding build.
+                'RuntimeLibrary': '<(win_release_dynamic_crt)',
+              }, {  # else
+                'RuntimeLibrary': '<(win_release_static_crt)',
+              }],
+            ],
           },
         },
         'conditions': [
@@ -346,33 +407,36 @@
             'inherit_from': ['Optimize_x64', 'Release_Base'],
           },
         }],
+        ['target_platform=="Linux" and nacl_sdk_root!=""', {
+          # The following configurations, i.e. directories, are meant for binary
+          # files built with an NaCl toolchain.
+          # A special hack in build_for_nacl.py sets environment variables such
+          # as CC, LD, etc., so it builds NaCl binaries in these directories.
+          'Debug_NaCl_i686': {
+            'inherit_from': ['Common_Base', 'Debug_Base'],
+          },
+          'Release_NaCl_i686': {
+            'inherit_from': ['Common_Base', 'Optimize_Base', 'Release_Base'],
+          },
+          'Debug_NaCl_x86-64': {
+            'inherit_from': ['Common_Base', 'Debug_Base'],
+          },
+          'Release_NaCl_x86-64': {
+            'inherit_from': ['Common_Base', 'Optimize_Base', 'Release_Base'],
+          },
+        }],
       ],
-      # The following configurations, i.e. directories, are meant for binary
-      # files built with an NaCl toolchain.
-      # A special hack in build_for_nacl.py sets environment variables such as
-      # CC, LD, etc., so it builds NaCl binaries in these directories.
-      'Debug_NaCl_i686': {
-        'inherit_from': ['Common_Base', 'Debug_Base'],
-      },
-      'Release_NaCl_i686': {
-        'inherit_from': ['Common_Base', 'Optimize_Base', 'Release_Base'],
-      },
-      'Debug_NaCl_x86-64': {
-        'inherit_from': ['Common_Base', 'Debug_Base'],
-      },
-      'Release_NaCl_x86-64': {
-        'inherit_from': ['Common_Base', 'Optimize_Base', 'Release_Base'],
-      },
     },
     'default_configuration': 'Debug',
     'defines': [
       # For gtest
-      'GTEST_HAS_TR1_TUPLE=0',
-      # For gtest
+      'GTEST_HAS_TR1_TUPLE=1',
     ],
     'include_dirs': [
       '<(DEPTH)',
       '<(DEPTH)/third_party/breakpad/src',
+      '<(DEPTH)/third_party/gmock/include',
+      '<(DEPTH)/third_party/gtest/include',  # for FRIEND_TEST
       '<(SHARED_INTERMEDIATE_DIR)',
       '<(SHARED_INTERMEDIATE_DIR)/proto_out',
     ],
@@ -516,6 +580,7 @@
       ['OS=="linux"', {
         'defines': [
           'OS_LINUX',
+          'MOZC_SERVER_DIRECTORY="<@(server_dir)"',
         ],
         'cflags': [
           '<@(gcc_cflags)',

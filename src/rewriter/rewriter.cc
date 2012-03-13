@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,7 @@
 #include "rewriter/transliteration_rewriter.h"
 #include "rewriter/unicode_rewriter.h"
 #include "rewriter/user_boundary_history_rewriter.h"
+#include "rewriter/user_dictionary_rewriter.h"
 #include "rewriter/user_segment_history_rewriter.h"
 #include "rewriter/variants_rewriter.h"
 #include "rewriter/version_rewriter.h"
@@ -66,6 +67,7 @@ class RewriterImpl : public MergerRewriter {
 };
 
 RewriterImpl::RewriterImpl() {
+  AddRewriter(new UserDictionaryRewriter);
   AddRewriter(new FocusCandidateRewriter);
   AddRewriter(new TransliterationRewriter);
   AddRewriter(new EnglishVariantsRewriter);
@@ -86,7 +88,7 @@ RewriterImpl::RewriterImpl() {
   }
   AddRewriter(new DateRewriter);
   AddRewriter(new FortuneRewriter);
-//  AddRewriter(new CommandRewriter);
+  AddRewriter(new CommandRewriter);
   AddRewriter(new VersionRewriter);
 #if defined(OS_MACOSX) || defined(OS_WINDOWS) || defined(OS_CHROMEOS)
   // TODO(horo): Because infolist renderer window is implimented

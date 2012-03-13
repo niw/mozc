@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -112,6 +112,11 @@ CandidateFilter::ResultType CandidateFilter::FilterCandidateInternal(
   }
 
   CHECK(top_candidate_);
+
+  // Don't remove duplications if USER_DICTIONARY.
+  if (candidate->attributes & Segment::Candidate::USER_DICTIONARY) {
+    return CandidateFilter::GOOD_CANDIDATE;
+  }
 
   // too many candidates size
   if (candidate_size + 1 >= kMaxCandidatesSize) {

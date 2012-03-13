@@ -36,6 +36,10 @@
         <translation>Cancel</translation>
     </message>
     <message>
+        <source>CancelAndIMEOff</source>
+        <translation>Cancel and deactivate IME</translation>
+    </message>
+    <message>
         <source>Revert</source>
         <translation>Cancel the last preference learning</translation>
     </message>
@@ -242,10 +246,6 @@
     <message>
         <source>Undo</source>
         <translation>Undo</translation>
-    </message>
-    <message>
-        <source>SegmentFocusRightOrCommit</source>
-        <translation>Move segment focus right or commit segment</translation>
     </message>
     <message>
         <source>Reconvert</source>

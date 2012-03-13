@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -73,6 +73,10 @@ class RxTrie {
   // * Do not call ReverseLookup for the missing id. *
   // It will cause infinite loop.
   void ReverseLookup(int id, string *key) const;
+
+  // Searches the key string and returns the id of it.
+  // Returns -1 if key is not found.
+  int GetIdFromKey(const string &key) const;
 
  private:
   enum SearchType {

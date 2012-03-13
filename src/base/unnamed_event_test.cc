@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -95,4 +95,18 @@ TEST(UnnamedEventTest, UnnamedEventTest) {
     EXPECT_TRUE(event.Wait(5000));
     t.Join();
   }
+}
+
+TEST(UnnamedEventTest, NotifyBeforeWait) {
+  mozc::UnnamedEvent event;
+  ASSERT_TRUE(event.Notify());
+  EXPECT_TRUE(event.Wait(100));
+}
+
+TEST(UnnamedEventTest, DoubleNotifyBeforeWait) {
+  mozc::UnnamedEvent event;
+  ASSERT_TRUE(event.Notify());
+  ASSERT_TRUE(event.Notify());
+  EXPECT_TRUE(event.Wait(100));
+  EXPECT_FALSE(event.Wait(100));
 }

@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -43,8 +43,7 @@ int main(int argc, char **argv) {
   mozc::composer::Table table;
   table.LoadFromFile(FLAGS_table.c_str());
 
-  mozc::composer::Composition composition;
-  composition.SetTable(&table);
+  mozc::composer::Composition composition(&table);
 
   string command;
   string result;

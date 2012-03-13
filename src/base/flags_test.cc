@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,7 @@ char *strdup_with_new(const char *str) {
 
 namespace {
 TEST(FlagsTest, FlagsBasicTest) {
-  EXPECT_EQ(false, FLAGS_test_bool);
+  EXPECT_FALSE(FLAGS_test_bool);
   EXPECT_EQ(20, FLAGS_test_int32);
   EXPECT_EQ(29051773239673121LL, FLAGS_test_int64);
   EXPECT_EQ(84467440737095516LL, FLAGS_test_uint64);

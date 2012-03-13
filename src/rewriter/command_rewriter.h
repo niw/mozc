@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -61,7 +61,6 @@ class CommandRewriter: public RewriterInterface  {
   void InsertIncognitoModeToggleCommand(Segment *segment,
                                         size_t reference_pos,
                                         size_t insert_pos) const;
-  void ApplyIncognitoModeToggleCommand(const Segment &segment);
 
   // Insert a new IncogitoModeToggle Command candidate.
   // Use segment->candidate(base_pos) as a reference candidate.
@@ -70,7 +69,6 @@ class CommandRewriter: public RewriterInterface  {
   void InsertDisableAllSuggestionToggleCommand(Segment *segment,
                                                size_t reference_pos,
                                                size_t insert_pos) const;
-  void ApplyDisableAllSuggestionToggleCommand(const Segment &segment);
 };
 }
 #endif  // MOZC_REWRITER_COMMAND_REWRITER_H_

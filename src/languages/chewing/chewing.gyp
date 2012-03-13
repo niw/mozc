@@ -1,4 +1,4 @@
-# Copyright 2010-2011, Google Inc.
+# Copyright 2010-2012, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -42,8 +42,8 @@
       ],
       'dependencies': [
         '../../base/base.gyp:base',
-        '../../config/config.gyp:genproto_config',
-        '../../session/session_base.gyp:genproto_session',
+        '../../session/session_base.gyp:key_event_util',
+        '../../session/session_base.gyp:session_protocol',
       ],
       'includes': [
         'chewing_libraries.gypi',
@@ -70,7 +70,7 @@
             'unix/ibus/mozc_engine_property.cc',
           ],
           'dependencies': [
-            '../../session/session_base.gyp:genproto_session',
+            '../../session/session_base.gyp:session_protocol',
           ],
           'includes': [
             '../../unix/ibus/ibus_libraries.gypi',
@@ -93,8 +93,9 @@
           ],
           'conditions': [
             ['chromeos==1', {
-             'dependencies+': [
-               '../../config/config.gyp:genproto_config',
+             'dependencies': [
+               '../../config/config.gyp:config_handler',
+               '../../config/config.gyp:config_protocol',
                'chewing_session',
              ],
              'sources+': [

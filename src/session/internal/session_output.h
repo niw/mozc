@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -115,6 +115,13 @@ class SessionOutput {
                          const string &value,
                          uint32 segment_type_mask,
                          commands::Preedit *preedit);
+
+  // Fill the Result protobuf with the key and result strings
+  // for a conversion result without any text normalization.
+  static void FillConversionResultWithoutNormalization(
+      const string &key,
+      const string &result,
+      commands::Result *result_proto);
 
   // Fill the Result protobuf with the key and result strings
   // nomalizing the string for a conversion result.

@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -42,6 +42,8 @@
 #include <QtCore/QMutex>
 #include <QtCore/QThread>
 
+class QListWidgetItem;
+
 namespace mozc {
 namespace gui {
 
@@ -61,6 +63,7 @@ class HandWritingThread : public QThread {
  public slots:
   // This slot invokes the recognition and emit candidatesUpdated().
   void startRecognition();
+  void itemSelected(const QListWidgetItem *item);
 
  signals:
   void candidatesUpdated();
@@ -68,6 +71,11 @@ class HandWritingThread : public QThread {
  private:
   handwriting::Strokes strokes_;
   vector<string> candidates_;
+
+  uint64 strokes_sec_;
+  uint32 strokes_usec_;
+  uint64 last_requested_sec_;
+  uint32 last_requested_usec_;
 
   QMutex strokes_mutex_;
   QMutex candidates_mutex_;

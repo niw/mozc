@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -87,7 +87,8 @@ void Segment::Candidate::CopyFrom(const Candidate &src) {
 
   attributes = src.attributes;
 
-  style = src. style;
+  style = src.style;
+  command = src.command;
 }
 
 Segment::Segment()

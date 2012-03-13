@@ -1,4 +1,4 @@
-# Copyright 2010-2011, Google Inc.
+# Copyright 2010-2012, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -56,5 +56,23 @@
         '../net/net.gyp:net',
       ],
     },
+  ],
+  'conditions': [
+    ['enable_cloud_handwriting==1', {
+      'targets': [
+        {
+          'target_name': 'cloud_handwriting',
+          'type': 'static_library',
+          'sources': [
+            'cloud_handwriting.cc',
+          ],
+          'dependencies': [
+            '../base/base.gyp:base',
+            '../net/net.gyp:net',
+            '<(DEPTH)/third_party/jsoncpp/jsoncpp.gyp:jsoncpp',
+          ],
+        },
+      ],
+    }],
   ],
 }

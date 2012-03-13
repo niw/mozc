@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -56,6 +56,13 @@ class UsageRewriterTest : public testing::Test {
  protected:
   virtual void SetUp() {
     Util::SetUserProfileDirectory(FLAGS_test_tmpdir);
+    config::Config config;
+    config::ConfigHandler::GetDefaultConfig(&config);
+    config::ConfigHandler::SetConfig(config);
+  }
+
+  virtual void TearDown() {
+    // just in case, reset the config in test_tmpdir
     config::Config config;
     config::ConfigHandler::GetDefaultConfig(&config);
     config::ConfigHandler::SetConfig(config);
@@ -131,6 +138,64 @@ TEST_F(UsageRewriterTest, SingleSegmentSingleCandidateTest) {
   EXPECT_FALSE(rewriter.Rewrite(&segments));
   EXPECT_EQ("", segments.conversion_segment(0).candidate(0).usage_title);
   EXPECT_EQ("", segments.conversion_segment(0).candidate(0).usage_description);
+}
+
+TEST_F(UsageRewriterTest, ConfigTest) {
+   Segments segments;
+  UsageRewriter rewriter;
+  Segment *seg;
+
+  // Default setting
+  {
+    segments.Clear();
+    seg = segments.push_back_segment();
+    // "あおい"
+    seg->set_key("\xE3\x81\x82\xE3\x81\x8A\xE3\x81\x84");
+    // "あおい", "青い", "あおい", "青い"
+    AddCandidate("\xE3\x81\x82\xE3\x81\x8A\xE3\x81\x84",
+                 "\xE9\x9D\x92\xE3\x81\x84",
+                 "\xE3\x81\x82\xE3\x81\x8A\xE3\x81\x84",
+                 "\xE9\x9D\x92\xE3\x81\x84", seg);
+    EXPECT_TRUE(rewriter.Rewrite(&segments));
+  }
+
+  {
+    config::Config config;
+    config::ConfigHandler::GetDefaultConfig(&config);
+    config.mutable_information_list_config()->
+        set_use_local_usage_dictionary(false);
+    config::ConfigHandler::SetConfig(config);
+
+    segments.Clear();
+    seg = segments.push_back_segment();
+    // "あおい"
+    seg->set_key("\xE3\x81\x82\xE3\x81\x8A\xE3\x81\x84");
+    // "あおい", "青い", "あおい", "青い"
+    AddCandidate("\xE3\x81\x82\xE3\x81\x8A\xE3\x81\x84",
+                 "\xE9\x9D\x92\xE3\x81\x84",
+                 "\xE3\x81\x82\xE3\x81\x8A\xE3\x81\x84",
+                 "\xE9\x9D\x92\xE3\x81\x84", seg);
+    EXPECT_FALSE(rewriter.Rewrite(&segments));
+  }
+
+  {
+    config::Config config;
+    config::ConfigHandler::GetDefaultConfig(&config);
+    config.mutable_information_list_config()->
+        set_use_local_usage_dictionary(true);
+    config::ConfigHandler::SetConfig(config);
+
+    segments.Clear();
+    seg = segments.push_back_segment();
+    // "あおい"
+    seg->set_key("\xE3\x81\x82\xE3\x81\x8A\xE3\x81\x84");
+    // "あおい", "青い", "あおい", "青い"
+    AddCandidate("\xE3\x81\x82\xE3\x81\x8A\xE3\x81\x84",
+                 "\xE9\x9D\x92\xE3\x81\x84",
+                 "\xE3\x81\x82\xE3\x81\x8A\xE3\x81\x84",
+                 "\xE9\x9D\x92\xE3\x81\x84", seg);
+    EXPECT_TRUE(rewriter.Rewrite(&segments));
+  }
 }
 
 TEST_F(UsageRewriterTest, SingleSegmentMultiCandidatesTest) {

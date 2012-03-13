@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -54,6 +54,14 @@ void RbxArrayBuilder::Push(const string &value) {
 
 void RbxArrayBuilder::Build() {
   rbx_builder_build(rbx_builder_);
+}
+
+const char *RbxArrayBuilder::GetImageBody() const {
+  return reinterpret_cast<const char *>(rbx_builder_get_image(rbx_builder_));
+}
+
+int RbxArrayBuilder::GetImageSize() const {
+  return rbx_builder_get_size(rbx_builder_);
 }
 
 void RbxArrayBuilder::WriteImage(OutputFileStream *ofs) const {

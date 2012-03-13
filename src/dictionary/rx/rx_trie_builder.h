@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -54,6 +54,13 @@ class RxTrieBuilder {
   // Get id from key string.
   // Return -1 if key is not found or rx trie is not built yet.
   int GetIdFromKey(const string &key) const;
+
+  // Returns a byte array of the image.
+  // The instance owns the returned object.
+  const char *GetImageBody() const;
+
+  // Returns the size of the image.
+  int GetImageSize() const;
 
   // Write image of trie
   void WriteImage(OutputFileStream *ofs) const;

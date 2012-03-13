@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -186,9 +186,7 @@ void ConfigHandlerImpl::SetImposedConfig(const Config &config) {
 // Reload from file
 bool ConfigHandlerImpl::Reload() {
   VLOG(1) << "Reloading config file: " << filename_;
-  scoped_ptr<istream> is(ConfigFileStream::Open(
-                             filename_,
-                             ios::in | ios::binary));
+  scoped_ptr<istream> is(ConfigFileStream::OpenReadBinary(filename_));
   Config input_proto;
   bool ret_code = true;
 

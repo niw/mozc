@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -47,6 +47,9 @@ class ResultList: public QListWidget {
   void update();
   void updateFontSize(int index);
   void updateFont(const QFont &font);
+
+ signals:
+  void itemSelected(const QListWidgetItem *item);
 
  protected:
   void mouseReleaseEvent(QMouseEvent *event);

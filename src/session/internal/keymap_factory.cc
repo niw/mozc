@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -34,7 +34,6 @@
 #include "base/base.h"
 #include "base/freelist.h"
 #include "config/config.pb.h"
-#include "config/config_handler.h"
 #include "session/internal/keymap.h"
 
 namespace mozc {

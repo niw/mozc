@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -866,7 +866,7 @@ bool IsBannedApplication(const set<string>* bundleIdSet,
   // If the key event is turn on event, the key event has to be sent
   // to the server anyway.
   if (mode_ == mozc::commands::DIRECT &&
-      !ImeSwitchUtil::IsTurnOnInDirectMode(keyEvent)) {
+      !ImeSwitchUtil::IsDirectModeCommand(keyEvent)) {
     // Yen sign special hack: although the current mode is DIRECT,
     // backslash is sent instead of yen sign for JIS yen key with no
     // modifiers.  This behavior is based on the configuration.

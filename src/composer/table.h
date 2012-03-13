@@ -1,4 +1,4 @@
-// Copyright 2010-2011, Google Inc.
+// Copyright 2010-2012, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -36,7 +36,7 @@
 #include <string>
 #include <vector>
 #include "base/base.h"
-#include "composer/internal/trie.h"
+#include "base/trie.h"
 
 namespace mozc {
 namespace composer {
