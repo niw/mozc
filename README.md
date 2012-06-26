@@ -15,11 +15,11 @@ Extra steps to the original Build Instructions
 ----------------------------------------------
 
  1. Checkout source code from this repository using `git` command.
- 1. Run `checkout_externals.sh` instead of runing gclient command described in [the original instructions](http://code.google.com/p/mozc/wiki/MacBuildInstructions).
+ 1. Run `checkout_externals.py` instead of runing gclient command described in [the original instructions](http://code.google.com/p/mozc/wiki/MacBuildInstructions).
  1. Follow instructions. My build instraction is:
 
         # Checkout dependencies.
-        % ./checkout_externals.sh
+        % python checkout_externals.py mac
          
         # Build Mozc itself.
         % cd src
