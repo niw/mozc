@@ -53,7 +53,6 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
-        '../net/net.gyp:net',
       ],
     },
   ],
@@ -68,8 +67,8 @@
           ],
           'dependencies': [
             '../base/base.gyp:base',
-            '../net/net.gyp:net',
-            '<(DEPTH)/third_party/jsoncpp/jsoncpp.gyp:jsoncpp',
+            '../net/net.gyp:http_client',
+            '../net/net.gyp:jsoncpp',
           ],
         },
       ],

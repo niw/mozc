@@ -28,9 +28,12 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "base/base.h"
+#include "converter/conversion_request.h"
 #include "converter/segments.h"
 #include "rewriter/remove_redundant_candidate_rewriter.h"
 #include "testing/base/public/gunit.h"
+#include "session/commands.pb.h"
+#include "session/request_handler.h"
 
 namespace mozc {
 TEST(RemoveRedundantCandidateRewriterTest, RemoveTest) {
@@ -43,7 +46,7 @@ TEST(RemoveRedundantCandidateRewriterTest, RemoveTest) {
   candidate->key = "a";
   candidate->value = "a";
 
-  EXPECT_TRUE(rewriter.Rewrite(&segments));
+  EXPECT_TRUE(rewriter.Rewrite(ConversionRequest(), &segments));
   EXPECT_EQ(0, segment->candidates_size());
 }
 
@@ -57,12 +60,16 @@ TEST(RemoveRedundantCandidateRewriterTest, NoRemoveTest) {
   candidate->key = "a";
   candidate->value = "aa";
 
-  EXPECT_FALSE(rewriter.Rewrite(&segments));
+  EXPECT_FALSE(rewriter.Rewrite(ConversionRequest(), &segments));
   EXPECT_EQ(1, segment->candidates_size());
 }
 
 TEST(RemoveRedundantCandidateRewriterTest, CapabilityTest) {
   RemoveRedundantCandidateRewriter rewriter;
   EXPECT_EQ(RewriterInterface::NOT_AVAILABLE, rewriter.capability());
+  commands::Request input;
+  input.set_mixed_conversion(true);
+  commands::RequestHandler::SetRequest(input);
+  EXPECT_EQ(RewriterInterface::ALL, rewriter.capability());
 }
 }  // namespace mozc

@@ -36,7 +36,6 @@
 #include "base/base.h"
 #include "base/singleton.h"
 #include "base/util.h"
-#include "rewriter/rewriter_interface.h"
 #include "rewriter/user_segment_history_rewriter.h"
 #include "rewriter/user_boundary_history_rewriter.h"
 #include "storage/registry.h"
@@ -51,30 +50,18 @@ const uint32 kBucketSize = 512;
 const uint32 kMaxEntriesSize = 128;
 const char kLastDownloadTimestampKey[] =
     "sync.learning_preference_last_download_time";
-
-class RealClockTimer : public ClockTimerInterface {
- public:
-  uint64 GetCurrentTime() const {
-    return static_cast<uint64>(time(NULL));
-  }
-};
 }  // anonymous namespace
 
 LearningPreferenceAdapter::LearningPreferenceAdapter()
-    : clock_timer_(NULL), local_update_time_(0) {
+    : local_update_time_(0) {
   ClearStorage();
-  RewriterInterface *rewriter = RewriterFactory::GetRewriter();
-  CHECK(rewriter);
 
-  // TODO(taku): We assume that UserSegmentHistoryRewriter and
-  // UserBoundaryHistoryRewriter are instantiated when we call
-  // GetRewriter(). This assumption makes an extra dependency
-  // to the real implementaion of RewriterFactory.
-  //
-  // It is better to let Rewriter call AddStorage() methods.
+  // TODO(peria): Make sure that these GetStorage() do not return NULL
+  //     if FLAGS_user_history_rewriter in rewriter/rewriter.cc is true.
+  //     It means UserSegmentHistoryRewriter and userBoundaryHistoryRewriter
+  //     must be created before the call of this constructor.
   AddStorage(LearningPreference::Entry::USER_SEGMENT_HISTORY,
              UserSegmentHistoryRewriter::GetStorage());
-
   AddStorage(LearningPreference::Entry::USER_BOUNDARY_HISTORY,
              UserBoundaryHistoryRewriter::GetStorage());
 }
@@ -86,10 +73,7 @@ bool LearningPreferenceAdapter::Start() {
 
   const uint64 last_access_time = GetLastDownloadTimestamp();
 
-  local_update_time_ =
-      clock_timer_ != NULL ?
-      clock_timer_ ->GetCurrentTime() :
-      Singleton<RealClockTimer>::get()->GetCurrentTime();
+  local_update_time_ = Util::GetTime();
 
   for (size_t i = 0; i < GetStorageSize(); ++i) {
     const Storage &storage = GetStorage(i);
@@ -313,12 +297,6 @@ uint64 LearningPreferenceAdapter::GetLastDownloadTimestamp() const {
     return static_cast<uint64>(0);
   }
   return last_download_time;
-}
-
-void LearningPreferenceAdapter::SetClockTimerInterface(
-    ClockTimerInterface *clock_timer) {
-  DCHECK(clock_timer);
-  clock_timer_ = clock_timer;
 }
 
 ime_sync::Component LearningPreferenceAdapter::component_id() const {

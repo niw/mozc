@@ -53,9 +53,6 @@ class ImeUtil {
   // in some special situations like CustomAction.
   static bool SetDefault();
 
-  // Returns true if CUAS (Cicero Unaware Application Support) is enabled.
-  static bool IsCuasEnabled();
-
   // Enables or disables CUAS (Cicero Unaware Application Support).
   // Returns true if the operation completed successfully.
   static bool SetCuasEnabled(bool enable);
@@ -68,6 +65,7 @@ class ImeUtil {
   // process.
   // Returns true if the operation completed successfully.
   static bool ActivateForCurrentProcess();
+
 
   // Activates the IMM32 version of Google Japanese Input for all existing
   // applications running in the current session.

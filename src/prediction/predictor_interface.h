@@ -30,12 +30,17 @@
 #ifndef MOZC_PREDICTION_PREDICTOR_INTERFACE_H_
 #define MOZC_PREDICTION_PREDICTOR_INTERFACE_H_
 
+#include <string>
+
 namespace mozc {
 
+class ConversionRequest;
 class Segments;
 
 class PredictorInterface {
  public:
+  virtual ~PredictorInterface() {}
+
   // return suggestions.
   // You may need to change the behavior according to the
   // Segments::request_type flag
@@ -43,6 +48,11 @@ class PredictorInterface {
   // PREDICTION: invoked only when user pushes "tab" key.
   // less aggressive than SUGGESTION mode.
   virtual bool Predict(Segments *segments) const = 0;
+  virtual bool PredictForRequest(const ConversionRequest &request,
+                                 Segments *segments) const {
+    // Ignore the request (e.g., a composer in it) by default.
+    return Predict(segments);
+  }
 
   // Hook(s) for all mutable operations
   virtual void Finish(Segments *segments) {}
@@ -62,29 +72,13 @@ class PredictorInterface {
   // Reload user history data from local disk.
   virtual bool Reload() { return true; }
 
+  virtual const string &GetPredictorName() const = 0;
+
  protected:
-  // don't allow users to call constructor and destructor
+  // Disable the construction.
   PredictorInterface() {}
-  virtual ~PredictorInterface() {}
 };
 
-// factory for making "default" predictors
-class PredictorFactory {
- public:
-  // return singleton object
-  static PredictorInterface *GetPredictor();
-  static PredictorInterface *GetUserHistoryPredictor();
-  static PredictorInterface *GetDictionaryPredictor();
-
-  // dependency injection for unittesting
-  static void SetPredictor(PredictorInterface *predictor);
-  static void SetUserHistoryPredictor(PredictorInterface *predictor);
-  static void SetDictionaryPredictor(PredictorInterface *predictor);
-
- private:
-  PredictorFactory() {}
-  ~PredictorFactory() {}
-};
 }  // namespace mozc
 
 #endif  // MOZC_PREDICTION_PREDICTOR_INTERFACE_H_

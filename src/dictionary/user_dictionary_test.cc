@@ -38,16 +38,20 @@
 #include <vector>
 #include "base/base.h"
 #include "base/file_stream.h"
+#include "base/singleton.h"
 #include "base/trie.h"
 #include "base/util.h"
-#include "config/config_handler.h"
 #include "config/config.pb.h"
+#include "config/config_handler.h"
 #include "converter/node.h"
 #include "converter/node_allocator.h"
+#include "data_manager/user_dictionary_manager.h"
+#include "dictionary/pos_matcher.h"
 #include "dictionary/suppression_dictionary.h"
 #include "dictionary/user_dictionary_storage.h"
 #include "dictionary/user_dictionary_util.h"
 #include "dictionary/user_pos.h"
+#include "dictionary/user_pos_interface.h"
 #include "storage/registry.h"
 #include "testing/base/public/googletest.h"
 #include "testing/base/public/gunit.h"
@@ -97,7 +101,7 @@ void PushBackToken(const string &key,
 // depends on POS. It accepts only two values for part-of-speech:
 // "noun" as words without inflection and "verb" as words with
 // inflection.
-class UserPOSMock : public UserPOS::UserPOSInterface {
+class UserPOSMock : public UserPOSInterface {
  public:
   UserPOSMock() {}
   virtual ~UserPOSMock() {}
@@ -168,20 +172,43 @@ class UserDictionaryTest : public testing::Test {
  protected:
   virtual void SetUp() {
     pos_mock_.reset(new UserPOSMock);
+    CHECK(pos_mock_.get() != NULL);
     Util::SetUserProfileDirectory(FLAGS_test_tmpdir);
-    UserPOS::SetUserPOSInterface(pos_mock_.get());
-    EXPECT_TRUE(storage::Registry::Clear());
+    CHECK(storage::Registry::Clear());
+    suppression_dictionary_.reset(new SuppressionDictionary);
   }
 
   virtual void TearDown() {
     pos_mock_.reset();
-    UserPOS::SetUserPOSInterface(NULL);
-    EXPECT_TRUE(storage::Registry::Clear());
+    CHECK(storage::Registry::Clear());
   }
 
   // Workaround for the constructor of UserDictionary being protected.
+  // Creates a user dictionary with mock pos data.
+  UserDictionary *CreateDictionaryWithMockPos() {
+    // TODO(noriyukit): Prepare mock for POSMatcher that is consistent with
+    // UserPOSMock.
+    return new UserDictionary(
+        pos_mock_.get(),
+        UserDictionaryManager::GetUserDictionaryManager()->GetPOSMatcher(),
+        suppression_dictionary_.get());
+  }
+
+  // Creates a user dictionary with actual pos data.
   UserDictionary *CreateDictionary() {
-    return new UserDictionary;
+    const UserPOSInterface *user_pos =
+        UserDictionaryManager::GetUserDictionaryManager()->GetUserPOS();
+    return new UserDictionary(
+        user_pos,
+        UserDictionaryManager::GetUserDictionaryManager()->GetPOSMatcher(),
+        Singleton<SuppressionDictionary>::get());
+  }
+
+  // Returns a sigleton of a user dictionary.
+  UserDictionary *GetUserDictionarySingleton() {
+    UserDictionaryManager *manager =
+        UserDictionaryManager::GetUserDictionaryManager();
+    return manager->GetUserDictionary();
   }
 
   struct Entry {
@@ -278,11 +305,12 @@ class UserDictionaryTest : public testing::Test {
     }
   }
 
-  scoped_ptr<UserPOSMock> pos_mock_;
+  scoped_ptr<const UserPOSMock> pos_mock_;
+  scoped_ptr<SuppressionDictionary> suppression_dictionary_;
 };
 
 TEST_F(UserDictionaryTest, TestLookupPredictive) {
-  scoped_ptr<UserDictionary> dic(CreateDictionary());
+  scoped_ptr<UserDictionary> dic(CreateDictionaryWithMockPos());
   // Wait for async reload called from the constructor.
   dic->WaitForReloader();
 
@@ -345,7 +373,7 @@ TEST_F(UserDictionaryTest, TestLookupPredictive) {
 }
 
 TEST_F(UserDictionaryTest, TestLookupPredictiveWithLimit) {
-  scoped_ptr<UserDictionary> dic(CreateDictionary());
+  scoped_ptr<UserDictionary> dic(CreateDictionaryWithMockPos());
   // Wait for async reload called from the constructor.
   dic->WaitForReloader();
 
@@ -391,7 +419,7 @@ TEST_F(UserDictionaryTest, TestLookupPredictiveWithLimit) {
 }
 
 TEST_F(UserDictionaryTest, TestLookupPrefix) {
-  scoped_ptr<UserDictionary> dic(CreateDictionary());
+  scoped_ptr<UserDictionary> dic(CreateDictionaryWithMockPos());
   // Wait for async reload called from the constructor.
   dic->WaitForReloader();
 
@@ -451,7 +479,7 @@ TEST_F(UserDictionaryTest, IncognitoModeTest) {
   config.set_incognito_mode(true);
   config::ConfigHandler::SetConfig(config);
 
-  scoped_ptr<UserDictionary> dic(CreateDictionary());
+  scoped_ptr<UserDictionary> dic(CreateDictionaryWithMockPos());
   // Wait for async reload called from the constructor.
   dic->WaitForReloader();
 
@@ -504,7 +532,7 @@ TEST_F(UserDictionaryTest, AsyncLoadTest) {
   }
 
   {
-    UserDictionary *dic = UserDictionary::GetUserDictionary();
+    UserDictionary *dic = GetUserDictionarySingleton();
     // Wait for async reload called from the constructor.
     dic->WaitForReloader();
     dic->SetUserDictionaryName(filename);
@@ -512,7 +540,7 @@ TEST_F(UserDictionaryTest, AsyncLoadTest) {
     NodeAllocator allocator;
     for (int i = 0; i < 32; ++i) {
       random_shuffle(keys.begin(), keys.end());
-      dic->AsyncReload();
+      dic->Reload();
       for (int i = 0; i < 1000; ++i) {
         dic->LookupPrefix(keys[i].c_str(),
                           keys[i].size(), &allocator);
@@ -523,11 +551,101 @@ TEST_F(UserDictionaryTest, AsyncLoadTest) {
   Util::Unlink(filename);
 }
 
-TEST_F(UserDictionaryTest, TestSuppressionDictionary) {
-  SuppressionDictionary *suppression_dictionary =
-      SuppressionDictionary::GetSuppressionDictionary();
+TEST_F(UserDictionaryTest, AddToAutoRegisteredDictionary) {
+  const string filename = Util::JoinPath(FLAGS_test_tmpdir,
+                                         "add_to_auto_registered.db");
+  Util::Unlink(filename);
 
-  scoped_ptr<UserDictionary> user_dic(CreateDictionary());
+  // Create dictionary
+  {
+    UserDictionaryStorage storage(filename);
+    EXPECT_FALSE(storage.Load());
+    EXPECT_TRUE(storage.Lock());
+    EXPECT_TRUE(storage.Save());
+    EXPECT_TRUE(storage.UnLock());
+  }
+
+  // Add entries.
+  {
+    scoped_ptr<UserDictionary> dic(CreateDictionaryWithMockPos());
+    dic->WaitForReloader();
+    dic->SetUserDictionaryName(filename);
+    for (int i = 0; i < 100; ++i) {
+      EXPECT_TRUE(dic->AddToAutoRegisteredDictionary(
+                      "key" + Util::SimpleItoa(i),
+                      "value" + Util::SimpleItoa(i),
+                      "noun"));
+      dic->WaitForReloader();
+    }
+  }
+
+  // Verify the contents.
+  {
+    UserDictionaryStorage storage(filename);
+    EXPECT_TRUE(storage.Load());
+#ifdef ENABLE_CLOUD_SYNC
+    int index = 1;
+    EXPECT_EQ(2, storage.dictionaries_size());
+#else
+    int index = 0;
+    EXPECT_EQ(1, storage.dictionaries_size());
+#endif
+    EXPECT_EQ(100, storage.dictionaries(index).entries_size());
+    for (int i = 0; i < 100; ++i) {
+      EXPECT_EQ("key" + Util::SimpleItoa(i),
+                storage.dictionaries(index).entries(i).key());
+      EXPECT_EQ("value" + Util::SimpleItoa(i),
+                storage.dictionaries(index).entries(i).value());
+      EXPECT_EQ("noun",
+                storage.dictionaries(index).entries(i).pos());
+    }
+  }
+
+  Util::Unlink(filename);
+
+  // Create dictionary
+  {
+    UserDictionaryStorage storage(filename);
+    EXPECT_FALSE(storage.Load());
+    EXPECT_TRUE(storage.Lock());
+    EXPECT_TRUE(storage.Save());
+    EXPECT_TRUE(storage.UnLock());
+  }
+
+  // Add same entries.
+  {
+    scoped_ptr<UserDictionary> dic(CreateDictionaryWithMockPos());
+    dic->WaitForReloader();
+    dic->SetUserDictionaryName(filename);
+    EXPECT_TRUE(dic->AddToAutoRegisteredDictionary("key", "value", "noun"));
+    dic->WaitForReloader();
+    // Duplicated one is not registered.
+    EXPECT_FALSE(dic->AddToAutoRegisteredDictionary("key", "value", "noun"));
+    dic->WaitForReloader();
+  }
+
+  // Verify the contents.
+  {
+    UserDictionaryStorage storage(filename);
+    EXPECT_TRUE(storage.Load());
+#ifdef ENABLE_CLOUD_SYNC
+    EXPECT_EQ(2, storage.dictionaries_size());
+    EXPECT_EQ(1, storage.dictionaries(1).entries_size());
+    EXPECT_EQ("key", storage.dictionaries(1).entries(0).key());
+    EXPECT_EQ("value", storage.dictionaries(1).entries(0).value());
+    EXPECT_EQ("noun", storage.dictionaries(1).entries(0).pos());
+#else
+    EXPECT_EQ(1, storage.dictionaries_size());
+    EXPECT_EQ(1, storage.dictionaries(0).entries_size());
+    EXPECT_EQ("key", storage.dictionaries(0).entries(0).key());
+    EXPECT_EQ("value", storage.dictionaries(0).entries(0).value());
+    EXPECT_EQ("noun", storage.dictionaries(0).entries(0).pos());
+#endif
+  }
+}
+
+TEST_F(UserDictionaryTest, TestSuppressionDictionary) {
+  scoped_ptr<UserDictionary> user_dic(CreateDictionaryWithMockPos());
   user_dic->WaitForReloader();
 
   const string filename = Util::JoinPath(FLAGS_test_tmpdir,
@@ -559,13 +677,13 @@ TEST_F(UserDictionaryTest, TestSuppressionDictionary) {
       entry->set_pos("\xE6\x8A\x91\xE5\x88\xB6\xE5\x8D\x98\xE8\xAA\x9E");
     }
 
-    suppression_dictionary->Lock();
-    EXPECT_TRUE(suppression_dictionary->IsLocked());
+    suppression_dictionary_->Lock();
+    EXPECT_TRUE(suppression_dictionary_->IsLocked());
     user_dic->Load(storage);
-    EXPECT_FALSE(suppression_dictionary->IsLocked());
+    EXPECT_FALSE(suppression_dictionary_->IsLocked());
 
     for (size_t j = 0; j < 10; ++j) {
-      EXPECT_TRUE(suppression_dictionary->SuppressEntry(
+      EXPECT_TRUE(suppression_dictionary_->SuppressEntry(
           "suppress_key" + Util::SimpleItoa(j),
           "suppress_value" + Util::SimpleItoa(j)));
     }
@@ -586,12 +704,12 @@ TEST_F(UserDictionaryTest, TestSuppressionDictionary) {
       entry->set_pos("noun");
     }
 
-    suppression_dictionary->Lock();
+    suppression_dictionary_->Lock();
     user_dic->Load(storage);
-    EXPECT_FALSE(suppression_dictionary->IsLocked());
+    EXPECT_FALSE(suppression_dictionary_->IsLocked());
 
     for (size_t j = 0; j < 10; ++j) {
-      EXPECT_FALSE(suppression_dictionary->SuppressEntry(
+      EXPECT_FALSE(suppression_dictionary_->SuppressEntry(
           "suppress_key" + Util::SimpleItoa(j),
           "suppress_value" + Util::SimpleItoa(j)));
     }
@@ -602,7 +720,6 @@ TEST_F(UserDictionaryTest, TestSuppressionDictionary) {
 TEST_F(UserDictionaryTest, TestSuggestionOnlyWord) {
   scoped_ptr<UserDictionary> user_dic(CreateDictionary());
   user_dic->WaitForReloader();
-  UserPOS::SetUserPOSInterface(NULL);
 
   const string filename = Util::JoinPath(FLAGS_test_tmpdir,
                                          "suggestion_only_test.db");
@@ -665,7 +782,7 @@ TEST_F(UserDictionaryTest, TestSuggestionOnlyWord) {
 }
 
 TEST_F(UserDictionaryTest, TestUsageStats) {
-  scoped_ptr<UserDictionary> dic(CreateDictionary());
+  scoped_ptr<UserDictionary> dic(CreateDictionaryWithMockPos());
   // Wait for async reload called from the constructor.
   dic->WaitForReloader();
   UserDictionaryStorage storage("");

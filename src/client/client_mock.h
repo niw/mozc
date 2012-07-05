@@ -68,10 +68,16 @@ class ClientMock : public client::ClientInterface {
   virtual void set_timeout(int timeout);
   virtual void set_restricted(bool restricted);
   virtual void set_server_program(const string &program_path);
+  virtual void set_suppress_error_dialog(bool suppress);
   virtual void set_client_capability(const commands::Capability &capability);
   bool LaunchTool(const string &mode, const string &extra_arg);
   bool LaunchToolWithProtoBuf(const commands::Output &output);
   bool OpenBrowser(const string &url);
+  bool StartCloudSync();
+  bool ClearCloudSync();
+  bool GetCloudSyncStatus(commands::CloudSyncStatus *cloud_sync_status);
+  void set_output_GetCloudSyncStatus(
+      const commands::CloudSyncStatus &cloud_sync_status);
 
   void ClearFunctionCounter();
   void SetBoolFunctionReturn(string func_name, bool value);
@@ -103,6 +109,7 @@ class ClientMock : public client::ClientInterface {
 
   config::Config called_config_;
 
+  commands::CloudSyncStatus cloud_sync_status_;
 };
 }  // namespace ibus
 }  // namespace mozc

@@ -401,6 +401,10 @@ void Client::set_server_program(const string &program_path) {
   server_launcher_->set_server_program(program_path);
 }
 
+void Client::set_suppress_error_dialog(bool suppress) {
+  server_launcher_->set_suppress_error_dialog(suppress);
+}
+
 void Client::set_client_capability(const commands::Capability &capability) {
   client_capability_.CopyFrom(capability);
 }
@@ -569,6 +573,47 @@ bool Client::PingServer() const {
   return true;
 }
 
+bool Client::StartCloudSync() {
+  return CallCommand(commands::Input::START_CLOUD_SYNC);
+}
+
+bool Client::ClearCloudSync() {
+  return CallCommand(commands::Input::CLEAR_CLOUD_SYNC);
+}
+
+bool Client::GetCloudSyncStatus(commands::CloudSyncStatus *cloud_sync_status) {
+  DCHECK(cloud_sync_status);
+  commands::Input input;
+  InitInput(&input);
+  input.set_type(commands::Input::GET_CLOUD_SYNC_STATUS);
+  commands::Output output;
+  if (!Call(input, &output)) {
+    LOG(ERROR) << "Call failed.  Server is not started.";
+    return false;
+  }
+
+  if (!output.has_cloud_sync_status()) {
+    LOG(ERROR) << "No CloudSyncStatus.  Server may be stale.";
+    return false;
+  }
+
+  cloud_sync_status->CopyFrom(output.cloud_sync_status());
+  return true;
+}
+
+bool Client::AddAuthCode(const commands::Input::AuthorizationInfo &auth_info) {
+  commands::Input input;
+  InitInput(&input);
+  input.set_type(commands::Input::ADD_AUTH_CODE);
+  input.mutable_auth_code()->CopyFrom(auth_info);
+  commands::Output output;
+  if (!Call(input, &output)) {
+    LOG(ERROR) << "Call failed.  Server is not started.";
+    return false;
+  }
+
+  return true;
+}
 
 bool Client::CallCommand(commands::Input::CommandType type) {
   commands::Input input;

@@ -42,6 +42,7 @@
 #include "composer/composer.h"
 #include "session/internal/candidate_list.h"
 #include "session/internal/session_output.h"
+#include "session/request_handler.h"
 #include "transliteration/transliteration.h"
 
 namespace mozc {
@@ -116,8 +117,9 @@ bool SessionConverter::ConvertWithPreferences(
   segments_->set_request_type(Segments::CONVERSION);
   SetConversionPreferences(preferences, segments_.get());
 
-  if (!converter_->StartConversionWithComposer(segments_.get(), &composer)) {
-    LOG(WARNING) << "StartConversionWithComposer() failed";
+  if (!converter_->StartConversionForRequest(
+          ConversionRequest(&composer), segments_.get())) {
+    LOG(WARNING) << "StartConversionForRequest() failed";
     return false;
   }
 
@@ -224,8 +226,8 @@ bool SessionConverter::ConvertToTransliteration(
     if (segments_->conversion_segments_size() != 1) {
       string composition;
       GetPreedit(0, segments_->conversion_segments_size(), &composition);
-      converter_->ResizeSegment(segments_.get(), 0,
-                                Util::CharsLen(composition));
+      converter_->ResizeSegment(segments_.get(), ConversionRequest(&composer),
+                                0, Util::CharsLen(composition));
       UpdateCandidateList();
     }
 
@@ -270,8 +272,8 @@ bool SessionConverter::ConvertToHalfWidth(const composer::Composer &composer) {
     // converter/converter.cc to enable to accept mozc::Segment::FIXED
     // from the session layer.
     if (segments_->conversion_segments_size() != 1) {
-      converter_->ResizeSegment(segments_.get(), 0,
-                                Util::CharsLen(composition));
+      converter_->ResizeSegment(segments_.get(), ConversionRequest(&composer),
+                                0, Util::CharsLen(composition));
       UpdateCandidateList();
     }
   } else {
@@ -322,8 +324,8 @@ bool SessionConverter::SwitchKanaType(const composer::Composer &composer) {
     if (segments_->conversion_segments_size() != 1) {
       string composition;
       GetPreedit(0, segments_->conversion_segments_size(), &composition);
-      converter_->ResizeSegment(segments_.get(), 0,
-                                Util::CharsLen(composition));
+      converter_->ResizeSegment(segments_.get(), ConversionRequest(&composer),
+                                0, Util::CharsLen(composition));
       UpdateCandidateList();
     }
 
@@ -372,7 +374,7 @@ void PrependCandidates(const Segment &previous_segment,
   const size_t cands_size = previous_segment.candidates_size();
   for (size_t i = 0; i < cands_size; ++i) {
     Segment::Candidate *candidate = segment->push_front_candidate();
-    *candidate = previous_segment.candidate(cands_size - i - 1);  // copy
+    candidate->CopyFrom(previous_segment.candidate(cands_size - i - 1));
   }
   *(segment->mutable_meta_candidates()) = previous_segment.meta_candidates();
 }
@@ -387,7 +389,6 @@ bool SessionConverter::SuggestWithPreferences(
     const composer::Composer &composer,
     const ConversionPreferences &preferences) {
   DCHECK(CheckState(COMPOSITION | SUGGESTION));
-  bool use_partial_suggestion = false;
   candidate_list_visible_ = false;
 
   // Normalize the current state by resetting the previous state.
@@ -401,14 +402,16 @@ bool SessionConverter::SuggestWithPreferences(
   // Initialize the segments for suggestion.
   SetConversionPreferences(preferences, segments_.get());
 
+  const bool use_partial_suggestion = GET_REQUEST(mixed_conversion);
   const size_t cursor = composer.GetCursor();
   if (cursor == composer.GetLength() || cursor == 0 ||
       !use_partial_suggestion) {
-    if (!converter_->StartSuggestionWithComposer(segments_.get(), &composer)) {
+    if (!converter_->StartSuggestionForRequest(
+            ConversionRequest(&composer), segments_.get())) {
       // TODO(komatsu): Because suggestion is a prefix search, once
       // StartSuggestion returns false, this GetSuggestion always
       // returns false.  Refactor it.
-      VLOG(1) << "StartSuggestion() returns no suggestions.";
+      VLOG(1) << "StartSuggestionForRequest() returns no suggestions.";
 
       // Clear segments and keep the context
       converter_->CancelConversion(segments_.get());
@@ -475,8 +478,9 @@ bool SessionConverter::PredictWithPreferences(
   segments_->clear_conversion_segments();
 
   if (predict_expand || predict_first) {
-    if (!converter_->StartPredictionWithComposer(segments_.get(), &composer)) {
-      LOG(WARNING) << "StartPredictionWithComposer() failed";
+    if (!converter_->StartPredictionForRequest(
+            ConversionRequest(&composer), segments_.get())) {
+      LOG(WARNING) << "StartPredictionForRequest() failed";
 
       // TODO(komatsu): Perform refactoring after checking the stability test.
       //
@@ -536,15 +540,16 @@ bool SessionConverter::ExpandSuggestionWithPreferences(
   // Without this statement we can add additional candidates into
   // existing segments.
 
-  bool use_partial_suggestion = false;
+  const bool use_partial_suggestion = GET_REQUEST(mixed_conversion);
   const size_t cursor = composer.GetCursor();
   if (cursor == composer.GetLength() || cursor == 0 ||
       !use_partial_suggestion) {
     // This is abuse of StartPrediction().
     // TODO(matsuzakit or yamaguchi): Add ExpandSuggestion method
     //    to Converter class.
-    if (!converter_->StartPredictionWithComposer(segments_.get(), &composer)) {
-      LOG(WARNING) << "StartPrediction() failed";
+    if (!converter_->StartPredictionForRequest(
+            ConversionRequest(&composer), segments_.get())) {
+      LOG(WARNING) << "StartPredictionForRequest() failed";
     }
   } else {
     string query;
@@ -658,7 +663,10 @@ bool SessionConverter::CommitSuggestionInternal(
 
   const size_t result_length = Util::CharsLen(result_.key());
   const size_t preedit_length = Util::CharsLen(preedit);
-  bool use_partial_suggestion = false;
+  const bool use_partial_suggestion = GET_REQUEST(zero_query_suggestion);
+
+  // TODO(horo): When we will support hardware keyboard and introduce
+  // shift+enter keymap in Android, this if condition may be insufficient.
   if (use_partial_suggestion && (result_length < preedit_length)) {
     // A candidate was chosen from partial suggestion.
     converter_->CommitPartialSuggestionSegmentValue(
@@ -872,7 +880,7 @@ void SessionConverter::SegmentFocusLeftEdge() {
   UpdateCandidateList();
 }
 
-void SessionConverter::SegmentWidthExpand() {
+void SessionConverter::SegmentWidthExpand(const composer::Composer &composer) {
   DCHECK(CheckState(PREDICTION | CONVERSION));
   candidate_list_visible_ = false;
   if (CheckState(PREDICTION)) {
@@ -880,14 +888,15 @@ void SessionConverter::SegmentWidthExpand() {
   }
   ResetResult();
 
-  if (!converter_->ResizeSegment(segments_.get(), segment_index_, 1)) {
+  if (!converter_->ResizeSegment(segments_.get(), ConversionRequest(&composer),
+                                 segment_index_, 1)) {
     return;
   }
 
   UpdateCandidateList();
 }
 
-void SessionConverter::SegmentWidthShrink() {
+void SessionConverter::SegmentWidthShrink(const composer::Composer &composer) {
   DCHECK(CheckState(PREDICTION | CONVERSION));
   candidate_list_visible_ = false;
   if (CheckState(PREDICTION)) {
@@ -895,7 +904,8 @@ void SessionConverter::SegmentWidthShrink() {
   }
   ResetResult();
 
-  if (!converter_->ResizeSegment(segments_.get(), segment_index_, -1)) {
+  if (!converter_->ResizeSegment(segments_.get(), ConversionRequest(&composer),
+                                 segment_index_, -1)) {
     return;
   }
 
@@ -1122,22 +1132,27 @@ void SessionConverter::SetConversionPreferences(
   segments->set_max_history_segments_size(preferences.max_history_size);
 }
 
+// TODO(team): Strictly speaking, copy source must be of type SessionConverter
+// because we cannot create an exact copy from another implementation of
+// SessionConverterInterface other than SessionConverter. The design should be
+// reconsidered.
 void SessionConverter::CopyFrom(const SessionConverterInterface &src) {
   Reset();
 
-  Segments segments;
-  src.GetSegments(&segments);
-  SetSegments(segments);
-
+  // Copy the members in order of their declarations.
   state_ = src.GetState();
+  // TODO(team): copy of |converter_| member.
+  // We cannot copy the member converter_ from SessionConverterInterface becase
+  // it doesn't (and shouldn't) define a method like GetConverter(). At the
+  // moment it's ok because the current design guarantees that the converter is
+  // singleton. However, we should refactor such bad design; see also the
+  // comment right above.
+  src.GetSegments(segments_.get());
   segment_index_ = src.GetSegmentIndex();
+  previous_suggestions_.CopyFrom(src.GetPreviousSuggestions());
   conversion_preferences_ = src.conversion_preferences();
   operation_preferences_ = src.GetOperationPreferences();
   result_.CopyFrom(src.GetResult());
-
-  const Segment &previous_suggestions =
-      src.GetPreviousSuggestions();
-  previous_suggestions_.CopyFrom(previous_suggestions);
 
   if (CheckState(SUGGESTION | PREDICTION | CONVERSION)) {
     UpdateCandidateList();

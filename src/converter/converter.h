@@ -35,47 +35,51 @@
 #include "testing/base/public/gunit_prod.h"
 
 namespace mozc {
+class ConversionRequest;
+class ImmutableConverterInterface;
+class PredictorInterface;
+class POSMatcher;
+class PosGroup;
+class RewriterInterface;
 class Segments;
 class UserDatamanagerInterface;
-class ImmutableConverterInterface;
 
 class ConverterImpl : public ConverterInterface {
  public:
   ConverterImpl();
+  ConverterImpl(PredictorInterface *predictor, RewriterInterface *rewriter);
   virtual ~ConverterImpl();
 
-  bool Predict(Segments *segments,
+  // Lazily initializes the internal predictor and rewriter.
+  void Init(PredictorInterface *predictor, RewriterInterface *rewriter);
+
+  bool Predict(const ConversionRequest &request,
                const string &key,
-               const Segments::RequestType request_type) const;
+               const Segments::RequestType request_type,
+               Segments *segments) const;
 
   bool StartConversionForRequest(const ConversionRequest &request,
                                  Segments *segments) const;
   bool StartConversion(Segments *segments,
                        const string &key) const;
-  bool StartConversionWithComposer(Segments *segments,
-                                   const composer::Composer *composer) const;
   bool StartReverseConversion(Segments *segments,
                               const string &key) const;
   bool StartPredictionForRequest(const ConversionRequest &request,
                                  Segments *segments) const;
   bool StartPrediction(Segments *segments,
                        const string &key) const;
-  bool StartPredictionWithComposer(Segments *segments,
-                                   const composer::Composer *composer) const;
+  bool StartSuggestionForRequest(const ConversionRequest &request,
+                                 Segments *segments) const;
   bool StartSuggestion(Segments *segments,
                        const string &key) const;
-  bool StartSuggestionWithComposer(Segments *segments,
-                                   const composer::Composer *composer) const;
+  bool StartPartialPredictionForRequest(const ConversionRequest &request,
+                                        Segments *segments) const;
   bool StartPartialPrediction(Segments *segments,
                               const string &key) const;
-  bool StartPartialPredictionWithComposer(
-      Segments *segments,
-      const composer::Composer *composer) const;
+  bool StartPartialSuggestionForRequest(const ConversionRequest &request,
+                                        Segments *segments) const;
   bool StartPartialSuggestion(Segments *segments,
                               const string &key) const;
-  bool StartPartialSuggestionWithComposer(
-      Segments *segments,
-      const composer::Composer *composer) const;
 
   bool FinishConversion(Segments *segments) const;
   bool CancelConversion(Segments *segments) const;
@@ -97,9 +101,11 @@ class ConverterImpl : public ConverterInterface {
   bool SubmitFirstSegment(Segments *segments,
                           size_t candidate_index) const;
   bool ResizeSegment(Segments *segments,
+                     const ConversionRequest &requset,
                      size_t segment_index,
                      int offset_length) const;
   bool ResizeSegment(Segments *segments,
+                     const ConversionRequest &requset,
                      size_t start_segment_index,
                      size_t segments_size,
                      const uint8 *new_size_array,
@@ -109,6 +115,7 @@ class ConverterImpl : public ConverterInterface {
  private:
   FRIEND_TEST(ConverterTest, CompletePOSIds);
   FRIEND_TEST(ConverterTest, SetupHistorySegmentsFromPrecedingText);
+  FRIEND_TEST(ConverterTest, DefaultPredictor);
 
   // Complete Left id/Right id if they are not defined.
   // Some users don't push conversion button but directly
@@ -127,8 +134,13 @@ class ConverterImpl : public ConverterInterface {
   bool SetupHistorySegmentsFromPrecedingText(const string &preceding_text,
                                              Segments *segments) const;
 
+  const POSMatcher *pos_matcher_;
+  const PosGroup *pos_group_;
+  scoped_ptr<PredictorInterface> predictor_;
+  scoped_ptr<RewriterInterface> rewriter_;
   scoped_ptr<UserDataManagerInterface> user_data_manager_;
-  ImmutableConverterInterface *immutable_converter_;
+  const ImmutableConverterInterface *immutable_converter_;
+  const uint16 general_noun_id_;
 };
 }  // namespace mozc
 

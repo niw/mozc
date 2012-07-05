@@ -38,8 +38,6 @@
 #include "base/version.h"
 #include "client/client.h"
 #include "config/config_handler.h"
-#include "languages/global_language_spec.h"
-#include "languages/japanese/lang_dep_spec.h"
 #include "session/commands.pb.h"
 #include "unix/emacs/client_pool.h"
 
@@ -109,6 +107,8 @@ void ProcessLoop() {
         ErrorExit(mozc::emacs::kErrVoidFunction, "Unknown function");
     }
 
+    mozc::emacs::RemoveUsageData(command.mutable_output());
+
     // Output results.
     vector<string> buffer;
     mozc::emacs::PrintMessage(command.output(), &buffer);
@@ -126,9 +126,6 @@ void ProcessLoop() {
 
 int main(int argc, char **argv) {
   InitGoogle(argv[0], &argc, &argv, true);
-  mozc::japanese::LangDepSpecJapanese spec;
-  mozc::language::GlobalLanguageSpec::SetLanguageDependentSpec(&spec);
-
   if (FLAGS_suppress_stderr) {
 #ifdef OS_WINDOWS
     const char path[] = "NUL";

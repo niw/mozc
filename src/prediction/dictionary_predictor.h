@@ -39,22 +39,34 @@
 
 namespace mozc {
 
-class Segments;
-class DictionaryInterface;
 class ConnectorInterface;
+class ConversionRequest;
+class DictionaryInterface;
 class ImmutableConverterInterface;
-class SegmenterInterface;
 class NodeAllocatorInterface;
+class POSMatcher;
+class SegmenterInterface;
+class Segments;
 struct Node;
 
 // Dictioanry-based predictor
-class DictionaryPredictor: public PredictorInterface {
+class DictionaryPredictor : public PredictorInterface {
  public:
-  DictionaryPredictor();
-  explicit DictionaryPredictor(SegmenterInterface *segmenter);
+  // Initializes a predictor with given references to submodules. Note that
+  // pointers are not owned by the class and to be deleted by the caller.
+  DictionaryPredictor(const ImmutableConverterInterface *immutable_converter,
+                      const DictionaryInterface *dictionary,
+                      const DictionaryInterface *suffix_dictionary,
+                      const ConnectorInterface *connector,
+                      const SegmenterInterface *segmenter,
+                      const POSMatcher &pos_matcher);
   virtual ~DictionaryPredictor();
 
-  bool Predict(Segments *segments) const;
+  virtual bool Predict(Segments *segments) const;
+  virtual bool PredictForRequest(const ConversionRequest &request,
+                                 Segments *segments) const;
+
+  virtual const string &GetPredictorName() const { return predictor_name_; }
 
  protected:
   // Protected members for unittesting
@@ -94,16 +106,19 @@ class DictionaryPredictor: public PredictorInterface {
                                    vector<Result> *results) const;
 
   void AggregateUnigramPrediction(PredictionType type,
+                                  const ConversionRequest &request,
                                   Segments *segments,
                                   NodeAllocatorInterface *allocator,
                                   vector<Result> *results) const;
 
   void AggregateBigramPrediction(PredictionType type,
+                                 const ConversionRequest &request,
                                  Segments *segments,
                                  NodeAllocatorInterface *allocator,
                                  vector<Result> *results) const;
 
   void AggregateSuffixPrediction(PredictionType type,
+                                 const ConversionRequest &request,
                                  Segments *segments,
                                  NodeAllocatorInterface *allocator,
                                  vector<Result> *results) const;
@@ -142,8 +157,24 @@ class DictionaryPredictor: public PredictorInterface {
     }
   };
 
+  // Return false if no results were aggregated.
+  bool AggregatePrediction(const ConversionRequest &request,
+                           Segments *segments,
+                           NodeAllocatorInterface *allocator,
+                           vector<Result> *results) const;
+
+  void SetCost(const Segments &segments, vector<Result> *results) const;
+
+  // Remove prediciton by setting NO_PREDICTION to result type if necessary.
+  void RemovePrediction(const Segments &segments,
+                        vector<Result> *results) const;
+
+  bool AddPredictionToCandidates(Segments *segments,
+                                 vector<Result> *results) const;
+
   const Node *GetPredictiveNodes(const DictionaryInterface *dictionary,
                                  const string &history_key,
+                                 const ConversionRequest &request,
                                  const Segments &segments,
                                  NodeAllocatorInterface *allocator) const;
 
@@ -217,10 +248,12 @@ class DictionaryPredictor: public PredictorInterface {
 
   // Scoring function which takes prediction bounus into account.
   // It basically reranks the candidate by lang_prob * (1 + remain_len).
+  // This algorithm is mainly used for desktop.
   void SetPredictionCost(const Segments &segments,
                          vector<Result> *results) const;
 
   // Language model-based scoring function.
+  // This algorithm is mainly used for mobile.
   void SetLMCost(const Segments &segments,
                  vector<Result> *results) const;
 
@@ -254,11 +287,13 @@ class DictionaryPredictor: public PredictorInterface {
   size_t GetUnigramCandidateCutoffThreshold(const Segments &segments,
                                             bool mixed_conversion) const;
 
-  DictionaryInterface *dictionary_;
-  DictionaryInterface *suffix_dictionary_;
-  ConnectorInterface *connector_;
+  const ImmutableConverterInterface *immutable_converter_;
+  const DictionaryInterface *dictionary_;
+  const DictionaryInterface *suffix_dictionary_;
+  const ConnectorInterface *connector_;
   const SegmenterInterface *segmenter_;
-  ImmutableConverterInterface *immutable_converter_;
+  const uint16 counter_suffix_word_id_;
+  const string predictor_name_;
 };
 }  // namespace mozc
 

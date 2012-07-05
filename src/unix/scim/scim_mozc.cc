@@ -46,10 +46,20 @@ const char kConfigName[] = "/Panel/Gtk/LookupTableVertical";
 
 const char kPropTool[] = "/Mozc/Tool";
 const char kPropToolIcon[] = SCIM_ICONDIR "/scim-mozc-tool.png";
-const char kPropToolDictionary[] = "/Mozc/Tool/dictionary";
-const char kPropToolDictionaryIcon[] = SCIM_ICONDIR "/scim-mozc-dictionary.png";
-const char kPropToolProperty[] = "/Mozc/Tool/property";
-const char kPropToolPropertyIcon[] = SCIM_ICONDIR "/scim-mozc-properties.png";
+const char kPropToolConfigDialog[] = "/Mozc/Tool/configdialog";
+const char kPropToolConfigDialogIcon[] =
+    SCIM_ICONDIR "/scim-mozc-properties.png";
+const char kPropToolWordRegisterDialog[] =
+    "/Mozc/Tool/wordregisterdialog";
+const char kPropToolWordRegisterDialogIcon[] =
+    SCIM_ICONDIR "/scim-mozc-dictionary.png";
+const char kPropToolDictionaryTool[] = "/Mozc/Tool/dictionarytool";
+const char kPropToolDictionaryToolIcon[] =
+    SCIM_ICONDIR "/scim-mozc-dictionary.png";
+const char kPropToolHandwriting[] = "/Mozc/Tool/handwriting";
+const char kPropToolHandwritingIcon[] = "";
+const char kPropToolCharacterPalette[] = "/Mozc/Tool/characterpalette";
+const char kPropToolCharacterPaletteIcon[] = "";
 
 const char kPropCompositionMode[] = "/Mozc/CompositionMode";
 
@@ -129,6 +139,7 @@ ScimMozc::ScimMozc(scim::IMEngineFactoryBase *factory,
     : scim::IMEngineInstanceBase(factory, encoding, id),
       connection_(connection),
       parser_(parser),
+      activated_(false),
       composition_mode_(mozc::commands::HIRAGANA) {
   VLOG(1) << "ScimMozc created.";
   const bool is_vertical
@@ -154,7 +165,7 @@ bool ScimMozc::process_key_event(const scim::KeyEvent &key) {
   string error;
   mozc::commands::Output raw_response;
   if (!connection_->TrySendKeyEvent(
-          key, composition_mode_, &raw_response, &error)) {
+          key, activated_, composition_mode_, &raw_response, &error)) {
     // TODO(yusukes): Show |error|.
     return false;  // not consumed.
   }
@@ -231,7 +242,9 @@ void ScimMozc::trigger_property(const scim::String &property) {
 
   for (size_t i = 0; i < kNumCompositionModes; ++i) {
     if (property == kPropCompositionModes[i].config_path) {
-      if (kPropCompositionModes[i].mode == mozc::commands::DIRECT) {
+      const mozc::commands::CompositionMode new_mode =
+          kPropCompositionModes[i].mode;
+      if (activated_ && new_mode == mozc::commands::DIRECT) {
         // Commit a preedit string.
         string error;
         mozc::commands::Output raw_response;
@@ -239,27 +252,37 @@ void ScimMozc::trigger_property(const scim::String &property) {
                                         &raw_response, &error)) {
           parser_->ParseResponse(raw_response, this);
         }
-        DrawAll();
-        // Switch to the DIRECT mode.
-        SetCompositionMode(mozc::commands::DIRECT);
-      } else {
-        // Send the SWITCH_INPUT_MODE command.
-        string error;
-        mozc::commands::Output raw_response;
-        if (connection_->TrySendCompositionMode(
-                kPropCompositionModes[i].mode, &raw_response, &error)) {
+        if (connection_->TrySendImeOff(composition_mode_, &raw_response,
+                                       &error)) {
           parser_->ParseResponse(raw_response, this);
         }
+      } else {
+        if (activated_) {
+          composition_mode_ = new_mode;
+        } else {
+          string error;
+          mozc::commands::Output raw_response;
+          if (connection_->TrySendImeOn(new_mode, &raw_response, &error)) {
+            parser_->ParseResponse(raw_response, this);
+          }
+        }
       }
+      DrawAll();
       return;
     }
   }
 
   string args;
-  if (property == kPropToolDictionary) {
+  if (property == kPropToolDictionaryTool) {
     args = "--mode=dictionary_tool";
-  } else if (property == kPropToolProperty) {
+  } else if (property == kPropToolConfigDialog) {
     args = "--mode=config_dialog";
+  } else if (property == kPropToolWordRegisterDialog) {
+    args = "--mode=word_register_dialog";
+  } else if (property == kPropToolHandwriting) {
+    args = "--mode=hand_writing";
+  } else if (property == kPropToolCharacterPalette) {
+    args = "--mode=character_palette";
   } else {
     // Unknown property.
     return;
@@ -297,8 +320,13 @@ void ScimMozc::SetAuxString(const scim::String &str) {
   aux_ = str;
 }
 
-void ScimMozc::SetCompositionMode(mozc::commands::CompositionMode mode) {
-  composition_mode_ = mode;
+void ScimMozc::SetStatus(const mozc::commands::Status &status) {
+  if (!status.has_activated() || !status.has_mode()) {
+    return;
+  }
+
+  activated_ = status.activated();
+  composition_mode_ = status.mode();
   // Update the bar.
   const char *icon = GetCurrentCompositionModeIcon();
   scim::Property p = scim::Property(
@@ -385,10 +413,20 @@ void ScimMozc::InitializeBar() {
     // Construct "tool" icon and its menu.
     p = scim::Property(kPropTool, "", kPropToolIcon, "Tool");
     prop_list.push_back(p);
-    p = scim::Property(
-        kPropToolDictionary, "Dictionary tool", kPropToolDictionaryIcon);
+    p = scim::Property(kPropToolConfigDialog, "Properties",
+                       kPropToolConfigDialogIcon);
     prop_list.push_back(p);
-    p = scim::Property(kPropToolProperty, "Property", kPropToolPropertyIcon);
+    p = scim::Property(kPropToolWordRegisterDialog, "Add Word",
+                       kPropToolWordRegisterDialogIcon);
+    prop_list.push_back(p);
+    p = scim::Property(kPropToolDictionaryTool, "Dictionary tool",
+                       kPropToolDictionaryToolIcon);
+    prop_list.push_back(p);
+    p = scim::Property(kPropToolCharacterPalette, "Character Palette",
+                       kPropToolCharacterPaletteIcon);
+    prop_list.push_back(p);
+    p = scim::Property(kPropToolHandwriting, "Handwriting",
+                       kPropToolHandwritingIcon);
     prop_list.push_back(p);
   }
 
@@ -396,6 +434,10 @@ void ScimMozc::InitializeBar() {
 }
 
 const char *ScimMozc::GetCurrentCompositionModeIcon() const {
+  if (!activated_) {
+    DCHECK_LT(mozc::commands::DIRECT, kNumCompositionModes);
+    return kPropCompositionModes[mozc::commands::DIRECT].icon;
+  }
   DCHECK(composition_mode_ < kNumCompositionModes);
   if (composition_mode_ < kNumCompositionModes) {
     return kPropCompositionModes[composition_mode_].icon;

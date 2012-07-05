@@ -69,7 +69,6 @@
         'session_server_test.cc',
       ],
       'dependencies': [
-        '../languages/japanese/japanese.gyp:language_dependent_spec_japanese',
         '../testing/testing.gyp:gtest_main',
         'session.gyp:session',
         'session.gyp:session_server',
@@ -85,6 +84,7 @@
         'session_test.cc',
       ],
       'dependencies': [
+        '../data_manager/data_manager.gyp:user_pos_manager',
         '../rewriter/rewriter.gyp:rewriter',
         '../testing/testing.gyp:gtest_main',
         'session.gyp:session',
@@ -126,6 +126,18 @@
       'variables': {
         'test_size': 'small',
       },
+      'conditions': [
+        ['use_separate_connection_data==1', {
+          'dependencies': [
+            '../converter/converter.gyp:connection_data_injected_environment',
+          ],
+        }],
+        ['use_separate_dictionary==1', {
+          'dependencies': [
+            '../dictionary/dictionary.gyp:dictionary_data_injected_environment',
+          ],
+        }],
+      ],
     },
     {
       'target_name': 'session_converter_test',
@@ -233,6 +245,18 @@
       'variables': {
         'test_size': 'small',
       },
+      'conditions': [
+        ['use_separate_connection_data==1', {
+          'dependencies': [
+            '../converter/converter.gyp:connection_data_injected_environment',
+          ],
+        }],
+        ['use_separate_dictionary==1', {
+          'dependencies': [
+            '../dictionary/dictionary.gyp:dictionary_data_injected_environment',
+          ],
+        }],
+      ],
     },
     {
       'target_name': 'random_keyevents_generator_test',

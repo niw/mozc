@@ -30,7 +30,7 @@
 {
   'targets': [
     {
-      'target_name': 'net',
+      'target_name': 'http_client',
       'type': 'static_library',
       'sources': [
         'http_client.cc',
@@ -40,9 +40,44 @@
         '../base/base.gyp:base',
       ],
       'conditions': [
-        ['OS=="mac"', {
-          'sources': [
-            'http_client_mac.mm',
+        ['enable_http_client==1', {
+          'defines': [
+            'MOZC_ENABLE_HTTP_CLIENT',
+          ],
+          'conditions': [
+            ['OS=="mac"', {
+              'sources': [
+                'http_client_mac.mm',
+              ],
+            }],
+            ['OS=="win"', {
+              'link_settings': {
+                'msvs_settings': {
+                  'VCLinkerTool': {
+                    'AdditionalDependencies': [
+                      'wininet.lib',
+                    ],
+                  },
+                },
+              },
+            }],
+            ['target_platform=="Linux"', {
+              # Enable libcurl
+              'cflags': [
+                '<!@(<(pkg_config_command) --cflags libcurl)',
+              ],
+              'defines': [
+                'HAVE_CURL=1',
+              ],
+              'link_settings': {
+                'ldflags': [
+                  '<!@(<(pkg_config_command) --libs-only-L libcurl)',
+                ],
+                'libraries': [
+                  '<!@(<(pkg_config_command) --libs-only-l libcurl)',
+                ],
+              },
+            }],
           ],
         }],
       ],
@@ -55,7 +90,6 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
-        'net',
       ],
     },
     {
@@ -66,7 +100,7 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
-        'net',
+        'http_client',
       ],
     },
     {
@@ -84,6 +118,16 @@
       },
     },
     {
+      'target_name': 'jsoncpp',
+      'type': 'none',
+      'sources': [
+        'jsoncpp.h',
+      ],
+      'dependencies': [
+        '<(DEPTH)/third_party/jsoncpp/jsoncpp.gyp:jsoncpp_do_not_directly_use',
+      ],
+    },
+    {
       'target_name': 'jsonpath',
       'type': 'static_library',
       'sources': [
@@ -91,7 +135,7 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
-        '<(DEPTH)/third_party/jsoncpp/jsoncpp.gyp:jsoncpp',
+        'jsoncpp',
       ],
     },
     {

@@ -50,20 +50,7 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
-        '../base/base.gyp:config_file_stream',
-        '../client/client.gyp:client',
-        '../composer/composer.gyp:composer',
-        '../config/config.gyp:stats_config_util',
-        '../converter/converter.gyp:converter',
-        '../dictionary/dictionary.gyp:dictionary',
-        '../ipc/ipc.gyp:ipc',
-        '../languages/japanese/japanese.gyp:language_dependent_spec_japanese',
-        '../net/net.gyp:net',
-        '../prediction/prediction.gyp:prediction',
-        '../rewriter/rewriter.gyp:rewriter',
         '../session/session.gyp:session',
-        '../storage/storage.gyp:storage',
-        '../transliteration/transliteration.gyp:transliteration',
         'mozc_server_lib',
       ],
       'conditions': [
@@ -112,7 +99,6 @@
               'DelayLoadDLLs': [
                 'version.dll',
                 'wininet.dll',
-                'winmm.dll',
               ],
             },
           }
@@ -204,6 +190,7 @@
           ],
           'dependencies': [
             '../base/base.gyp:base',
+            '../base/base.gyp:encryptor',
             'server_protocol',
           ],
         },
@@ -220,14 +207,13 @@
             '<(gen_out_dir)/mozc_cache_service_autogen.rc',
           ],
           'dependencies': [
-            '../languages/japanese/japanese.gyp:language_dependent_spec_japanese',
-            '../languages/languages.gyp:global_language_spec',
             'cache_service_manager',
             'gen_mozc_cache_service_resource_header',
           ],
           'msvs_settings': {
             'VCLinkerTool': {
               'AdditionalDependencies': [
+                'crypt32.lib',  # used in 'mozc_cache_service.cc'
                 'shlwapi.lib',
               ],
               'DelayLoadDLLs': [

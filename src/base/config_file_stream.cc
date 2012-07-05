@@ -29,6 +29,10 @@
 
 #include "base/config_file_stream.h"
 
+#ifdef OS_WINDOWS
+#include <windows.h>
+#endif  // OS_WINDOWS
+
 #include <map>
 #include <string.h>
 #include <fstream>
@@ -104,6 +108,10 @@ istream *ConfigFileStream::Open(const string &filename,
     }
   // user://foo.bar.txt
   } else if (Util::StartsWith(filename, kUserPrefix)) {
+#ifdef MOZC_USE_PEPPER_FILE_IO
+    // TODO(horo): implement this.
+    return NULL;
+#else
     const string new_filename =
         Util::JoinPath(Util::GetUserProfileDirectory(),
                        RemovePrefix(kUserPrefix, filename));
@@ -114,8 +122,13 @@ istream *ConfigFileStream::Open(const string &filename,
     }
     delete ifs;
     return NULL;
+#endif  // MOZC_USE_PEPPER_FILE_IO
   // file:///foo.map
   } else if (Util::StartsWith(filename, kFilePrefix)) {
+#ifdef MOZC_USE_PEPPER_FILE_IO
+    // TODO(horo): implement this.
+    return NULL;
+#else
     const string new_filename = RemovePrefix(kFilePrefix, filename);
     InputFileStream *ifs = new InputFileStream(new_filename.c_str(), mode);
     CHECK(ifs);
@@ -124,6 +137,7 @@ istream *ConfigFileStream::Open(const string &filename,
     }
     delete ifs;
     return NULL;
+#endif  // MOZC_USE_PEPPER_FILE_IO
   } else if (Util::StartsWith(filename, kMemoryPrefix)) {
     istringstream *ifs = new istringstream(
         Singleton<OnMemoryFileMap>::get()->get(filename), mode);
@@ -156,7 +170,10 @@ bool ConfigFileStream::AtomicUpdate(const string &filename,
     LOG(ERROR) << "Cannot update system:// files.";
     return false;
   }
-
+#ifdef MOZC_USE_PEPPER_FILE_IO
+  // TODO(horo): implement this.
+  return false;
+#else
   // We should save the new config first,
   // as we may rewrite the original config according to platform.
   // The original config should be platform independent.
@@ -179,10 +196,33 @@ bool ConfigFileStream::AtomicUpdate(const string &filename,
     LOG(ERROR) << "Util::AtomicRename failed";
     return false;
   }
+
+#ifdef OS_WINDOWS
+  // If file name doesn't end with ".db", the file
+  // is more likely a temporary file.
+  if (!Util::EndsWith(real_filename, ".db")) {
+    wstring wfilename;
+    Util::UTF8ToWide(real_filename.c_str(), &wfilename);
+    // TODO(yukawa): Provide a way to
+    // integrate ::SetFileAttributesTransacted with
+    // AtomicRename.
+    if (!::SetFileAttributes(wfilename.c_str(),
+                             FILE_ATTRIBUTE_HIDDEN |
+                             FILE_ATTRIBUTE_SYSTEM)) {
+      LOG(ERROR) << "Cannot make hidden: " << real_filename
+                 << " " << ::GetLastError();
+    }
+  }
+#endif  // OS_WINDOWS
   return true;
+#endif  // MOZC_USE_PEPPER_FILE_IO
 }
 
 string ConfigFileStream::GetFileName(const string &filename) {
+#ifdef MOZC_USE_PEPPER_FILE_IO
+  // TODO(horo): implement this.
+  return "";
+#else
   if (Util::StartsWith(filename, kSystemPrefix) ||
       Util::StartsWith(filename, kMemoryPrefix)) {
     return "";
@@ -196,6 +236,7 @@ string ConfigFileStream::GetFileName(const string &filename) {
     return filename;
   }
   return "";
+#endif  // MOZC_USE_PEPPER_FILE_IO
 }
 
 void ConfigFileStream::ClearOnMemoryFiles() {

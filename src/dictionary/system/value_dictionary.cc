@@ -45,55 +45,52 @@
 
 namespace mozc {
 
-ValueDictionary::ValueDictionary()
+ValueDictionary::ValueDictionary(const POSMatcher& pos_matcher)
     : value_trie_(new rx::RxTrie),
       dictionary_file_(new DictionaryFile),
       codec_(dictionary::SystemDictionaryCodecFactory::GetCodec()),
-      empty_limit_(Limit()) {
+      empty_limit_(Limit()),
+      suggestion_only_word_id_(pos_matcher.GetSuggestOnlyWordId()) {
 }
 
 ValueDictionary::~ValueDictionary() {}
 
 // static
 ValueDictionary *ValueDictionary::CreateValueDictionaryFromFile(
-    const string &filename) {
-  ValueDictionary *instance = new ValueDictionary();
-  DCHECK(instance);
+    const POSMatcher& pos_matcher, const string &filename) {
+  scoped_ptr<ValueDictionary> instance(new ValueDictionary(pos_matcher));
+  DCHECK(instance.get());
   if (!instance->dictionary_file_->OpenFromFile(filename)) {
     LOG(ERROR) << "Failed to open system dictionary file";
     return NULL;
   }
   if (!instance->OpenDictionaryFile()) {
     LOG(ERROR) << "Failed to create value dictionary";
-    delete instance;
     return NULL;
   }
-  return instance;
+  return instance.release();
 }
 
 // static
 ValueDictionary *ValueDictionary::CreateValueDictionaryFromImage(
-    const char *ptr, int len) {
+    const POSMatcher& pos_matcher, const char *ptr, int len) {
   // Make the dictionary not to be paged out.
   // We don't check the return value because the process doesn't necessarily
   // has the priviledge to mlock.
   // Note that we don't munlock the space because it's always better to keep
   // the singleton system dictionary paged in as long as the process runs.
-#ifndef OS_WINDOWS
-  mlock(ptr, len);
-#endif  // OS_WINDOWS
-  ValueDictionary *instance = new ValueDictionary();
-  DCHECK(instance);
+  Util::MaybeMLock(ptr, len);
+  scoped_ptr<ValueDictionary> instance(new ValueDictionary(pos_matcher));
+  DCHECK(instance.get());
   if (!instance->dictionary_file_->OpenFromImage(ptr, len)) {
     LOG(ERROR) << "Failed to open system dictionary file";
     return NULL;
   }
   if (!instance->OpenDictionaryFile()) {
     LOG(ERROR) << "Failed to create value dictionary";
-    delete instance;
     return NULL;
   }
-  return instance;
+  return instance.release();
 }
 
 bool ValueDictionary::OpenDictionaryFile() {
@@ -163,8 +160,8 @@ Node *ValueDictionary::LookupPredictiveWithLimit(
     // Cost is also set without lookup.
     // TODO(toshiyuki): If necessary, implement simple cost lookup.
     // Bloom filter may be one option.
-    new_node->lid = POSMatcher::GetSuggestOnlyWordId();
-    new_node->rid = POSMatcher::GetSuggestOnlyWordId();
+    new_node->lid = suggestion_only_word_id_;
+    new_node->rid = suggestion_only_word_id_;
     new_node->wcost = 10000;
     new_node->key = value;
     new_node->value = value;

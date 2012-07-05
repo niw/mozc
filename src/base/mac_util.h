@@ -29,6 +29,8 @@
 
 #ifndef MOZC_BASE_MAC_UTIL_H_
 #define MOZC_BASE_MAC_UTIL_H_
+
+#ifdef OS_MACOSX
 #include <string>
 
 namespace mozc {
@@ -62,9 +64,20 @@ class MacUtil {
   // process.
   static bool StartLaunchdService(const string &service_name,
                                   pid_t *pid);
+
+  // Checks if the prelauncher is set in "Login Item".
+  static bool CheckPrelauncherLoginItemStatus();
+
+  // Removes the prelauncher from "Login Item".
+  static void RemovePrelauncherLoginItem();
+
+  // Adds the prelauncher to "Login Item"
+  static void AddPrelauncherLoginItem();
  private:
   MacUtil() {}
   ~MacUtil() {}
 };
 }  // namespace mozc
+
+#endif  // OS_MACOSX
 #endif  // MOZC_BASE_MAC_UTIL_H_

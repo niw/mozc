@@ -34,13 +34,14 @@
 #include <vector>
 #include "base/config_file_stream.h"
 #include "base/util.h"
-#include "config/config_handler.h"
 #include "config/config.pb.h"
-#include "converter/segments.h"
+#include "config/config_handler.h"
+#include "converter/conversion_request.h"
 #include "converter/converter_interface.h"
-#include "storage/lru_storage.h"
+#include "converter/segments.h"
 #include "rewriter/rewriter_interface.h"
 #include "rewriter/user_boundary_history_rewriter.h"
+#include "storage/lru_storage.h"
 #include "usage_stats/usage_stats.h"
 
 namespace mozc {
@@ -101,8 +102,11 @@ class LengthArray {
 };
 }  // namespace
 
-UserBoundaryHistoryRewriter::UserBoundaryHistoryRewriter()
-    : storage_(new LRUStorage) {
+UserBoundaryHistoryRewriter::UserBoundaryHistoryRewriter(
+    const ConverterInterface *parent_converter)
+    : parent_converter_(parent_converter),
+      storage_(new LRUStorage) {
+  DCHECK(parent_converter_);
   g_lru_storage = storage_.get();
   Reload();
 }
@@ -132,7 +136,9 @@ void UserBoundaryHistoryRewriter::Finish(Segments *segments) {
   }
 
   if (segments->resized()) {
-    ResizeOrInsert(segments, INSERT);
+    // |ResizeOrInsert| does NOT call Converter::ResizeSegment since we pass
+    // INSERT as an argument, so we can use dummy ConversionRequest.
+    ResizeOrInsert(segments, ConversionRequest(), INSERT);
     // update usage stats here
     usage_stats::UsageStats::SetInteger(
         "UserBoundaryHistoryEntrySize",
@@ -140,7 +146,8 @@ void UserBoundaryHistoryRewriter::Finish(Segments *segments) {
   }
 }
 
-bool UserBoundaryHistoryRewriter::Rewrite(Segments *segments) const {
+bool UserBoundaryHistoryRewriter::Rewrite(
+    const ConversionRequest &request, Segments *segments) const {
   if (GET_CONFIG(incognito_mode)) {
     VLOG(2) << "incognito mode";
     return false;
@@ -162,7 +169,7 @@ bool UserBoundaryHistoryRewriter::Rewrite(Segments *segments) const {
   }
 
   if (!segments->resized()) {
-    return ResizeOrInsert(segments, RESIZE);
+    return ResizeOrInsert(segments, request, RESIZE);
   }
 
   return false;
@@ -187,8 +194,8 @@ bool UserBoundaryHistoryRewriter::Reload() {
 }
 
 // TODO(taku): split Reize/Insert into different functions
-bool UserBoundaryHistoryRewriter::ResizeOrInsert(Segments *segments,
-                                                 int type) const {
+bool UserBoundaryHistoryRewriter::ResizeOrInsert(
+    Segments *segments, const ConversionRequest &request, int type) const {
   bool result = false;
   uint8 length_array[8];
 
@@ -213,8 +220,6 @@ bool UserBoundaryHistoryRewriter::ResizeOrInsert(Segments *segments,
   if (target_segments_size <= history_segments_size) {
     return false;
   }
-
-  ConverterInterface *converter = ConverterFactory::GetConverter();
 
   deque<pair<string, size_t> > keys(target_segments_size -
                                     history_segments_size);
@@ -254,10 +259,11 @@ bool UserBoundaryHistoryRewriter::ResizeOrInsert(Segments *segments,
                     << " " << (int)length_array[2] << " " << (int)length_array[3]
                     << " " << (int)length_array[4] << " " << (int)length_array[5]
                     << " " << (int)length_array[6] << " " << (int)length_array[7];
-            converter->ResizeSegment(segments,
-                                     i - history_segments_size,
-                                     j + 1,
-                                     length_array, 8);
+            parent_converter_->ResizeSegment(segments,
+                                             request,
+                                             i - history_segments_size,
+                                             j + 1,
+                                             length_array, 8);
             i += (j + target_segments_size - old_segments_size);
             result = true;
             break;

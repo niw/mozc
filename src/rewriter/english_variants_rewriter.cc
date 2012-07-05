@@ -33,8 +33,10 @@
 #include <vector>
 #include "base/base.h"
 #include "base/util.h"
+#include "converter/conversion_request.h"
 #include "converter/segments.h"
 #include "session/commands.pb.h"
+#include "session/request_handler.h"
 
 namespace mozc {
 
@@ -163,10 +165,14 @@ bool EnglishVariantsRewriter::ExpandEnglishVariantsWithSegment(
 }
 
 int EnglishVariantsRewriter::capability() const {
+  if (GET_REQUEST(mixed_conversion)) {
+    return RewriterInterface::ALL;
+  }
   return RewriterInterface::CONVERSION;
 }
 
-bool EnglishVariantsRewriter::Rewrite(Segments *segments) const {
+bool EnglishVariantsRewriter::Rewrite(const ConversionRequest &request,
+                                      Segments *segments) const {
   bool modified = false;
   for (size_t i = segments->history_segments_size();
        i < segments->segments_size(); ++i) {

@@ -36,6 +36,7 @@
       'target_name': 'ipc',
       'type': 'static_library',
       'sources': [
+        'android_ipc.cc',
         'ipc.cc',
         'ipc_mock.cc',
         'ipc_path_manager.cc',
@@ -47,8 +48,15 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
-        '../languages/languages.gyp:global_language_spec',
         'ipc_protocol',
+      ],
+      'conditions': [
+        ['target_platform=="Android"', {
+          'sources!': [
+            'ipc_path_manager.cc',
+            'process_watch_dog.cc',
+          ],
+        }],
       ],
     },
     {
@@ -60,15 +68,16 @@
       ],
       'dependencies': [
         '../protobuf/protobuf.gyp:protobuf',
-        'genproto_ipc',
+        'genproto_ipc#host',
       ],
       'export_dependent_settings': [
-        'genproto_ipc',
+        'genproto_ipc#host',
       ],
     },
     {
       'target_name': 'genproto_ipc',
       'type': 'none',
+      'toolsets': ['host'],
       'sources': [
         'ipc.proto',
       ],
@@ -85,15 +94,16 @@
       ],
       'dependencies': [
         '../protobuf/protobuf.gyp:protobuf',
-        'genproto_window_info',
+        'genproto_window_info#host',
       ],
       'export_dependent_settings': [
-        'genproto_window_info',
+        'genproto_window_info#host',
       ],
     },
     {
       'target_name': 'genproto_window_info',
       'type': 'none',
+      'toolsets': ['host'],
       'sources': [
         'window_info.proto',
       ],
@@ -122,7 +132,6 @@
         'process_watch_dog_test.cc',
       ],
       'dependencies': [
-        '../languages/japanese/japanese.gyp:language_dependent_spec_japanese',
         '../testing/testing.gyp:gtest_main',
         'ipc',
         'ipc_test_util',

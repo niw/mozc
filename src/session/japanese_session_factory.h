@@ -33,7 +33,6 @@
 #define MOZC_SESSION_JAPANESE_SESSION_FACTORY_H_
 
 #include "base/base.h"
-#include "session/commands.pb.h"
 #include "session/session_factory_manager.h"
 
 namespace mozc {
@@ -46,10 +45,8 @@ class JapaneseSessionFactory : public SessionFactoryInterface {
   virtual ~JapaneseSessionFactory();
   virtual SessionInterface *NewSession();
   virtual UserDataManagerInterface *GetUserDataManager();
-  virtual void Reload();
   virtual bool IsAvailable() const;
  private:
-  bool is_available_;
   static scoped_ptr<SessionFactoryInterface> factory_;
 };
 

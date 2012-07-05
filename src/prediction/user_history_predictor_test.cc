@@ -30,20 +30,24 @@
 #include "prediction/user_history_predictor.h"
 
 #include "base/password_manager.h"
+#include "base/singleton.h"
 #include "base/util.h"
 #include "composer/composer.h"
 #include "composer/table.h"
 #include "config/config.pb.h"
 #include "config/config_handler.h"
+#include "converter/conversion_request.h"
 #include "converter/converter_interface.h"
-#include "converter/converter_mock.h"
 #include "converter/segments.h"
+#include "dictionary/dictionary_interface.h"
+#include "data_manager/user_pos_manager.h"
+#include "dictionary/pos_matcher.h"
 #include "dictionary/suppression_dictionary.h"
 #include "session/commands.pb.h"
+#include "session/request_handler.h"
 #include "storage/lru_cache.h"
 #include "testing/base/public/googletest.h"
 #include "testing/base/public/gunit.h"
-
 
 DECLARE_string(test_tmpdir);
 DECLARE_bool(enable_expansion_for_user_history_predictor);
@@ -142,51 +146,70 @@ class UserHistoryPredictorTest : public testing::Test {
     Util::SetUserProfileDirectory(FLAGS_test_tmpdir);
     config::ConfigHandler::GetDefaultConfig(&default_config_);
     config::ConfigHandler::SetConfig(default_config_);
+    commands::RequestHandler::SetRequest(default_request_);
   }
 
   virtual void TearDown() {
     config::ConfigHandler::SetConfig(default_config_);
+    commands::RequestHandler::SetRequest(default_request_);
     FLAGS_enable_expansion_for_user_history_predictor = default_expansion_;
   }
 
   virtual void EnableZeroQuerySuggestion() {
+    commands::Request request;
+    request.set_zero_query_suggestion(true);
+    commands::RequestHandler::SetRequest(request);
   }
 
   virtual void DisableZeroQuerySuggestion() {
+    commands::Request request;
+    request.set_zero_query_suggestion(false);
+    commands::RequestHandler::SetRequest(request);
+  }
+
+  UserHistoryPredictor *CreateUserHistoryPredictor() const {
+    return new UserHistoryPredictor(
+        DictionaryFactory::GetDictionary(),
+        UserPosManager::GetUserPosManager()->GetPOSMatcher(),
+        Singleton<SuppressionDictionary>::get());
   }
 
  private:
   config::Config default_config_;
+  commands::Request default_request_;
   const bool default_expansion_;
 };
 
 TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTest) {
   {
-    UserHistoryPredictor predictor;
-    predictor.WaitForSyncer();
+    scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+    predictor->WaitForSyncer();
 
     // Nothing happen
     {
+      ConversionRequest request;
       Segments segments;
       // "てすと"
       MakeSegmentsForSuggestion(
           "\xE3\x81\xA6\xE3\x81\x99\xE3\x81\xA8", &segments);
-      EXPECT_FALSE(predictor.Predict(&segments));
+      EXPECT_FALSE(predictor->PredictForRequest(request, &segments));
       EXPECT_EQ(segments.segment(0).candidates_size(), 0);
     }
 
     // Nothing happen
     {
+      ConversionRequest request;
       Segments segments;
       // "てすと"
       MakeSegmentsForPrediction(
           "\xE3\x81\xA6\xE3\x81\x99\xE3\x81\xA8", &segments);
-      EXPECT_FALSE(predictor.Predict(&segments));
+      EXPECT_FALSE(predictor->PredictForRequest(request, &segments));
       EXPECT_EQ(segments.segment(0).candidates_size(), 0);
     }
 
     // Insert two items
     {
+      ConversionRequest request;
       Segments segments;
       // "わたしのなまえはなかのです"
       MakeSegmentsForConversion
@@ -199,12 +222,12 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTest) {
           "\xE7\xA7\x81\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D"
           "\xE3\x81\xAF\xE4\xB8\xAD\xE9\x87\x8E\xE3\x81\xA7"
           "\xE3\x81\x99", &segments);
-      predictor.Finish(&segments);
+      predictor->Finish(&segments);
 
       // "わたしの"
       MakeSegmentsForSuggestion(
           "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-      EXPECT_TRUE(predictor.Predict(&segments));
+      EXPECT_TRUE(predictor->PredictForRequest(request, &segments));
       // "私の名前は中野です"
       EXPECT_EQ(segments.segment(0).candidate(0).value,
                 "\xE7\xA7\x81\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D"
@@ -215,7 +238,7 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTest) {
       // "わたしの"
       MakeSegmentsForPrediction(
           "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-      EXPECT_TRUE(predictor.Predict(&segments));
+      EXPECT_TRUE(predictor->PredictForRequest(request, &segments));
       // "私の名前は中野です"
       EXPECT_EQ(segments.segment(0).candidate(0).value,
                 "\xE7\xA7\x81\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D"
@@ -224,14 +247,15 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTest) {
     }
 
     // sync
-    predictor.Sync();
+    predictor->Sync();
     Util::Sleep(500);
   }
 
   // reload
   {
-    UserHistoryPredictor predictor;
-    predictor.WaitForSyncer();
+    scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+    predictor->WaitForSyncer();
+    ConversionRequest request;
     Segments segments;
 
     // turn off
@@ -244,7 +268,7 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTest) {
       // "わたしの"
       MakeSegmentsForSuggestion(
           "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-      EXPECT_FALSE(predictor.Predict(&segments));
+      EXPECT_FALSE(predictor->PredictForRequest(request, &segments));
 
       config.set_use_history_suggest(true);
       config.set_incognito_mode(true);
@@ -253,7 +277,7 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTest) {
       // "わたしの"
       MakeSegmentsForSuggestion(
           "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-      EXPECT_FALSE(predictor.Predict(&segments));
+      EXPECT_FALSE(predictor->PredictForRequest(request, &segments));
     }
 
     // turn on
@@ -266,7 +290,7 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTest) {
     // "わたしの"
     MakeSegmentsForSuggestion(
         "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->PredictForRequest(request, &segments));
     // "私の名前は中野です"
     EXPECT_EQ(segments.segment(0).candidate(0).value,
               "\xE7\xA7\x81\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D"
@@ -276,7 +300,7 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTest) {
     // "わたしの"
     MakeSegmentsForPrediction(
         "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->PredictForRequest(request, &segments));
     // "私の名前は中野です"
     EXPECT_EQ(segments.segment(0).candidate(0).value,
               "\xE7\xA7\x81\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D"
@@ -290,7 +314,7 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTest) {
         "\xE3\x81\xAA\xE3\x81\xBE\xE3\x81\x88\xE3\x81\xAF"
         "\xE3\x81\xAA\xE3\x81\x8B\xE3\x81\xAE\xE3\x81\xA7\xE3\x81\x99",
         &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->PredictForRequest(request, &segments));
     // "私の名前は中野です"
     EXPECT_EQ(segments.segment(0).candidate(0).value,
               "\xE7\xA7\x81\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D"
@@ -302,51 +326,53 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTest) {
         "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE"
         "\xE3\x81\xAA\xE3\x81\xBE\xE3\x81\x88\xE3\x81\xAF\xE3\x81\xAA"
         "\xE3\x81\x8B\xE3\x81\xAE\xE3\x81\xA7\xE3\x81\x99", &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->PredictForRequest(request, &segments));
     // "私の名前は中野です"
     EXPECT_EQ(segments.segment(0).candidate(0).value,
               "\xE7\xA7\x81\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D"
               "\xE3\x81\xAF\xE4\xB8\xAD\xE9\x87\x8E\xE3\x81\xA7\xE3\x81\x99");
 
     // clear
-    predictor.ClearAllHistory();
-    predictor.WaitForSyncer();
+    predictor->ClearAllHistory();
+    predictor->WaitForSyncer();
   }
 
   // nothing happen
   {
-    UserHistoryPredictor predictor;
-    predictor.WaitForSyncer();
+    scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+    predictor->WaitForSyncer();
+    ConversionRequest request;
     Segments segments;
 
     // reproducesd
     // "わたしの"
     MakeSegmentsForSuggestion(
         "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-    EXPECT_FALSE(predictor.Predict(&segments));
+    EXPECT_FALSE(predictor->PredictForRequest(request, &segments));
 
     // "わたしの"
     MakeSegmentsForPrediction(
         "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-    EXPECT_FALSE(predictor.Predict(&segments));
+    EXPECT_FALSE(predictor->PredictForRequest(request, &segments));
   }
 
   // nothing happen
   {
-    UserHistoryPredictor predictor;
-    predictor.WaitForSyncer();
+    scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+    predictor->WaitForSyncer();
+    ConversionRequest request;
     Segments segments;
 
     // reproducesd
     // "わたしの"
     MakeSegmentsForSuggestion(
         "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-    EXPECT_FALSE(predictor.Predict(&segments));
+    EXPECT_FALSE(predictor->PredictForRequest(request, &segments));
 
     // "わたしの"
     MakeSegmentsForPrediction(
         "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-    EXPECT_FALSE(predictor.Predict(&segments));
+    EXPECT_FALSE(predictor->PredictForRequest(request, &segments));
   }
 }
 
@@ -354,10 +380,10 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTest) {
 // has type != CONVERSION.
 // To support such Segments, this test case is created separately.
 TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTest_suggestion) {
-  UserHistoryPredictor predictor;
-  predictor.WaitForSyncer();
-  predictor.ClearAllHistory();
-  predictor.WaitForSyncer();
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+  predictor->WaitForSyncer();
+  predictor->ClearAllHistory();
+  predictor->WaitForSyncer();
 
   // Register input histories via Finish method.
   {
@@ -371,11 +397,11 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTest_suggestion) {
     MakeSegmentsForSuggestion("\xE3\x81\xBE", &segments);
     // "摩"
     AddCandidate(1, "\xE6\x91\xA9", &segments);
-    predictor.Finish(&segments);
+    predictor->Finish(&segments);
 
     // All added items must be suggestion entries.
     const UserHistoryPredictor::DicCache::Element *element;
-    for (element = predictor.dic_->Head();
+    for (element = predictor->dic_->Head();
          element->next;
          element = element->next) {
       const user_history_predictor::UserHistory::Entry &entry = element->value;
@@ -386,10 +412,11 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTest_suggestion) {
 
   // Obtain input histories via Predict method.
   {
+    ConversionRequest request;
     Segments segments;
     // "かま"
     MakeSegmentsForSuggestion("\xE3\x81\x8B\xE3\x81\xBE", &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->PredictForRequest(request, &segments));
     set<string> expected_candidates;
     // "火魔汰"
     expected_candidates.insert("\xE7\x81\xAB\xE9\xAD\x94\xE6\xB1\xB0");
@@ -408,11 +435,12 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTest_suggestion) {
 
 TEST_F(UserHistoryPredictorTest, DescriptionTest) {
   {
-    UserHistoryPredictor predictor;
-    predictor.WaitForSyncer();
+    scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+    predictor->WaitForSyncer();
 
     // Insert two items
     {
+      ConversionRequest request;
       Segments segments;
       // "わたしのなまえはなかのです"
       MakeSegmentsForConversion
@@ -428,12 +456,12 @@ TEST_F(UserHistoryPredictorTest, DescriptionTest) {
           // "テスト"
           "\xe3\x83\x86\xe3\x82\xb9\xe3\x83\x88",
           &segments);
-      predictor.Finish(&segments);
+      predictor->Finish(&segments);
 
       // "わたしの"
       MakeSegmentsForSuggestion(
           "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-      EXPECT_TRUE(predictor.Predict(&segments));
+      EXPECT_TRUE(predictor->PredictForRequest(request, &segments));
       // "私の名前は中野です"
       EXPECT_EQ(segments.segment(0).candidate(0).value,
                 "\xE7\xA7\x81\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D"
@@ -448,7 +476,7 @@ TEST_F(UserHistoryPredictorTest, DescriptionTest) {
       // "わたしの"
       MakeSegmentsForPrediction(
           "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-      EXPECT_TRUE(predictor.Predict(&segments));
+      EXPECT_TRUE(predictor->PredictForRequest(request, &segments));
       // "私の名前は中野です"
       EXPECT_EQ(segments.segment(0).candidate(0).value,
                 "\xE7\xA7\x81\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D"
@@ -460,13 +488,14 @@ TEST_F(UserHistoryPredictorTest, DescriptionTest) {
     }
 
     // sync
-    predictor.Sync();
+    predictor->Sync();
   }
 
   // reload
   {
-    UserHistoryPredictor predictor;
-    predictor.WaitForSyncer();
+    scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+    predictor->WaitForSyncer();
+    ConversionRequest request;
     Segments segments;
 
     // turn off
@@ -475,12 +504,12 @@ TEST_F(UserHistoryPredictorTest, DescriptionTest) {
       config::Config config;
       config.set_use_history_suggest(false);
       config::ConfigHandler::SetConfig(config);
-      predictor.WaitForSyncer();
+      predictor->WaitForSyncer();
 
       // "わたしの"
       MakeSegmentsForSuggestion(
           "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-      EXPECT_FALSE(predictor.Predict(&segments));
+      EXPECT_FALSE(predictor->PredictForRequest(request, &segments));
 
       config.set_use_history_suggest(true);
       config.set_incognito_mode(true);
@@ -489,21 +518,21 @@ TEST_F(UserHistoryPredictorTest, DescriptionTest) {
       // "わたしの"
       MakeSegmentsForSuggestion(
           "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-      EXPECT_FALSE(predictor.Predict(&segments));
+      EXPECT_FALSE(predictor->PredictForRequest(request, &segments));
     }
 
     // turn on
     {
       config::Config config;
       config::ConfigHandler::SetConfig(config);
-      predictor.WaitForSyncer();
+      predictor->WaitForSyncer();
     }
 
     // reproducesd
     // "わたしの"
     MakeSegmentsForSuggestion(
         "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->PredictForRequest(request, &segments));
     // "私の名前は中野です"
     EXPECT_EQ(segments.segment(0).candidate(0).value,
               "\xE7\xA7\x81\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D"
@@ -516,7 +545,7 @@ TEST_F(UserHistoryPredictorTest, DescriptionTest) {
     // "わたしの"
     MakeSegmentsForPrediction(
         "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->PredictForRequest(request, &segments));
     // "私の名前は中野です"
     EXPECT_EQ(segments.segment(0).candidate(0).value,
               "\xE7\xA7\x81\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D"
@@ -533,7 +562,7 @@ TEST_F(UserHistoryPredictorTest, DescriptionTest) {
         "\xE3\x81\xAA\xE3\x81\xBE\xE3\x81\x88\xE3\x81\xAF"
         "\xE3\x81\xAA\xE3\x81\x8B\xE3\x81\xAE\xE3\x81\xA7\xE3\x81\x99",
         &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->PredictForRequest(request, &segments));
     // "私の名前は中野です"
     EXPECT_EQ(segments.segment(0).candidate(0).value,
               "\xE7\xA7\x81\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D"
@@ -548,7 +577,7 @@ TEST_F(UserHistoryPredictorTest, DescriptionTest) {
         "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE"
         "\xE3\x81\xAA\xE3\x81\xBE\xE3\x81\x88\xE3\x81\xAF\xE3\x81\xAA"
         "\xE3\x81\x8B\xE3\x81\xAE\xE3\x81\xA7\xE3\x81\x99", &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->PredictForRequest(request, &segments));
     // "私の名前は中野です"
     EXPECT_EQ(segments.segment(0).candidate(0).value,
               "\xE7\xA7\x81\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D"
@@ -558,51 +587,53 @@ TEST_F(UserHistoryPredictorTest, DescriptionTest) {
               "\xe3\x83\x86\xe3\x82\xb9\xe3\x83\x88");
 
     // clear
-    predictor.ClearAllHistory();
-    predictor.WaitForSyncer();
+    predictor->ClearAllHistory();
+    predictor->WaitForSyncer();
   }
 
   // nothing happen
   {
-    UserHistoryPredictor predictor;
-    predictor.WaitForSyncer();
+    scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+    predictor->WaitForSyncer();
+    ConversionRequest request;
     Segments segments;
 
     // reproducesd
     // "わたしの"
     MakeSegmentsForSuggestion(
         "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-    EXPECT_FALSE(predictor.Predict(&segments));
+    EXPECT_FALSE(predictor->PredictForRequest(request, &segments));
 
     // "わたしの"
     MakeSegmentsForPrediction(
         "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-    EXPECT_FALSE(predictor.Predict(&segments));
+    EXPECT_FALSE(predictor->PredictForRequest(request, &segments));
   }
 
   // nothing happen
   {
-    UserHistoryPredictor predictor;
-    predictor.WaitForSyncer();
+    scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+    predictor->WaitForSyncer();
+    ConversionRequest request;
     Segments segments;
 
     // reproducesd
     // "わたしの"
     MakeSegmentsForSuggestion(
         "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-    EXPECT_FALSE(predictor.Predict(&segments));
+    EXPECT_FALSE(predictor->PredictForRequest(request, &segments));
 
     // "わたしの"
     MakeSegmentsForPrediction(
         "\xE3\x82\x8F\xE3\x81\x9F\xE3\x81\x97\xE3\x81\xAE", &segments);
-    EXPECT_FALSE(predictor.Predict(&segments));
+    EXPECT_FALSE(predictor->PredictForRequest(request, &segments));
   }
 }
 
 TEST_F(UserHistoryPredictorTest, UserHistoryPredictorUnusedHistoryTest) {
   {
-    UserHistoryPredictor predictor;
-    predictor.WaitForSyncer();
+    scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+    predictor->WaitForSyncer();
 
     Segments segments;
     // "わたしのなまえはなかのです"
@@ -619,7 +650,7 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorUnusedHistoryTest) {
 
     // once
     segments.set_request_type(Segments::SUGGESTION);
-    predictor.Finish(&segments);
+    predictor->Finish(&segments);
 
     segments.Clear();
     // "ひろすえりょうこ"
@@ -632,21 +663,21 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorUnusedHistoryTest) {
     segments.set_request_type(Segments::CONVERSION);
 
     // conversion
-    predictor.Finish(&segments);
+    predictor->Finish(&segments);
 
     // sync
-    predictor.Sync();
+    predictor->Sync();
   }
 
   {
-    UserHistoryPredictor predictor;
-    predictor.WaitForSyncer();
+    scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+    predictor->WaitForSyncer();
     Segments segments;
 
     // "わたしの"
     MakeSegmentsForSuggestion("\xE3\x82\x8F\xE3\x81\x9F"
                               "\xE3\x81\x97\xE3\x81\xAE", &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->Predict(&segments));
     // "私の名前は中野です"
     EXPECT_EQ(segments.segment(0).candidate(0).value,
               "\xE7\xA7\x81\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D"
@@ -656,19 +687,19 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorUnusedHistoryTest) {
     // "ひろすえ"
     MakeSegmentsForSuggestion("\xE3\x81\xB2\xE3\x82\x8D"
                               "\xE3\x81\x99\xE3\x81\x88", &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->Predict(&segments));
     // "広末涼子"
     EXPECT_EQ(segments.segment(0).candidate(0).value,
               "\xE5\xBA\x83\xE6\x9C\xAB\xE6\xB6\xBC\xE5\xAD\x90");
 
-    predictor.ClearUnusedHistory();
-    predictor.WaitForSyncer();
+    predictor->ClearUnusedHistory();
+    predictor->WaitForSyncer();
 
     segments.Clear();
     // "わたしの"
     MakeSegmentsForSuggestion("\xE3\x82\x8F\xE3\x81\x9F"
                               "\xE3\x81\x97\xE3\x81\xAE", &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->Predict(&segments));
     // "私の名前は中野です"
     EXPECT_EQ(segments.segment(0).candidate(0).value,
               "\xE7\xA7\x81\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D"
@@ -678,20 +709,20 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorUnusedHistoryTest) {
     // "ひろすえ"
     MakeSegmentsForSuggestion("\xE3\x81\xB2\xE3\x82\x8D"
                               "\xE3\x81\x99\xE3\x81\x88", &segments);
-    EXPECT_FALSE(predictor.Predict(&segments));
+    EXPECT_FALSE(predictor->Predict(&segments));
 
-    predictor.Sync();
+    predictor->Sync();
   }
 
   {
-    UserHistoryPredictor predictor;
-    predictor.WaitForSyncer();
+    scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+    predictor->WaitForSyncer();
     Segments segments;
 
     // "わたしの"
     MakeSegmentsForSuggestion("\xE3\x82\x8F\xE3\x81\x9F"
                               "\xE3\x81\x97\xE3\x81\xAE", &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->Predict(&segments));
     // "私の名前は中野です"
     EXPECT_EQ(segments.segment(0).candidate(0).value,
               "\xE7\xA7\x81\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D"
@@ -701,15 +732,15 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorUnusedHistoryTest) {
     // "ひろすえ"
     MakeSegmentsForSuggestion("\xE3\x81\xB2\xE3\x82\x8D"
                               "\xE3\x81\x99\xE3\x81\x88", &segments);
-    EXPECT_FALSE(predictor.Predict(&segments));
+    EXPECT_FALSE(predictor->Predict(&segments));
   }
 }
 
 TEST_F(UserHistoryPredictorTest, UserHistoryPredictorRevertTest) {
-  UserHistoryPredictor predictor;
-  predictor.WaitForSyncer();
-  predictor.ClearAllHistory();
-  predictor.WaitForSyncer();
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+  predictor->WaitForSyncer();
+  predictor->ClearAllHistory();
+  predictor->WaitForSyncer();
 
   Segments segments, segments2;
   // "わたしのなまえはなかのです"
@@ -724,36 +755,36 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorRevertTest) {
       "\xE3\x81\xAF\xE4\xB8\xAD\xE9\x87\x8E\xE3\x81\xA7"
       "\xE3\x81\x99", &segments);
 
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
 
   // Before Revert, Suggest works
   // "わたしの"
   MakeSegmentsForSuggestion("\xE3\x82\x8F\xE3\x81\x9F"
                             "\xE3\x81\x97\xE3\x81\xAE", &segments2);
-  EXPECT_TRUE(predictor.Predict(&segments2));
+  EXPECT_TRUE(predictor->Predict(&segments2));
   // "私の名前は中野です"
   EXPECT_EQ(segments.segment(0).candidate(0).value,
             "\xE7\xA7\x81\xE3\x81\xAE\xE5\x90\x8D\xE5\x89\x8D"
             "\xE3\x81\xAF\xE4\xB8\xAD\xE9\x87\x8E\xE3\x81\xA7\xE3\x81\x99");
 
   // Call revert here
-  predictor.Revert(&segments);
+  predictor->Revert(&segments);
 
   segments.Clear();
   // "わたしの"
   MakeSegmentsForSuggestion("\xE3\x82\x8F\xE3\x81\x9F"
                             "\xE3\x81\x97\xE3\x81\xAE", &segments);
 
-  EXPECT_FALSE(predictor.Predict(&segments));
+  EXPECT_FALSE(predictor->Predict(&segments));
   EXPECT_EQ(segments.segment(0).candidates_size(), 0);
 
-  EXPECT_FALSE(predictor.Predict(&segments));
+  EXPECT_FALSE(predictor->Predict(&segments));
   EXPECT_EQ(segments.segment(0).candidates_size(), 0);
 }
 
 TEST_F(UserHistoryPredictorTest, UserHistoryPredictorClearTest) {
-  UserHistoryPredictor predictor;
-  predictor.WaitForSyncer();
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+  predictor->WaitForSyncer();
 
   // input "testtest" 10 times
   for (int i = 0; i < 10; ++i) {
@@ -762,11 +793,11 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorClearTest) {
     // "テストテスト"
     AddCandidate("\xe3\x83\x86\xe3\x82\xb9\xe3\x83\x88"
                  "\xe3\x83\x86\xe3\x82\xb9\xe3\x83\x88", &segments);
-    predictor.Finish(&segments);
+    predictor->Finish(&segments);
   }
 
-  predictor.ClearAllHistory();
-  predictor.WaitForSyncer();
+  predictor->ClearAllHistory();
+  predictor->WaitForSyncer();
 
   // input "testtest" 1 time
   for (int i = 0; i < 1; ++i) {
@@ -775,26 +806,26 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorClearTest) {
     // "テストテスト"
     AddCandidate("\xe3\x83\x86\xe3\x82\xb9\xe3\x83\x88"
                  "\xe3\x83\x86\xe3\x82\xb9\xe3\x83\x88", &segments);
-    predictor.Finish(&segments);
+    predictor->Finish(&segments);
   }
 
   // frequency is cleared as well.
   {
     Segments segments;
     MakeSegmentsForSuggestion("t", &segments);
-    EXPECT_FALSE(predictor.Predict(&segments));
+    EXPECT_FALSE(predictor->Predict(&segments));
 
     segments.Clear();
     MakeSegmentsForSuggestion("testte", &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->Predict(&segments));
   }
 }
 
 TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTailingPunctuation) {
-  UserHistoryPredictor predictor;
-  predictor.WaitForSyncer();
-  predictor.ClearAllHistory();
-  predictor.WaitForSyncer();
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+  predictor->WaitForSyncer();
+  predictor->ClearAllHistory();
+  predictor->WaitForSyncer();
 
   Segments segments;
 
@@ -816,13 +847,13 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTailingPunctuation) {
   MakeSegmentsForConversion("\xE3\x80\x82", &segments);
   AddCandidate(1, "\xE3\x80\x82", &segments);
 
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
 
   segments.Clear();
   // "わたしの"
   MakeSegmentsForPrediction("\xE3\x82\x8F\xE3\x81\x9F"
                             "\xE3\x81\x97\xE3\x81\xAE", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
   EXPECT_EQ(segments.segment(0).candidates_size(), 2);
   // "私の名前は中野です"
   EXPECT_EQ(segments.segment(0).candidate(0).value,
@@ -839,7 +870,7 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTailingPunctuation) {
   MakeSegmentsForSuggestion("\xE3\x82\x8F\xE3\x81\x9F"
                             "\xE3\x81\x97\xE3\x81\xAE", &segments);
 
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
   EXPECT_EQ(segments.segment(0).candidates_size(), 2);
   // "私の名前は中野です"
   EXPECT_EQ(segments.segment(0).candidate(0).value,
@@ -853,10 +884,10 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorTailingPunctuation) {
 }
 
 TEST_F(UserHistoryPredictorTest, UserHistoryPredictorPreceedingPunctuation) {
-  UserHistoryPredictor predictor;
-  predictor.WaitForSyncer();
-  predictor.ClearAllHistory();
-  predictor.WaitForSyncer();
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+  predictor->WaitForSyncer();
+  predictor->ClearAllHistory();
+  predictor->WaitForSyncer();
 
   Segments segments;
 
@@ -878,14 +909,14 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorPreceedingPunctuation) {
       "\xE3\x81\xAF\xE4\xB8\xAD\xE9\x87\x8E\xE3\x81\xA7"
       "\xE3\x81\x99", &segments);
 
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
 
   segments.Clear();
   // "わたしの"
   MakeSegmentsForPrediction("\xE3\x82\x8F\xE3\x81\x9F"
                             "\xE3\x81\x97\xE3\x81\xAE", &segments);
 
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
   EXPECT_EQ(segments.segment(0).candidates_size(), 1);
   // "私の名前は中野です"
   EXPECT_EQ(segments.segment(0).candidate(0).value,
@@ -897,7 +928,7 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorPreceedingPunctuation) {
   // "わたしの"
   MakeSegmentsForSuggestion("\xE3\x82\x8F\xE3\x81\x9F"
                             "\xE3\x81\x97\xE3\x81\xAE", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
   EXPECT_EQ(segments.segment(0).candidates_size(), 1);
   // "私の名前は中野です"
   EXPECT_EQ(segments.segment(0).candidate(0).value,
@@ -905,12 +936,152 @@ TEST_F(UserHistoryPredictorTest, UserHistoryPredictorPreceedingPunctuation) {
             "\xE3\x81\xAF\xE4\xB8\xAD\xE9\x87\x8E\xE3\x81\xA7\xE3\x81\x99");
 }
 
+TEST_F(UserHistoryPredictorTest, ZeroQuerySuggestionTest) {
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+  predictor->WaitForSyncer();
+  predictor->ClearAllHistory();
+  predictor->WaitForSyncer();
+  EnableZeroQuerySuggestion();
+
+  Segments segments;
+
+  // No history segments
+  segments.Clear();
+  MakeSegmentsForSuggestion("", &segments);
+  EXPECT_FALSE(predictor->Predict(&segments));
+
+  {
+    segments.Clear();
+
+    // "たろうは/太郎は"
+    MakeSegmentsForConversion("\xE3\x81\x9F\xE3\x82\x8D"
+                              "\xE3\x81\x86\xE3\x81\xAF", &segments);
+    AddCandidate(0, "\xE5\xA4\xAA\xE9\x83\x8E\xE3\x81\xAF", &segments);
+    predictor->Finish(&segments);
+    segments.mutable_segment(0)->set_segment_type(Segment::HISTORY);
+
+    // "はなこに/花子に"
+    MakeSegmentsForConversion("\xE3\x81\xAF\xE3\x81\xAA"
+                              "\xE3\x81\x93\xE3\x81\xAB", &segments);
+    AddCandidate(1, "\xE8\x8A\xB1\xE5\xAD\x90\xE3\x81\xAB", &segments);
+    predictor->Finish(&segments);
+    segments.mutable_segment(1)->set_segment_type(Segment::HISTORY);
+
+    // "きょうと/京都"
+    segments.pop_back_segment();
+    MakeSegmentsForConversion(
+        "\xE3\x81\x8D\xE3\x82\x87\xE3\x81\x86\xE3\x81\xA8",
+        &segments);
+    AddCandidate(1, "\xE4\xBA\xAC\xE9\x83\xBD",
+                 &segments);
+    Util::Sleep(2000);
+    predictor->Finish(&segments);
+    segments.mutable_segment(1)->set_segment_type(Segment::HISTORY);
+
+    // "おおさか/大阪"
+    segments.pop_back_segment();
+    MakeSegmentsForConversion(
+        "\xE3\x81\x8A\xE3\x81\x8A\xE3\x81\x95\xE3\x81\x8B",
+        &segments);
+    AddCandidate(1, "\xE5\xA4\xA7\xE9\x98\xAA",
+                 &segments);
+    Util::Sleep(2000);
+    predictor->Finish(&segments);
+    segments.mutable_segment(1)->set_segment_type(Segment::HISTORY);
+
+    DisableZeroQuerySuggestion();
+    segments.pop_back_segment();
+    MakeSegmentsForSuggestion("", &segments);  // empty request
+    EXPECT_FALSE(predictor->Predict(&segments));
+
+    // Enable zero query suggestions
+    EnableZeroQuerySuggestion();
+
+    segments.pop_back_segment();
+    MakeSegmentsForSuggestion("", &segments);   // empty request
+    EXPECT_TRUE(predictor->Predict(&segments));
+    // last-pushed segment is "大阪"
+    // "大阪"
+    EXPECT_EQ("\xE5\xA4\xA7\xE9\x98\xAA",
+              segments.segment(1).candidate(0).value);
+    // "おおさか"
+    EXPECT_EQ("\xE3\x81\x8A\xE3\x81\x8A"
+              "\xE3\x81\x95\xE3\x81\x8B",
+              segments.segment(1).candidate(0).key);
+
+    segments.pop_back_segment();
+    // "は"
+    MakeSegmentsForSuggestion("\xE3\x81\xAF", &segments);
+    EXPECT_TRUE(predictor->Predict(&segments));
+
+    segments.pop_back_segment();
+    // "た"
+    MakeSegmentsForSuggestion("\xE3\x81\x9F", &segments);
+    EXPECT_TRUE(predictor->Predict(&segments));
+
+    segments.pop_back_segment();
+    // "き"
+    MakeSegmentsForSuggestion("\xE3\x81\x8D", &segments);
+    EXPECT_TRUE(predictor->Predict(&segments));
+
+    segments.pop_back_segment();
+    // "お"
+    MakeSegmentsForSuggestion("\xE3\x81\x8A", &segments);
+    EXPECT_TRUE(predictor->Predict(&segments));
+  }
+
+  predictor->ClearAllHistory();
+  predictor->WaitForSyncer();
+
+  {
+    segments.Clear();
+    // "たろうは/太郎は"
+    MakeSegmentsForConversion("\xE3\x81\x9F\xE3\x82\x8D"
+                              "\xE3\x81\x86\xE3\x81\xAF", &segments);
+    AddCandidate(0, "\xE5\xA4\xAA\xE9\x83\x8E\xE3\x81\xAF", &segments);
+
+    // "はなこに/花子に"
+    MakeSegmentsForConversion("\xE3\x81\xAF\xE3\x81\xAA"
+                              "\xE3\x81\x93\xE3\x81\xAB", &segments);
+    AddCandidate(1, "\xE8\x8A\xB1\xE5\xAD\x90\xE3\x81\xAB", &segments);
+    predictor->Finish(&segments);
+
+    segments.Clear();
+    // "たろうは/太郎は"
+    MakeSegmentsForConversion("\xE3\x81\x9F\xE3\x82\x8D"
+                              "\xE3\x81\x86\xE3\x81\xAF", &segments);
+    AddCandidate(0, "\xE5\xA4\xAA\xE9\x83\x8E\xE3\x81\xAF", &segments);
+    segments.mutable_segment(0)->set_segment_type(Segment::HISTORY);
+
+    DisableZeroQuerySuggestion();
+
+    MakeSegmentsForSuggestion("", &segments);  // empty request
+    EXPECT_FALSE(predictor->Predict(&segments));
+
+    // Enable zero query suggestions
+    EnableZeroQuerySuggestion();
+
+    segments.pop_back_segment();
+    MakeSegmentsForSuggestion("", &segments);   // empty request
+    EXPECT_TRUE(predictor->Predict(&segments));
+
+    segments.pop_back_segment();
+    // "は"
+    MakeSegmentsForSuggestion("\xE3\x81\xAF", &segments);
+    EXPECT_TRUE(predictor->Predict(&segments));
+
+    segments.pop_back_segment();
+    // "た"
+    MakeSegmentsForSuggestion("\xE3\x81\x9F", &segments);
+    EXPECT_TRUE(predictor->Predict(&segments));
+  }
+}
 
 TEST_F(UserHistoryPredictorTest, MultiSegmentsMultiInput) {
-  UserHistoryPredictor predictor;
-  predictor.WaitForSyncer();
-  predictor.ClearAllHistory();
-  predictor.WaitForSyncer();
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+  predictor->WaitForSyncer();
+  predictor->ClearAllHistory();
+  predictor->WaitForSyncer();
 
   Segments segments;
 
@@ -918,14 +1089,14 @@ TEST_F(UserHistoryPredictorTest, MultiSegmentsMultiInput) {
   MakeSegmentsForConversion("\xE3\x81\x9F\xE3\x82\x8D"
                             "\xE3\x81\x86\xE3\x81\xAF", &segments);
   AddCandidate(0, "\xE5\xA4\xAA\xE9\x83\x8E\xE3\x81\xAF", &segments);
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
   segments.mutable_segment(0)->set_segment_type(Segment::HISTORY);
 
   // "はなこに/花子に"
   MakeSegmentsForConversion("\xE3\x81\xAF\xE3\x81\xAA"
                             "\xE3\x81\x93\xE3\x81\xAB", &segments);
   AddCandidate(1, "\xE8\x8A\xB1\xE5\xAD\x90\xE3\x81\xAB", &segments);
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
   segments.mutable_segment(1)->set_segment_type(Segment::HISTORY);
 
   // "むずかしい/難しい"
@@ -934,7 +1105,7 @@ TEST_F(UserHistoryPredictorTest, MultiSegmentsMultiInput) {
                             "\xE3\x81\x8B\xE3\x81\x97"
                             "\xE3\x81\x84", &segments);
   AddCandidate(2, "\xE9\x9B\xA3\xE3\x81\x97\xE3\x81\x84", &segments);
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
   segments.mutable_segment(2)->set_segment_type(Segment::HISTORY);
 
   // "ほんを/本を"
@@ -942,7 +1113,7 @@ TEST_F(UserHistoryPredictorTest, MultiSegmentsMultiInput) {
   MakeSegmentsForConversion("\xE3\x81\xBB"
                             "\xE3\x82\x93\xE3\x82\x92", &segments);
   AddCandidate(3, "\xE6\x9C\xAC\xE3\x82\x92", &segments);
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
   segments.mutable_segment(3)->set_segment_type(Segment::HISTORY);
 
   // "よませた/読ませた"
@@ -951,43 +1122,43 @@ TEST_F(UserHistoryPredictorTest, MultiSegmentsMultiInput) {
                             "\xE3\x81\x9B\xE3\x81\x9F", &segments);
   AddCandidate(4, "\xE8\xAA\xAD\xE3\x81\xBE"
                "\xE3\x81\x9B\xE3\x81\x9F", &segments);
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
 
   // "た", Too short inputs
   segments.Clear();
   MakeSegmentsForSuggestion("\xE3\x81\x9F", &segments);
-  EXPECT_FALSE(predictor.Predict(&segments));
+  EXPECT_FALSE(predictor->Predict(&segments));
 
   // "たろうは"
   segments.Clear();
   MakeSegmentsForSuggestion("\xE3\x81\x9F\xE3\x82\x8D"
                             "\xE3\x81\x86\xE3\x81\xAF", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   // "ろうは", suggests only from segment boundary.
   segments.Clear();
   MakeSegmentsForSuggestion("\xE3\x82\x8D"
                             "\xE3\x81\x86\xE3\x81\xAF", &segments);
-  EXPECT_FALSE(predictor.Predict(&segments));
+  EXPECT_FALSE(predictor->Predict(&segments));
 
   // "たろうははな"
   segments.Clear();
   MakeSegmentsForSuggestion("\xE3\x81\x9F\xE3\x82\x8D"
                             "\xE3\x81\x86\xE3\x81\xAF"
                             "\xE3\x81\xAF\xE3\x81\xAA", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   // "はなこにむ"
   segments.Clear();
   MakeSegmentsForSuggestion("\xE3\x81\xAF\xE3\x81\xAA"
                             "\xE3\x81\x93\xE3\x81\xAB\xE3\x82\x80", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   // "むずかし"
   segments.Clear();
   MakeSegmentsForSuggestion("\xE3\x82\x80\xE3\x81\x9A"
                             "\xE3\x81\x8B\xE3\x81\x97", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   // "はなこにむずかしいほ"
   segments.Clear();
@@ -996,13 +1167,13 @@ TEST_F(UserHistoryPredictorTest, MultiSegmentsMultiInput) {
                             "\xE3\x82\x80\xE3\x81\x9A"
                             "\xE3\x81\x8B\xE3\x81\x97"
                             "\xE3\x81\x84\xE3\x81\xBB", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   // "ほんをよま"
   segments.Clear();
   MakeSegmentsForSuggestion("\xE3\x81\xBB\xE3\x82\x93"
                             "\xE3\x82\x92\xE3\x82\x88\xE3\x81\xBE", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   Util::Sleep(1000);
 
@@ -1011,30 +1182,30 @@ TEST_F(UserHistoryPredictorTest, MultiSegmentsMultiInput) {
   MakeSegmentsForConversion("\xE3\x81\x9F\xE3\x82\x8D"
                             "\xE3\x81\x86\xE3\x81\xAF", &segments);
   AddCandidate(0, "\xE5\xA4\xAA\xE9\x83\x8E\xE3\x81\xAF", &segments);
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
   segments.mutable_segment(0)->set_segment_type(Segment::HISTORY);
 
   MakeSegmentsForConversion("\xE3\x82\x88\xE3\x81\x97"
                             "\xE3\x81\x93\xE3\x81\xAB", &segments);
   AddCandidate(1, "\xE8\x89\xAF\xE5\xAD\x90\xE3\x81\xAB", &segments);
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
   segments.mutable_segment(1)->set_segment_type(Segment::HISTORY);
 
   // "たろうは"
   segments.Clear();
   MakeSegmentsForSuggestion("\xE3\x81\x9F\xE3\x82\x8D"
                             "\xE3\x81\x86\xE3\x81\xAF", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
   EXPECT_EQ(segments.segment(0).candidate(0).value,
             "\xE5\xA4\xAA\xE9\x83\x8E\xE3\x81\xAF"
             "\xE8\x89\xAF\xE5\xAD\x90\xE3\x81\xAB");
 }
 
 TEST_F(UserHistoryPredictorTest, MultiSegmentsSingleInput) {
-  UserHistoryPredictor predictor;
-  predictor.WaitForSyncer();
-  predictor.ClearAllHistory();
-  predictor.WaitForSyncer();
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+  predictor->WaitForSyncer();
+  predictor->ClearAllHistory();
+  predictor->WaitForSyncer();
 
   Segments segments;
 
@@ -1064,44 +1235,44 @@ TEST_F(UserHistoryPredictorTest, MultiSegmentsSingleInput) {
   AddCandidate(4, "\xE8\xAA\xAD\xE3\x81\xBE"
                "\xE3\x81\x9B\xE3\x81\x9F", &segments);
 
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
 
   // "たろうは"
   segments.Clear();
   MakeSegmentsForSuggestion("\xE3\x81\x9F\xE3\x82\x8D"
                             "\xE3\x81\x86\xE3\x81\xAF", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   // "た", Too short input
   segments.Clear();
   MakeSegmentsForSuggestion("\xE3\x81\x9F", &segments);
-  EXPECT_FALSE(predictor.Predict(&segments));
+  EXPECT_FALSE(predictor->Predict(&segments));
 
   // "たろうははな"
   segments.Clear();
   MakeSegmentsForSuggestion("\xE3\x81\x9F\xE3\x82\x8D"
                             "\xE3\x81\x86\xE3\x81\xAF"
                             "\xE3\x81\xAF\xE3\x81\xAA", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   // "ろうははな", suggest only from segment boundary
   segments.Clear();
   MakeSegmentsForSuggestion("\xE3\x82\x8D"
                             "\xE3\x81\x86\xE3\x81\xAF"
                             "\xE3\x81\xAF\xE3\x81\xAA", &segments);
-  EXPECT_FALSE(predictor.Predict(&segments));
+  EXPECT_FALSE(predictor->Predict(&segments));
 
   // "はなこにむ"
   segments.Clear();
   MakeSegmentsForSuggestion("\xE3\x81\xAF\xE3\x81\xAA"
                             "\xE3\x81\x93\xE3\x81\xAB\xE3\x82\x80", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   // "むずかし"
   segments.Clear();
   MakeSegmentsForSuggestion("\xE3\x82\x80\xE3\x81\x9A"
                             "\xE3\x81\x8B\xE3\x81\x97", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   // "はなこにむずかしいほ"
   segments.Clear();
@@ -1110,13 +1281,13 @@ TEST_F(UserHistoryPredictorTest, MultiSegmentsSingleInput) {
                             "\xE3\x82\x80\xE3\x81\x9A"
                             "\xE3\x81\x8B\xE3\x81\x97"
                             "\xE3\x81\x84\xE3\x81\xBB", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   // "ほんをよま"
   segments.Clear();
   MakeSegmentsForSuggestion("\xE3\x81\xBB\xE3\x82\x93"
                             "\xE3\x82\x92\xE3\x82\x88\xE3\x81\xBE", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   Util::Sleep(1000);
 
@@ -1125,30 +1296,30 @@ TEST_F(UserHistoryPredictorTest, MultiSegmentsSingleInput) {
   MakeSegmentsForConversion("\xE3\x81\x9F\xE3\x82\x8D"
                             "\xE3\x81\x86\xE3\x81\xAF", &segments);
   AddCandidate(0, "\xE5\xA4\xAA\xE9\x83\x8E\xE3\x81\xAF", &segments);
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
   segments.mutable_segment(0)->set_segment_type(Segment::HISTORY);
 
   MakeSegmentsForConversion("\xE3\x82\x88\xE3\x81\x97"
                             "\xE3\x81\x93\xE3\x81\xAB", &segments);
   AddCandidate(1, "\xE8\x89\xAF\xE5\xAD\x90\xE3\x81\xAB", &segments);
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
   segments.mutable_segment(1)->set_segment_type(Segment::HISTORY);
 
   // "たろうは"
   segments.Clear();
   MakeSegmentsForSuggestion("\xE3\x81\x9F\xE3\x82\x8D"
                             "\xE3\x81\x86\xE3\x81\xAF", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
   EXPECT_EQ(segments.segment(0).candidate(0).value,
             "\xE5\xA4\xAA\xE9\x83\x8E\xE3\x81\xAF"
             "\xE8\x89\xAF\xE5\xAD\x90\xE3\x81\xAB");
 }
 
 TEST_F(UserHistoryPredictorTest, Regression2843371_Case1) {
-  UserHistoryPredictor predictor;
-  predictor.WaitForSyncer();
-  predictor.ClearAllHistory();
-  predictor.WaitForSyncer();
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+  predictor->WaitForSyncer();
+  predictor->ClearAllHistory();
+  predictor->WaitForSyncer();
 
   Segments segments;
 
@@ -1176,7 +1347,7 @@ TEST_F(UserHistoryPredictorTest, Regression2843371_Case1) {
   MakeSegmentsForConversion("\xE3\x80\x82", &segments);
   AddCandidate(3, "\xE3\x80\x82", &segments);
 
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
 
   segments.Clear();
 
@@ -1206,7 +1377,7 @@ TEST_F(UserHistoryPredictorTest, Regression2843371_Case1) {
   MakeSegmentsForConversion("\xE3\x80\x82", &segments);
   AddCandidate(3, "\xE3\x80\x82", &segments);
 
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
 
   segments.Clear();
 
@@ -1215,7 +1386,7 @@ TEST_F(UserHistoryPredictorTest, Regression2843371_Case1) {
                             "\xE3\x81\x8D\xE3\x82\x87"
                             "\xE3\x81\x86\xE3\x81\xAF\xE3\x80\x81",
                             &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   // "東京は、日本です"
   EXPECT_EQ(segments.segment(0).candidate(0).value,
@@ -1226,10 +1397,10 @@ TEST_F(UserHistoryPredictorTest, Regression2843371_Case1) {
 }
 
 TEST_F(UserHistoryPredictorTest, Regression2843371_Case2) {
-  UserHistoryPredictor predictor;
-  predictor.WaitForSyncer();
-  predictor.ClearAllHistory();
-  predictor.WaitForSyncer();
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+  predictor->WaitForSyncer();
+  predictor->ClearAllHistory();
+  predictor->WaitForSyncer();
 
   Segments segments;
 
@@ -1284,17 +1455,17 @@ TEST_F(UserHistoryPredictorTest, Regression2843371_Case2) {
   MakeSegmentsForConversion("\xE3\x80\x82", &segments);
   AddCandidate(10, "\xE3\x80\x82", &segments);
 
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
 
   segments.Clear();
 
   // "えど("
   MakeSegmentsForSuggestion("\xE3\x81\x88\xE3\x81\xA9(", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
   EXPECT_EQ(segments.segment(0).candidate(0).value,
             "\xE6\xB1\x9F\xE6\x88\xB8(\xE6\x9D\xB1\xE4\xBA\xAC");
 
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   // "江戸(東京"
   EXPECT_EQ(segments.segment(0).candidate(0).value,
@@ -1302,10 +1473,10 @@ TEST_F(UserHistoryPredictorTest, Regression2843371_Case2) {
 }
 
 TEST_F(UserHistoryPredictorTest, Regression2843371_Case3) {
-  UserHistoryPredictor predictor;
-  predictor.WaitForSyncer();
-  predictor.ClearAllHistory();
-  predictor.WaitForSyncer();
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+  predictor->WaitForSyncer();
+  predictor->ClearAllHistory();
+  predictor->WaitForSyncer();
 
   Segments segments;
 
@@ -1334,7 +1505,7 @@ TEST_F(UserHistoryPredictorTest, Regression2843371_Case3) {
   MakeSegmentsForConversion("\xE3\x80\x82", &segments);
   AddCandidate(5, "\xE3\x80\x82", &segments);
 
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
 
   Util::Sleep(2000);
 
@@ -1364,7 +1535,7 @@ TEST_F(UserHistoryPredictorTest, Regression2843371_Case3) {
   MakeSegmentsForConversion("\xE3\x80\x82", &segments);
   AddCandidate(5, "\xE3\x80\x82", &segments);
 
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
 
   segments.Clear();
 
@@ -1372,7 +1543,7 @@ TEST_F(UserHistoryPredictorTest, Regression2843371_Case3) {
   MakeSegmentsForSuggestion("\xE3\x80\x8C\xE3\x82\x84"
                             "\xE3\x81\xBE\xE3\x80\x8D\xE3\x81\xAF",
                             &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   // "「山」は高い"
   EXPECT_EQ(segments.segment(0).candidate(0).value,
@@ -1381,10 +1552,10 @@ TEST_F(UserHistoryPredictorTest, Regression2843371_Case3) {
 }
 
 TEST_F(UserHistoryPredictorTest, Regression2843775) {
-  UserHistoryPredictor predictor;
-  predictor.WaitForSyncer();
-  predictor.ClearAllHistory();
-  predictor.WaitForSyncer();
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+  predictor->WaitForSyncer();
+  predictor->ClearAllHistory();
+  predictor->WaitForSyncer();
 
   Segments segments;
 
@@ -1409,14 +1580,14 @@ TEST_F(UserHistoryPredictorTest, Regression2843775) {
                "\xE9\xA1\x98\xE3\x81\x84"
                "\xE3\x81\x97\xE3\x81\xBE\xE3\x81\x99", &segments);
 
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
 
   segments.Clear();
 
   // "そうです"
   MakeSegmentsForSuggestion("\xE3\x81\x9D\xE3\x81\x86"
                             "\xE3\x81\xA7\xE3\x81\x99", &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   // "そうです。よろしくお願いします"
   EXPECT_EQ(segments.segment(0).candidate(0).value,
@@ -1431,10 +1602,10 @@ TEST_F(UserHistoryPredictorTest, Regression2843775) {
 }
 
 TEST_F(UserHistoryPredictorTest, DuplicateString) {
-  UserHistoryPredictor predictor;
-  predictor.WaitForSyncer();
-  predictor.ClearAllHistory();
-  predictor.WaitForSyncer();
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+  predictor->WaitForSyncer();
+  predictor->ClearAllHistory();
+  predictor->WaitForSyncer();
 
   Segments segments;
 
@@ -1481,7 +1652,7 @@ TEST_F(UserHistoryPredictorTest, DuplicateString) {
   MakeSegmentsForConversion("\xEF\xBC\x89", &segments);
   AddCandidate(7, "\xEF\xBC\x89", &segments);
 
-  predictor.Finish(&segments);
+  predictor->Finish(&segments);
 
   segments.Clear();
 
@@ -1489,7 +1660,7 @@ TEST_F(UserHistoryPredictorTest, DuplicateString) {
   MakeSegmentsForSuggestion(
       "\xE3\x81\x9E\xE3\x81\x86\xE3\x82\x8A\xE3\x82\x80\xE3\x81\x97",
       &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   for (int i = 0; i < segments.segment(0).candidates_size(); ++i) {
     EXPECT_EQ(string::npos,
@@ -1503,7 +1674,7 @@ TEST_F(UserHistoryPredictorTest, DuplicateString) {
   MakeSegmentsForSuggestion(
       "\xE3\x82\x89\xE3\x81\x84\xE3\x81\x8A\xE3\x82\x93",
       &segments);
-  EXPECT_TRUE(predictor.Predict(&segments));
+  EXPECT_TRUE(predictor->Predict(&segments));
 
   // "ライオン（微生物" should not be found
   for (int i = 0; i < segments.segment(0).candidates_size(); ++i) {
@@ -1528,8 +1699,8 @@ struct Command {
 };
 
 TEST_F(UserHistoryPredictorTest, SyncTest) {
-  UserHistoryPredictor predictor;
-  predictor.WaitForSyncer();
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+  predictor->WaitForSyncer();
 
   vector<Command> commands(10000);
   for (size_t i = 0; i < commands.size(); ++i) {
@@ -1552,21 +1723,21 @@ TEST_F(UserHistoryPredictorTest, SyncTest) {
   for (size_t i = 0; i < commands.size(); ++i) {
     switch (commands[i].type) {
       case Command::SYNC:
-        predictor.Sync();
+        predictor->Sync();
         break;
       case Command::WAIT:
-        predictor.WaitForSyncer();
+        predictor->WaitForSyncer();
         break;
       case Command::INSERT:
         segments.Clear();
         MakeSegmentsForConversion(commands[i].key, &segments);
         AddCandidate(commands[i].value, &segments);
-        predictor.Finish(&segments);
+        predictor->Finish(&segments);
         break;
       case Command::LOOKUP:
         segments.Clear();
         MakeSegmentsForSuggestion(commands[i].key, &segments);
-        predictor.Predict(&segments);
+        predictor->Predict(&segments);
       default:
         break;
     }
@@ -1657,7 +1828,7 @@ TEST_F(UserHistoryPredictorTest, FingerPrintTest) {
 }
 
 TEST_F(UserHistoryPredictorTest, Uint32ToStringTest) {
-  UserHistoryPredictor predictor;
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
   EXPECT_EQ(123,
             UserHistoryPredictor::StringToUint32(
                 UserHistoryPredictor::Uint32ToString(123)));
@@ -1680,7 +1851,7 @@ TEST_F(UserHistoryPredictorTest, Uint32ToStringTest) {
 }
 
 TEST_F(UserHistoryPredictorTest, GetScore) {
-  UserHistoryPredictor predictor;
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
   // latest value has higher score.
   {
     UserHistoryPredictor::Entry entry1, entry2;
@@ -1749,34 +1920,36 @@ TEST_F(UserHistoryPredictorTest, GetScore) {
 }
 
 TEST_F(UserHistoryPredictorTest, IsValidEntry) {
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+
   UserHistoryPredictor::Entry entry;
 
-  EXPECT_TRUE(UserHistoryPredictor::IsValidEntry(entry));
+  EXPECT_TRUE(predictor->IsValidEntry(entry));
 
   entry.set_key("key");
   entry.set_value("value");
 
-  EXPECT_TRUE(UserHistoryPredictor::IsValidEntry(entry));
+  EXPECT_TRUE(predictor->IsValidEntry(entry));
 
   entry.set_removed(true);
-  EXPECT_FALSE(UserHistoryPredictor::IsValidEntry(entry));
+  EXPECT_FALSE(predictor->IsValidEntry(entry));
 
   entry.set_removed(false);
-  EXPECT_TRUE(UserHistoryPredictor::IsValidEntry(entry));
+  EXPECT_TRUE(predictor->IsValidEntry(entry));
 
   entry.set_entry_type(UserHistoryPredictor::Entry::CLEAN_ALL_EVENT);
-  EXPECT_FALSE(UserHistoryPredictor::IsValidEntry(entry));
+  EXPECT_FALSE(predictor->IsValidEntry(entry));
 
   entry.set_entry_type(UserHistoryPredictor::Entry::CLEAN_UNUSED_EVENT);
-  EXPECT_FALSE(UserHistoryPredictor::IsValidEntry(entry));
+  EXPECT_FALSE(predictor->IsValidEntry(entry));
 
   entry.set_removed(true);
-  EXPECT_FALSE(UserHistoryPredictor::IsValidEntry(entry));
+  EXPECT_FALSE(predictor->IsValidEntry(entry));
 
   entry.Clear();
-  EXPECT_TRUE(UserHistoryPredictor::IsValidEntry(entry));
+  EXPECT_TRUE(predictor->IsValidEntry(entry));
 
-  SuppressionDictionary *d = SuppressionDictionary::GetSuppressionDictionary();
+  SuppressionDictionary *d = Singleton<SuppressionDictionary>::get();
   DCHECK(d);
   d->Lock();
   d->AddEntry("foo", "bar");
@@ -1784,11 +1957,11 @@ TEST_F(UserHistoryPredictorTest, IsValidEntry) {
 
   entry.set_key("key");
   entry.set_value("value");
-  EXPECT_TRUE(UserHistoryPredictor::IsValidEntry(entry));
+  EXPECT_TRUE(predictor->IsValidEntry(entry));
 
   entry.set_key("foo");
   entry.set_value("bar");
-  EXPECT_FALSE(UserHistoryPredictor::IsValidEntry(entry));
+  EXPECT_FALSE(predictor->IsValidEntry(entry));
 
   d->Lock();
   d->Clear();
@@ -1796,7 +1969,7 @@ TEST_F(UserHistoryPredictorTest, IsValidEntry) {
 }
 
 TEST_F(UserHistoryPredictorTest, IsValidSuggestion) {
-  UserHistoryPredictor predictor;
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
   UserHistoryPredictor::Entry entry;
 
   EXPECT_FALSE(UserHistoryPredictor::IsValidSuggestion(false, 1, entry));
@@ -1870,8 +2043,6 @@ TEST_F(UserHistoryPredictorTest, EntryPriorityQueueTest) {
 namespace {
 
 string RemoveLastUCS4Character(const string &input) {
-  const char *begin = input.data();
-  const char *end = begin + input.size();
   const size_t ucs4_count = Util::CharsLen(input);
   if (ucs4_count == 0) {
     return "";
@@ -1879,12 +2050,10 @@ string RemoveLastUCS4Character(const string &input) {
 
   size_t ucs4_processed = 0;
   string output;
-  while ((begin < end) && (ucs4_processed < ucs4_count - 1)) {
-    size_t mblen = 0;
-    const char32 ucs4 = Util::UTF8ToUCS4(begin, end, &mblen);
-    Util::UCS4ToUTF8Append(ucs4, &output);
-    begin += mblen;
-    ++ucs4_processed;
+  for (ConstChar32Iterator iter(input);
+       !iter.Done() && (ucs4_processed < ucs4_count - 1);
+       iter.Next(), ++ucs4_processed) {
+    Util::UCS4ToUTF8Append(iter.Get(), &output);
   }
   return output;
 }
@@ -1978,25 +2147,8 @@ const PrivacySensitiveTestData kNonSensitiveCases[] = {
     // "yっwz1sxm"
     "y" "\343\201\243" "wz1sxm",
     "ywwz1sxm"
-  }, {
-    kSensitive,  // We might want to revisit this behavior
-    "Type a very common English word which should be included in our "
-    "system dictionary without capitalization.",
-    "those",
-    "those"
-  }, {
-    kSensitive,  // We might want to revisit this behavior
-    "Type a very common English word which should be included in our "
-    "system dictionary with capitalization.",
-    "Those",
-    "Those"
-  }, {
-    kSensitive,  // We might want to revisit this behavior
-    "Type a very common English word which should be included in our "
-    "system dictionary with random capitalizations.",
-    "tHoSe",
-    "tHoSe"
-  }, {
+  },
+  {
     kSensitive,  // We might want to revisit this behavior
     "Type just a number.",
     "2398402938402934",
@@ -2013,11 +2165,11 @@ const PrivacySensitiveTestData kNonSensitiveCases[] = {
 }  // namespace
 
 TEST_F(UserHistoryPredictorTest, PrivacySensitiveTest) {
-  UserHistoryPredictor predictor;
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
 
   for (size_t i = 0; i < arraysize(kNonSensitiveCases); ++i) {
-    predictor.ClearAllHistory();
-    predictor.WaitForSyncer();
+    predictor->ClearAllHistory();
+    predictor->WaitForSyncer();
 
     const PrivacySensitiveTestData &data = kNonSensitiveCases[i];
     const string description(data.scenario_description);
@@ -2031,7 +2183,7 @@ TEST_F(UserHistoryPredictorTest, PrivacySensitiveTest) {
       Segments segments;
       MakeSegmentsForConversion(input, &segments);
       AddCandidate(0, output, &segments);
-      predictor.Finish(&segments);
+      predictor->Finish(&segments);
     }
 
     // TODO(yukawa): Refactor the scenario runner below by making
@@ -2042,19 +2194,19 @@ TEST_F(UserHistoryPredictorTest, PrivacySensitiveTest) {
       Segments segments;
       MakeSegmentsForSuggestion(partial_input, &segments);
       if (expect_sensitive) {
-        EXPECT_FALSE(predictor.Predict(&segments))
+        EXPECT_FALSE(predictor->Predict(&segments))
           << description << " input: " << input << " output: " << output;
       } else {
-        EXPECT_TRUE(predictor.Predict(&segments))
+        EXPECT_TRUE(predictor->Predict(&segments))
           << description << " input: " << input << " output: " << output;
       }
       segments.Clear();
       MakeSegmentsForPrediction(input, &segments);
       if (expect_sensitive) {
-        EXPECT_FALSE(predictor.Predict(&segments))
+        EXPECT_FALSE(predictor->Predict(&segments))
           << description << " input: " << input << " output: " << output;
       } else {
-        EXPECT_TRUE(predictor.Predict(&segments))
+        EXPECT_TRUE(predictor->Predict(&segments))
           << description << " input: " << input << " output: " << output;
       }
     }
@@ -2064,19 +2216,19 @@ TEST_F(UserHistoryPredictorTest, PrivacySensitiveTest) {
       Segments segments;
       MakeSegmentsForPrediction(partial_input, &segments);
       if (expect_sensitive) {
-        EXPECT_FALSE(predictor.Predict(&segments))
+        EXPECT_FALSE(predictor->Predict(&segments))
           << description << " input: " << input << " output: " << output;
       } else {
-        EXPECT_TRUE(predictor.Predict(&segments))
+        EXPECT_TRUE(predictor->Predict(&segments))
           << description << " input: " << input << " output: " << output;
       }
       segments.Clear();
       MakeSegmentsForPrediction(input, &segments);
       if (expect_sensitive) {
-        EXPECT_FALSE(predictor.Predict(&segments))
+        EXPECT_FALSE(predictor->Predict(&segments))
           << description << " input: " << input << " output: " << output;
       } else {
-        EXPECT_TRUE(predictor.Predict(&segments))
+        EXPECT_TRUE(predictor->Predict(&segments))
           << description << " input: " << input << " output: " << output;
       }
     }
@@ -2084,8 +2236,8 @@ TEST_F(UserHistoryPredictorTest, PrivacySensitiveTest) {
 }
 
 TEST_F(UserHistoryPredictorTest, PrivacySensitiveMultiSegmentsTest) {
-  UserHistoryPredictor predictor;
-  predictor.WaitForSyncer();
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
+  predictor->WaitForSyncer();
 
   // If a password-like input consists of multiple segments, it is not
   // considered to be privacy sensitive when the input is committed.
@@ -2096,25 +2248,25 @@ TEST_F(UserHistoryPredictorTest, PrivacySensitiveMultiSegmentsTest) {
     MakeSegmentsForConversion("abc!", &segments);
     AddCandidate(0, "123", &segments);
     AddCandidate(1, "abc!", &segments);
-    predictor.Finish(&segments);
+    predictor->Finish(&segments);
   }
 
   {
     Segments segments;
     MakeSegmentsForSuggestion("123abc", &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->Predict(&segments));
     segments.Clear();
     MakeSegmentsForSuggestion("123abc!", &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->Predict(&segments));
   }
 
   {
     Segments segments;
     MakeSegmentsForPrediction("123abc", &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->Predict(&segments));
     segments.Clear();
     MakeSegmentsForPrediction("123abc!", &segments);
-    EXPECT_TRUE(predictor.Predict(&segments));
+    EXPECT_TRUE(predictor->Predict(&segments));
   }
 }
 
@@ -2295,26 +2447,26 @@ TEST_F(UserHistoryPredictorTest, GetRomanMisspelledKey) {
 
 
 TEST_F(UserHistoryPredictorTest, RomanFuzzyLookupEntry) {
-  UserHistoryPredictor predictor;
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
   UserHistoryPredictor::Entry entry;
   UserHistoryPredictor::EntryPriorityQueue results;
 
   entry.set_key("");
-  EXPECT_FALSE(predictor.RomanFuzzyLookupEntry("", &entry, &results));
+  EXPECT_FALSE(predictor->RomanFuzzyLookupEntry("", &entry, &results));
 
   //  entry.set_key("よろしく");
   entry.set_key("\xE3\x82\x88\xE3\x82\x8D\xE3\x81\x97\xE3\x81\x8F");
-  EXPECT_TRUE(predictor.RomanFuzzyLookupEntry("yorosku", &entry, &results));
-  EXPECT_TRUE(predictor.RomanFuzzyLookupEntry("yrosiku", &entry, &results));
-  EXPECT_TRUE(predictor.RomanFuzzyLookupEntry("yorsiku", &entry, &results));
-  EXPECT_FALSE(predictor.RomanFuzzyLookupEntry("yrsk", &entry, &results));
-  EXPECT_FALSE(predictor.RomanFuzzyLookupEntry("yorosiku", &entry, &results));
+  EXPECT_TRUE(predictor->RomanFuzzyLookupEntry("yorosku", &entry, &results));
+  EXPECT_TRUE(predictor->RomanFuzzyLookupEntry("yrosiku", &entry, &results));
+  EXPECT_TRUE(predictor->RomanFuzzyLookupEntry("yorsiku", &entry, &results));
+  EXPECT_FALSE(predictor->RomanFuzzyLookupEntry("yrsk", &entry, &results));
+  EXPECT_FALSE(predictor->RomanFuzzyLookupEntry("yorosiku", &entry, &results));
 
   // entry.set_key("ぐーぐる");
   entry.set_key("\xE3\x81\x90\xE3\x83\xBC\xE3\x81\x90\xE3\x82\x8B");
-  EXPECT_TRUE(predictor.RomanFuzzyLookupEntry("gu=guru", &entry, &results));
-  EXPECT_FALSE(predictor.RomanFuzzyLookupEntry("gu-guru", &entry, &results));
-  EXPECT_FALSE(predictor.RomanFuzzyLookupEntry("g=guru", &entry, &results));
+  EXPECT_TRUE(predictor->RomanFuzzyLookupEntry("gu=guru", &entry, &results));
+  EXPECT_FALSE(predictor->RomanFuzzyLookupEntry("gu-guru", &entry, &results));
+  EXPECT_FALSE(predictor->RomanFuzzyLookupEntry("g=guru", &entry, &results));
 }
 
 namespace {
@@ -2325,7 +2477,7 @@ struct LookupTestData {
 }  // namespace
 
 TEST_F(UserHistoryPredictorTest, ExpandedLookupRoman) {
-  UserHistoryPredictor predictor;
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
   UserHistoryPredictor::Entry entry;
   UserHistoryPredictor::EntryPriorityQueue results;
 
@@ -2373,7 +2525,7 @@ TEST_F(UserHistoryPredictorTest, ExpandedLookupRoman) {
   // with expanded
   for (size_t i = 0; i < arraysize(kTests1); ++i) {
     entry.set_key(kTests1[i].entry_key);
-    EXPECT_EQ(kTests1[i].expect_result, predictor.LookupEntry(
+    EXPECT_EQ(kTests1[i].expect_result, predictor->LookupEntry(
         // "あｋ", "あ"
         "\xe3\x81\x82\xef\xbd\x8b", "\xe3\x81\x82",
         expanded.get(), &entry, NULL, &results))
@@ -2402,14 +2554,14 @@ TEST_F(UserHistoryPredictorTest, ExpandedLookupRoman) {
 
   for (size_t i = 0; i < arraysize(kTests2); ++i) {
     entry.set_key(kTests2[i].entry_key);
-    EXPECT_EQ(kTests2[i].expect_result, predictor.LookupEntry(
+    EXPECT_EQ(kTests2[i].expect_result, predictor->LookupEntry(
         "", "", expanded.get(), &entry, NULL, &results))
         << kTests2[i].entry_key;
   }
 }
 
 TEST_F(UserHistoryPredictorTest, ExpandedLookupKana) {
-  UserHistoryPredictor predictor;
+  scoped_ptr<UserHistoryPredictor> predictor(CreateUserHistoryPredictor());
   UserHistoryPredictor::Entry entry;
   UserHistoryPredictor::EntryPriorityQueue results;
 
@@ -2457,7 +2609,7 @@ TEST_F(UserHistoryPredictorTest, ExpandedLookupKana) {
   // with expanded
   for (size_t i = 0; i < arraysize(kTests1); ++i) {
     entry.set_key(kTests1[i].entry_key);
-    EXPECT_EQ(kTests1[i].expect_result, predictor.LookupEntry(
+    EXPECT_EQ(kTests1[i].expect_result, predictor->LookupEntry(
         // "あし", "あ"
         "\xe3\x81\x82\xe3\x81\x97", "\xe3\x81\x82",
         expanded.get(), &entry, NULL, &results))
@@ -2486,7 +2638,7 @@ TEST_F(UserHistoryPredictorTest, ExpandedLookupKana) {
 
   for (size_t i = 0; i < arraysize(kTests2); ++i) {
     entry.set_key(kTests2[i].entry_key);
-    EXPECT_EQ(kTests2[i].expect_result, predictor.LookupEntry(
+    EXPECT_EQ(kTests2[i].expect_result, predictor->LookupEntry(
         // "し"
         "\xe3\x81\x97", "", expanded.get(), &entry, NULL, &results))
         << kTests2[i].entry_key;
@@ -2656,8 +2808,10 @@ TEST_F(UserHistoryPredictorTest, GetMatchTypeFromInputKana) {
 namespace {
 void InitSegmentsFromInputSequence(const string &text,
                                    composer::Composer *composer,
+                                   ConversionRequest *request,
                                    Segments *segments) {
   DCHECK(composer);
+  DCHECK(request);
   DCHECK(segments);
   const char *begin = text.data();
   const char *end = text.data() + text.size();
@@ -2676,8 +2830,9 @@ void InitSegmentsFromInputSequence(const string &text,
     composer->InsertCharacterKeyEvent(key);
   }
 
+  request->set_composer(composer);
+
   segments->set_request_type(Segments::PREDICTION);
-  segments->set_composer(composer);
   Segment *segment = segments->add_segment();
   CHECK(segment);
   string query;
@@ -2689,18 +2844,20 @@ void InitSegmentsFromInputSequence(const string &text,
 TEST_F(UserHistoryPredictorTest, GetInputKeyFromSegmentsRoman) {
   scoped_ptr<composer::Table> table(new composer::Table);
   scoped_ptr<composer::Composer> composer(new composer::Composer);
+  ConversionRequest request;
   Segments segments;
 
   table->LoadFromFile("system://romanji-hiragana.tsv");
-  composer->SetTableForUnittest(table.get());
-  InitSegmentsFromInputSequence("gu-g", composer.get(), &segments);
+  composer->SetTable(table.get());
+  InitSegmentsFromInputSequence("gu-g", composer.get(), &request, &segments);
 
   {
     FLAGS_enable_expansion_for_user_history_predictor = true;
     string input_key;
     string base;
     scoped_ptr<Trie<string> > expanded;
-    UserHistoryPredictor::GetInputKeyFromSegments(segments,
+    UserHistoryPredictor::GetInputKeyFromSegments(request,
+                                                  segments,
                                                   &input_key,
                                                   &base,
                                                   &expanded);
@@ -2725,7 +2882,8 @@ TEST_F(UserHistoryPredictorTest, GetInputKeyFromSegmentsRoman) {
     string input_key;
     string base;
     scoped_ptr<Trie<string> > expanded;
-    UserHistoryPredictor::GetInputKeyFromSegments(segments,
+    UserHistoryPredictor::GetInputKeyFromSegments(request,
+                                                  segments,
                                                   &input_key,
                                                   &base,
                                                   &expanded);
@@ -2748,14 +2906,15 @@ TEST_F(UserHistoryPredictorTest, GetInputKeyFromSegmentsRomanRandom) {
   FLAGS_enable_expansion_for_user_history_predictor = true;
   scoped_ptr<composer::Table> table(new composer::Table);
   scoped_ptr<composer::Composer> composer(new composer::Composer);
+  ConversionRequest request;
   Segments segments;
 
   table->LoadFromFile("system://romanji-hiragana.tsv");
-  composer->SetTableForUnittest(table.get());
+  composer->SetTable(table.get());
 
   for (size_t i = 0; i < 1000; ++i) {
     composer.reset(new composer::Composer);
-    composer->SetTableForUnittest(table.get());
+    composer->SetTable(table.get());
     const int len = 1 + Util::Random(4);
     DCHECK_GE(len, 1);
     DCHECK_LE(len, 5);
@@ -2763,11 +2922,12 @@ TEST_F(UserHistoryPredictorTest, GetInputKeyFromSegmentsRomanRandom) {
     for (size_t j = 0; j < len; ++j) {
       input += GetRandomAscii();
     }
-    InitSegmentsFromInputSequence(input, composer.get(), &segments);
+    InitSegmentsFromInputSequence(input, composer.get(), &request, &segments);
     string input_key;
     string base;
     scoped_ptr<Trie<string> > expanded;
-    UserHistoryPredictor::GetInputKeyFromSegments(segments,
+    UserHistoryPredictor::GetInputKeyFromSegments(request,
+                                                  segments,
                                                   &input_key,
                                                   &base,
                                                   &expanded);
@@ -2780,16 +2940,18 @@ TEST_F(UserHistoryPredictorTest, GetInputKeyFromSegmentsShouldNotCrash) {
   FLAGS_enable_expansion_for_user_history_predictor = true;
   scoped_ptr<composer::Table> table(new composer::Table);
   scoped_ptr<composer::Composer> composer(new composer::Composer);
+  ConversionRequest request;
   Segments segments;
 
   table->LoadFromFile("system://romanji-hiragana.tsv");
-  composer->SetTableForUnittest(table.get());
+  composer->SetTable(table.get());
   {
-    InitSegmentsFromInputSequence("8,+", composer.get(), &segments);
+    InitSegmentsFromInputSequence("8,+", composer.get(), &request, &segments);
     string input_key;
     string base;
     scoped_ptr<Trie<string> > expanded;
-    UserHistoryPredictor::GetInputKeyFromSegments(segments,
+    UserHistoryPredictor::GetInputKeyFromSegments(request,
+                                                  segments,
                                                   &input_key,
                                                   &base,
                                                   &expanded);
@@ -2800,16 +2962,20 @@ TEST_F(UserHistoryPredictorTest, GetInputKeyFromSegmentsRomanN) {
   FLAGS_enable_expansion_for_user_history_predictor = true;
   scoped_ptr<composer::Table> table(new composer::Table);
   scoped_ptr<composer::Composer> composer(new composer::Composer);
+  scoped_ptr<ConversionRequest> request(NULL);
   Segments segments;
 
   table->LoadFromFile("system://romanji-hiragana.tsv");
-  composer->SetTableForUnittest(table.get());
+  composer->SetTable(table.get());
   {
-    InitSegmentsFromInputSequence("n", composer.get(), &segments);
+    request.reset(new ConversionRequest);
+    InitSegmentsFromInputSequence("n", composer.get(),
+                                  request.get(), &segments);
     string input_key;
     string base;
     scoped_ptr<Trie<string> > expanded;
-    UserHistoryPredictor::GetInputKeyFromSegments(segments,
+    UserHistoryPredictor::GetInputKeyFromSegments(*request,
+                                                  segments,
                                                   &input_key,
                                                   &base,
                                                   &expanded);
@@ -2829,14 +2995,17 @@ TEST_F(UserHistoryPredictorTest, GetInputKeyFromSegmentsRomanN) {
   }
 
   composer.reset(new composer::Composer);
-  composer->SetTableForUnittest(table.get());
+  composer->SetTable(table.get());
   segments.Clear();
   {
-    InitSegmentsFromInputSequence("nn", composer.get(), &segments);
+    request.reset(new ConversionRequest);
+    InitSegmentsFromInputSequence("nn", composer.get(),
+                                  request.get(), &segments);
     string input_key;
     string base;
     scoped_ptr<Trie<string> > expanded;
-    UserHistoryPredictor::GetInputKeyFromSegments(segments,
+    UserHistoryPredictor::GetInputKeyFromSegments(*request,
+                                                  segments,
                                                   &input_key,
                                                   &base,
                                                   &expanded);
@@ -2848,14 +3017,17 @@ TEST_F(UserHistoryPredictorTest, GetInputKeyFromSegmentsRomanN) {
   }
 
   composer.reset(new composer::Composer);
-  composer->SetTableForUnittest(table.get());
+  composer->SetTable(table.get());
   segments.Clear();
   {
-    InitSegmentsFromInputSequence("n'", composer.get(), &segments);
+    request.reset(new ConversionRequest);
+    InitSegmentsFromInputSequence("n'", composer.get(),
+                                  request.get(), &segments);
     string input_key;
     string base;
     scoped_ptr<Trie<string> > expanded;
-    UserHistoryPredictor::GetInputKeyFromSegments(segments,
+    UserHistoryPredictor::GetInputKeyFromSegments(*request,
+                                                  segments,
                                                   &input_key,
                                                   &base,
                                                   &expanded);
@@ -2867,14 +3039,17 @@ TEST_F(UserHistoryPredictorTest, GetInputKeyFromSegmentsRomanN) {
   }
 
   composer.reset(new composer::Composer);
-  composer->SetTableForUnittest(table.get());
+  composer->SetTable(table.get());
   segments.Clear();
   {
-    InitSegmentsFromInputSequence("n'n", composer.get(), &segments);
+    request.reset(new ConversionRequest);
+    InitSegmentsFromInputSequence("n'n", composer.get(),
+                                  request.get(), &segments);
     string input_key;
     string base;
     scoped_ptr<Trie<string> > expanded;
-    UserHistoryPredictor::GetInputKeyFromSegments(segments,
+    UserHistoryPredictor::GetInputKeyFromSegments(*request,
+                                                  segments,
                                                   &input_key,
                                                   &base,
                                                   &expanded);
@@ -2895,24 +3070,97 @@ TEST_F(UserHistoryPredictorTest, GetInputKeyFromSegmentsRomanN) {
   }
 }
 
+TEST_F(UserHistoryPredictorTest, GetInputKeyFromSegmentsFlickN) {
+  FLAGS_enable_expansion_for_user_history_predictor = true;
+  scoped_ptr<composer::Table> table(new composer::Table);
+  scoped_ptr<composer::Composer> composer(new composer::Composer);
+  ConversionRequest request;
+  Segments segments;
+
+  table->LoadFromFile("system://flick-hiragana.tsv");
+  composer->SetTable(table.get());
+  {
+    InitSegmentsFromInputSequence("/", composer.get(), &request, &segments);
+    string input_key;
+    string base;
+    scoped_ptr<Trie<string> > expanded;
+    UserHistoryPredictor::GetInputKeyFromSegments(request,
+                                                  segments,
+                                                  &input_key,
+                                                  &base,
+                                                  &expanded);
+    // "ん"
+    EXPECT_EQ("\xe3\x82\x93", input_key);
+    EXPECT_EQ("", base);
+    EXPECT_TRUE(expanded.get() != NULL);
+    string value;
+    size_t key_length = 0;
+    bool has_subtrie = false;
+    EXPECT_TRUE(
+        // "ん"
+        expanded->LookUpPrefix("\xe3\x82\x93",
+                               &value, &key_length, &has_subtrie));
+    // "ん"
+    EXPECT_EQ("\xe3\x82\x93", value);
+  }
+}
+
+TEST_F(UserHistoryPredictorTest, GetInputKeyFromSegments12KeyN) {
+  FLAGS_enable_expansion_for_user_history_predictor = true;
+  scoped_ptr<composer::Table> table(new composer::Table);
+  scoped_ptr<composer::Composer> composer(new composer::Composer);
+  ConversionRequest request;
+  Segments segments;
+
+  table->LoadFromFile("system://12keys-hiragana.tsv");
+  composer->SetTable(table.get());
+  {
+    // "わ00"
+    InitSegmentsFromInputSequence("\xe3\x82\x8f\x30\x30",
+                                  composer.get(), &request, &segments);
+    string input_key;
+    string base;
+    scoped_ptr<Trie<string> > expanded;
+    UserHistoryPredictor::GetInputKeyFromSegments(request,
+                                                  segments,
+                                                  &input_key,
+                                                  &base,
+                                                  &expanded);
+    // "ん"
+    EXPECT_EQ("\xe3\x82\x93", input_key);
+    EXPECT_EQ("", base);
+    EXPECT_TRUE(expanded.get() != NULL);
+    string value;
+    size_t key_length = 0;
+    bool has_subtrie = false;
+    EXPECT_TRUE(
+        // "ん"
+        expanded->LookUpPrefix("\xe3\x82\x93",
+                               &value, &key_length, &has_subtrie));
+    // "ん"
+    EXPECT_EQ("\xe3\x82\x93", value);
+  }
+}
 
 TEST_F(UserHistoryPredictorTest, GetInputKeyFromSegmentsKana) {
   scoped_ptr<composer::Table> table(new composer::Table);
   scoped_ptr<composer::Composer> composer(new composer::Composer);
+  ConversionRequest request;
   Segments segments;
 
   table->LoadFromFile("system://kana.tsv");
-  composer->SetTableForUnittest(table.get());
+  composer->SetTable(table.get());
   // "あか"
   InitSegmentsFromInputSequence("\xe3\x81\x82\xe3\x81\x8b",
-                                composer.get(), &segments);
+                                composer.get(), &request, &segments);
 
   {
     FLAGS_enable_expansion_for_user_history_predictor = true;
     string input_key;
     string base;
     scoped_ptr<Trie<string> > expanded;
-    UserHistoryPredictor::GetInputKeyFromSegments(segments,
+    UserHistoryPredictor::GetInputKeyFromSegments(request,
+                                                  segments,
                                                   &input_key,
                                                   &base,
                                                   &expanded);
@@ -2937,7 +3185,8 @@ TEST_F(UserHistoryPredictorTest, GetInputKeyFromSegmentsKana) {
     string input_key;
     string base;
     scoped_ptr<Trie<string> > expanded;
-    UserHistoryPredictor::GetInputKeyFromSegments(segments,
+    UserHistoryPredictor::GetInputKeyFromSegments(request,
+                                                  segments,
                                                   &input_key,
                                                   &base,
                                                   &expanded);

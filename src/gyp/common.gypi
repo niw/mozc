@@ -34,11 +34,14 @@
 # http://src.chromium.org/viewvc/chrome/trunk/src/build/common.gypi
 {
   'variables': {
+    # Top directory of third party libraries.
+    'third_party_dir%': '<(DEPTH)/third_party',
+
+    # Top directory of third party libraries for Windows.
+    'third_party_dir_win%': '<(DEPTH)/third_party',
+
     # This variable need to be set to 1 when you build Mozc for Chromium OS.
     'chromeos%': 0,
-    # Extra libraries for Linux. This can be used like:
-    # GYP_DEFINES='extra_linux_libs="-lfoo -lbar"' python build_mozc.py gyp
-    'extra_linux_libs%': [],
 
     # warning_cflags will be shared with Mac and Linux.
     'warning_cflags': [
@@ -49,10 +52,21 @@
       '-Wno-deprecated-declarations',
       '-Wwrite-strings',
     ],
-    # gcc_cflags will be shared with Mac and Linux.
+    # gcc_cflags will be shared with Mac and Linux except for NaCl.
     'gcc_cflags': [
       '-fmessage-length=0',
       '-fno-omit-frame-pointer',
+      '-fno-strict-aliasing',
+      '-funsigned-char',
+      '-include', 'base/namespace.h',
+      '-pipe',
+      '-pthread',
+    ],
+    # cflags for NaCl.
+    # -fno-omit-frame-pointer flag does not work correctly.
+    #   http://code.google.com/p/chromium/issues/detail?id=122623
+    'nacl_cflags': [
+      '-fmessage-length=0',
       '-fno-strict-aliasing',
       '-funsigned-char',
       '-include', 'base/namespace.h',
@@ -63,12 +77,65 @@
     'linux_ldflags': [
       '-pthread',
     ],
-    'linux_libs': [
-      '-lcrypto',
-      '-lcurl',
-      '-lrt',
-      '-lssl',
-      '-lz',
+
+    # 'conditions' is put inside of 'variables' so that we can use
+    # another 'conditions' in this gyp element level later. Note that
+    # you can have only one 'conditions' in a gyp element.
+    'variables': {
+      'target_compiler': '',
+      'conditions': [
+        ['OS=="win"', {
+          # Variable 'MSVS_VERSION' is available on Windows only.
+          'conditions': [
+            ['MSVS_VERSION=="2008"', {
+              'target_compiler': 'msvs2008',
+            }],
+            ['MSVS_VERSION=="2010"', {
+              'target_compiler': 'msvs2010',
+            }],
+          ],
+        }],
+      ],
+    },
+
+    # The target compiler such as 'msvs2008' or 'msvs2010'. This value is
+    # currently used only on Windows.
+    'target_compiler': '<(target_compiler)',
+
+    # Extra defines
+    'additional_defines%': [],
+
+    # Extra headers and libraries for Visual C++.
+    'msvs_includes%': [],
+    'msvs_libs_x86%': [],
+    'msvs_libs_x64%': [],
+
+    # enable_unittest represents if gtest-based unittest is available or not.
+    # This flag is valid on all the platforms except for NaCl.
+    # TODO(yukawa): Support NaCl environment.
+    'enable_unittest%': '1',
+
+    'conditions': [
+      # enable_gtk_renderer represents if mozc_renderer is supported on Linux
+      # or not.
+      ['target_platform=="Linux" and language=="japanese"', {
+        'enable_gtk_renderer%': 1,
+      }, { # else
+        'enable_gtk_renderer%': 0,
+      }],
+      ['target_platform=="ChromeOS"', {
+        # Unittest is not integrated to the automated test framework yet.
+        # TODO(nona): Enable unittest on Chromium OS. crosbug.com/19325
+        'enable_unittest': '0',
+      }],
+      ['target_compiler=="msvs2008"', {
+        'additional_defines+': [
+          # Bind executables to the latest version of Visual C++ 2008
+          # CRTs supported in the build environment.  b/2842806
+          # http://msdn.microsoft.com/en-us/library/cc664727(v=vs.90).aspx
+          '_BIND_TO_CURRENT_VCLIBS_VERSION=1',
+        ],
+      }],
     ],
     'msvc_disabled_warnings': [
       # 'expression' : signed/unsigned mismatch
@@ -106,10 +173,6 @@
     # use_qt is 'YES' only if you want to use GUI binaries.
     'use_qt%': 'YES',
 
-    # use_libgtest represents if gtest library is used or not.
-    # This option is only for Linux.
-    'use_libgtest%': 1,
-
     # use_libprotobuf represents if protobuf library is used or not.
     # This option is only for Linux.
     'use_libprotobuf%': 0,
@@ -133,12 +196,6 @@
     # a flag whether the current build is dev-channel or not.
     'channel_dev%': '0',
 
-    # Copied from Chromium:build/common.gypi
-    # Set to 1 to enable code coverage.  In addition to build changes
-    # (e.g. extra CFLAGS), also creates a new target in the src/chrome
-    # project file called "coverage".
-    'coverage%': 0,
-
     # enable_cloud_sync represents if cloud sync feature is enabled or not.
     'enable_cloud_sync%': 0,
 
@@ -150,10 +207,15 @@
     # enabled or not.
     'enable_webservice_infolist%': 0,
 
+
     # The pkg-config command to get the cflags/ldflags for Linux
     # builds.  We make it customizable to allow building in a special
     # environment such like cross-platform build.
     'pkg_config_command%': 'pkg-config',
+
+    # Android SDK home.
+    # Used only on Android build.
+    'android_home_dir%': '',
 
     'mozc_data_dir': '<(SHARED_INTERMEDIATE_DIR)/',
   },
@@ -189,7 +251,6 @@
         'msvs_configuration_attributes': {
           'CharacterSet': '<(win_char_set_unicode)',
         },
-        'defines': ['<(language_define)'],
         'conditions': [
           ['branding=="GoogleJapaneseInput"', {
             'defines': ['GOOGLE_JAPANESE_INPUT_BUILD'],
@@ -202,6 +263,15 @@
           ['not(OS=="linux" and use_libprotobuf!=0)', {
             'include_dirs': [
               '../protobuf/files/src',
+            ],
+          }],
+          # In order to extend language support of Mozc on Linux, we use
+          # additional suffix except for Japanese so that multiple
+          # converter processes can coexist. Note that Mozc on ChromeOS does
+          # not use IPC so this kind of special treatment is not required.
+          ['language!="japanese" and target_platform=="Linux"', {
+            'defines': [
+              'MOZC_LANGUAGE_SUFFIX_FOR_LINUX="_<(language)"',
             ],
           }],
           ['OS=="linux"', {
@@ -224,10 +294,41 @@
           ['enable_webservice_infolist==1', {
             'defines': ['ENABLE_WEBSERVICE_INFOLIST'],
           }],
+          ['enable_gtk_renderer==1', {
+            'defines': ['ENABLE_GTK_RENDERER'],
+          }],
+          ['enable_unittest==1', {
+            'defines': ['MOZC_ENABLE_UNITTEST'],
+          }],
         ],
       },
       'x86_Base': {
         'abstract': 1,
+        'msvs_settings': {
+          'VCLibrarianTool': {
+            'AdditionalLibraryDirectories': [
+              '<@(msvs_libs_x86)',
+            ],
+            'AdditionalLibraryDirectories!': [
+              '<@(msvs_libs_x64)',
+            ],
+          },
+          'VCLinkerTool': {
+            'TargetMachine': '<(win_target_machine_x86)',
+            'AdditionalOptions': [
+              '/SAFESEH',
+            ],
+            'AdditionalLibraryDirectories': [
+              '<@(msvs_libs_x86)',
+            ],
+            'AdditionalLibraryDirectories!': [
+              '<@(msvs_libs_x64)',
+            ],
+            'EnableUAC': 'true',
+            'UACExecutionLevel': '0',  # level="asInvoker"
+            'UACUIAccess': 'false',    # uiAccess="false"
+          },
+        },
         'msvs_configuration_attributes': {
           'OutputDirectory': '<(build_base)/$(ConfigurationName)',
           'IntermediateDirectory': '<(build_base)/$(ConfigurationName)/obj/$(ProjectName)',
@@ -241,6 +342,57 @@
           'IntermediateDirectory': '<(build_base)/$(ConfigurationName)64/obj/$(ProjectName)',
         },
         'msvs_configuration_platform': 'x64',
+        'msvs_settings': {
+          'VCLibrarianTool': {
+            'AdditionalLibraryDirectories': [
+              '<@(msvs_libs_x64)',
+            ],
+            'AdditionalLibraryDirectories!': [
+              '<@(msvs_libs_x86)',
+            ],
+          },
+          'VCLinkerTool': {
+            'TargetMachine': '<(win_target_machine_x64)',
+            'AdditionalLibraryDirectories': [
+              '<@(msvs_libs_x64)',
+            ],
+            'AdditionalLibraryDirectories!': [
+              '<@(msvs_libs_x86)',
+            ],
+          },
+        },
+      },
+      'Win_Static_Debug_CRT_Base': {
+        'abstract': 1,
+        'msvs_settings': {
+          'VCCLCompilerTool': {
+            'RuntimeLibrary': '<(win_debug_static_crt)',
+          },
+        },
+      },
+      'Win_Static_Optimize_CRT_Base': {
+        'abstract': 1,
+        'msvs_settings': {
+          'VCCLCompilerTool': {
+            'RuntimeLibrary': '<(win_release_static_crt)',
+          },
+        },
+      },
+      'Win_Dynamic_Debug_CRT_Base': {
+        'abstract': 1,
+        'msvs_settings': {
+          'VCCLCompilerTool': {
+            'RuntimeLibrary': '<(win_debug_dynamic_crt)',
+          },
+        },
+      },
+      'Win_Dynamic_Optimize_CRT_Base': {
+        'abstract': 1,
+        'msvs_settings': {
+          'VCCLCompilerTool': {
+            'RuntimeLibrary': '<(win_release_dynamic_crt)',
+          },
+        },
       },
       'Debug_Base': {
         'abstract': 1,
@@ -258,24 +410,6 @@
             'Optimization': '<(win_optimization_debug)',
             'PreprocessorDefinitions': ['_DEBUG'],
             'BasicRuntimeChecks': '3',
-            'conditions': [
-              ['use_dynamically_linked_qt=="YES"', {
-                # As a quick workaround, use dynamically-linked version of CRT
-                # if 'use_dynamically_linked_qt' is specified.
-                # As for GoogleJapaneseInput branding build, this is not enough
-                # because we cannot completely depend on dynamic CRT as
-                # described in b/2506385. We should use static CRT for the
-                # following binaries.
-                # - GoogleIMEJaCacheService.exe
-                # - GoogleIMEJaInstallerHelper32.dll
-                # - GoogleIMEJaInstallerHelper64.dll
-                # - any artifacts build in 'build_mozc.py build_tools'
-                # TODO(yukawa): Support GoogleJapaneseInput branding build.
-                'RuntimeLibrary': '<(win_debug_dynamic_crt)',
-              }, {  # else
-                'RuntimeLibrary': '<(win_debug_static_crt)',
-              }],
-            ],
           },
           'VCResourceCompilerTool': {
             'PreprocessorDefinitions': ['_DEBUG'],
@@ -317,24 +451,6 @@
             # are built with /O2.  We use the same optimization option between
             # Mozc and Qt just in case warning C4748 is true.
             'Optimization': '<(win_optimization_release)',
-            'conditions': [
-              ['use_dynamically_linked_qt=="YES"', {
-                # As a quick workaround, use dynamically-linked version of CRT
-                # if 'use_dynamically_linked_qt' is specified.
-                # As for GoogleJapaneseInput branding build, this is not enough
-                # because we cannot completely depend on dynamic CRT as
-                # described in b/2506385. We should use static CRT for the
-                # following binaries.
-                # - GoogleIMEJaCacheService.exe
-                # - GoogleIMEJaInstallerHelper32.dll
-                # - GoogleIMEJaInstallerHelper64.dll
-                # - any artifacts build in 'build_mozc.py build_tools'
-                # TODO(yukawa): Support GoogleJapaneseInput branding build.
-                'RuntimeLibrary': '<(win_release_dynamic_crt)',
-              }, {  # else
-                'RuntimeLibrary': '<(win_release_static_crt)',
-              }],
-            ],
           },
         },
         'conditions': [
@@ -353,26 +469,21 @@
           'IGNORE_INVALID_FLAG'
         ],
         'conditions': [
-          ['OS=="win"', {
-            # MSVS_VERSION is available on Windows only.
-            'conditions': [
-              ['MSVS_VERSION=="2010"', {
-                'msvs_settings': {
-                  'VCCLCompilerTool': {
-                    'WholeProgramOptimization': 'true',
-                  },
-                  'VCLinkerTool': {
-                    # 1 = 'LinkTimeCodeGenerationOptionUse'
-                    'LinkTimeCodeGeneration': '1',
-                  },
-                },
-              }],
-              ['MSVS_VERSION=="2008"', {
-                'msvs_configuration_attributes': {
-                  'WholeProgramOptimization': '1',
-                },
-              }],
-            ],
+          ['target_compiler=="msvs2008"', {
+            'msvs_configuration_attributes': {
+              'WholeProgramOptimization': '1',
+            },
+          }],
+          ['target_compiler=="msvs2010"', {
+            'msvs_settings': {
+              'VCCLCompilerTool': {
+                'WholeProgramOptimization': 'true',
+              },
+              'VCLinkerTool': {
+                # 1 = 'LinkTimeCodeGenerationOptionUse'
+                'LinkTimeCodeGeneration': '1',
+              },
+            },
           }],
         ],
         'msvs_settings': {
@@ -383,31 +494,79 @@
           },
         },
       },
+      'Android_Base': {
+        'abstract': 1,
+        'defines': [
+          'OS_ANDROID',
+          # For Protobuf
+          'GOOGLE_PROTOBUF_NO_RTTI',
+        ],
+        'include_dirs!': [
+          '<(third_party_dir)/breakpad/src',
+        ],
+        'ldflags!': [  # Remove all libraries for GNU/Linux.
+          '<@(linux_ldflags)',
+        ],
+        'ldflags': [
+          '-llog',
+        ],
+        'conditions': [
+          # For GTEST
+          # TODO(team): Move below flags to global setting as much as possible.
+          ['enable_unittest==1', {
+            'defines+': [
+              'GTEST_HAS_CLONE=0',
+              'GTEST_HAS_GLOBAL_WSTRING=0',
+              'GTEST_HAS_POSIX_RE=0',
+              'GTEST_HAS_STD_WSTRING=0',
+              'GTEST_OS_LINUX=1',
+              'GTEST_OS_LINUX_ANDROID=1',
+            ],
+          }],
+        ],
+      },
       #
       # Concrete configurations
       #
       'Debug': {
-        'inherit_from': ['Common_Base', 'x86_Base', 'Debug_Base'],
+        'inherit_from': ['Common_Base', 'x86_Base', 'Debug_Base', 'Win_Static_Debug_CRT_Base'],
       },
       'Optimize': {
-        'inherit_from': ['Common_Base', 'x86_Base', 'Optimize_Base'],
+        'inherit_from': ['Common_Base', 'x86_Base', 'Optimize_Base', 'Win_Static_Optimize_CRT_Base'],
       },
       'Release': {
         'inherit_from': ['Optimize', 'Release_Base'],
       },
       'conditions': [
         ['OS=="win"', {
+          'DebugDynamic': {
+            'inherit_from': ['Common_Base', 'x86_Base', 'Debug_Base', 'Win_Dynamic_Debug_CRT_Base'],
+          },
+          'OptimizeDynamic': {
+            'inherit_from': ['Common_Base', 'x86_Base', 'Optimize_Base', 'Win_Dynamic_Optimize_CRT_Base'],
+          },
+          'ReleaseDynamic': {
+            'inherit_from': ['OptimizeDynamic', 'Release_Base'],
+          },
           'Debug_x64': {
-            'inherit_from': ['Common_Base', 'x64_Base', 'Debug_Base'],
+            'inherit_from': ['Common_Base', 'x64_Base', 'Debug_Base', 'Win_Static_Debug_CRT_Base'],
           },
           'Optimize_x64': {
-            'inherit_from': ['Common_Base', 'x64_Base', 'Optimize_Base'],
+            'inherit_from': ['Common_Base', 'x64_Base', 'Optimize_Base', 'Win_Static_Optimize_CRT_Base'],
           },
           'Release_x64': {
             'inherit_from': ['Optimize_x64', 'Release_Base'],
           },
         }],
-        ['target_platform=="Linux" and nacl_sdk_root!=""', {
+        ['target_platform=="Android"', {
+          'Debug_Android': {
+            'inherit_from': ['Common_Base', 'Android_Base', 'Debug_Base'],
+          },
+          'Release_Android': {
+            'inherit_from': ['Common_Base', 'Android_Base', 'Optimize_Base', 'Release_Base'],
+          },
+        }],
+        ['target_platform=="NaCl"', {
           # The following configurations, i.e. directories, are meant for binary
           # files built with an NaCl toolchain.
           # A special hack in build_for_nacl.py sets environment variables such
@@ -429,27 +588,26 @@
     },
     'default_configuration': 'Debug',
     'defines': [
-      # For gtest
-      'GTEST_HAS_TR1_TUPLE=1',
+      '<@(additional_defines)',
     ],
     'include_dirs': [
       '<(DEPTH)',
-      '<(DEPTH)/third_party/breakpad/src',
-      '<(DEPTH)/third_party/gmock/include',
-      '<(DEPTH)/third_party/gtest/include',  # for FRIEND_TEST
+      '<(third_party_dir)/breakpad/src',
       '<(SHARED_INTERMEDIATE_DIR)',
       '<(SHARED_INTERMEDIATE_DIR)/proto_out',
     ],
     'conditions': [
-      # Define MOZC_DATA_DIR.
-      ['OS=="linux"', {
-        # <(mozc_data_dir) may include make-variables.  However, 'defines'
-        # escapes make-variables so they won't be replaced unexpectedly.  Since
-        # we would like replacements in the source code, we use 'cflags' for
-        # MOZC_DATA_DIR, which doesn't escape make-variables.
-        'cflags': ['-DMOZC_DATA_DIR="<(mozc_data_dir)"'],
-      }, {
-        'defines': ['MOZC_DATA_DIR="<(mozc_data_dir)"'],
+      # For GTEST
+      ['enable_unittest==1', {
+        'defines+': [
+          'GTEST_HAS_TR1_TUPLE=1',
+          'GTEST_HAS_RTTI=0',  # Android NDKr7 requires this.
+                               # TODO(team): Remove when it becomes unnecessary.
+        ],
+        'include_dirs+': [
+          '<(third_party_dir)/gmock/include',
+          '<(third_party_dir)/gtest/include',
+        ],
       }],
       ['OS=="win"', {
         'defines': [
@@ -477,9 +635,8 @@
           '_WINDOWS',
         ],
         'include_dirs': [
-          '<(DEPTH)/third_party/gtest',
-          '<(DEPTH)/third_party/gtest/include',
-          '<(DEPTH)/third_party/wtl/include',
+          '<@(msvs_includes)',
+          '<(third_party_dir_win)/wtl_80/files/include',
           # Add atl_wrapper dir into the 'include_dirs' so that we can
           # include the header file as <atlbase_mozc.h>, which
           # is more lintian-friendly than "atlbase_mozc.h".
@@ -490,7 +647,7 @@
         # setup_env.bat in the directory specified in 'msvs_cygwin_dirs'
         # for GYP to be happy.
         'msvs_cygwin_dirs': [
-          '<(DEPTH)/third_party/cygwin',
+          '<(third_party_dir)/cygwin',
         ],
         'msvs_settings': {
           'VCCLCompilerTool': {
@@ -507,64 +664,45 @@
             'SuppressStartupBanner': 'true',       # /nologo
             'TreatWChar_tAsBuiltInType': 'false',  # /Zc:wchar_t-
             'WarningLevel': '3',                   # /W3
+            'conditions': [
+              # Unfortunately, 'OmitFramePointers': 'false' does not mean
+              # /Oy- on Visual C++ 2008 or prior.  You need to use
+              # 'AdditionalOptions' option to specify /Oy- instead.
+              ['target_compiler=="msvs2008"', {
+                'AdditionalOptions': ['/Oy-'],  # /Oy-
+              }],
+              ['target_compiler=="msvs2010"', {
+                'OmitFramePointers': 'false',  # /Oy- (for Visual C++ 2010)
+              }],
+            ],
           },
-          'conditions': [
-            ['OS=="win"', {
-              # MSVS_VERSION is available on Windows only.
-              'conditions': [
-                ['MSVS_VERSION=="2010"', {
-                  'VCCLCompilerTool': {
-                    'OmitFramePointers': 'false',  # /Oy- (for Visual C++ 2010)
-                  },
-                }],
-                # Unfortunately, 'OmitFramePointers': 'false' does not mean
-                # /Oy- on Visual C++ 2008 or prior.  You need to use
-                # 'AdditionalOptions' option to specify /Oy- instead.
-                ['MSVS_VERSION=="2008"', {
-                  'VCCLCompilerTool': {
-                    'AdditionalOptions': ['/Oy-'],  # /Oy-
-                  },
-                }],
-              ],
-            }],
-          ],
           'VCLinkerTool': {
-            # TODO(satorux): Reduce the number of libraries. We should
-            # only have common libraries here.
             'AdditionalDependencies': [
-              'Advapi32.lib',
-              'Aux_ulib.lib',
+              'advapi32.lib',
               'comdlg32.lib',
-              'crypt32.lib',
-              'dbghelp.lib',
               'delayimp.lib',
               'gdi32.lib',
               'imm32.lib',
               'kernel32.lib',
-              'msi.lib',
-              'odbc32.lib',
-              'odbccp32.lib',
               'ole32.lib',
               'oleaut32.lib',
-              'propsys.lib',
               'psapi.lib',
               'shell32.lib',
               'user32.lib',
               'uuid.lib',
-              'version.lib',
-              'wininet.lib',
-              'winmm.lib',
-              'winspool.lib',
             ],
-            'AdditionalOptions': [
-              '/DYNAMICBASE',  # 'RandomizedBaseAddress': 'true'
-              '/NXCOMPAT',
-            ],
+            'DataExecutionPrevention': '2',        # /NXCOMPAT
             'EnableCOMDATFolding': '2',            # /OPT:ICF
             'GenerateDebugInformation': 'true',    # /DEBUG
             'LinkIncremental': '1',                # /INCREMENTAL:NO
             'OptimizeReferences': '2',             # /OPT:REF
-            'TerminalServerAware': '2',            # /TSAWARE
+            'RandomizedBaseAddress': '2',          # /DYNAMICBASE
+            'target_conditions': [
+              # /TSAWARE is valid only on executable target.
+              ['_type=="executable"', {
+                'TerminalServerAware': '2',        # /TSAWARE
+              }],
+            ],
           },
           'VCResourceCompilerTool': {
             'PreprocessorDefinitions': [
@@ -583,7 +721,6 @@
           'MOZC_SERVER_DIRECTORY="<@(server_dir)"',
         ],
         'cflags': [
-          '<@(gcc_cflags)',
           '<@(warning_cflags)',
           '-fPIC',
           '-fno-exceptions',
@@ -593,33 +730,39 @@
           # <unordered_map> and <unordered_set>.
           '-Wno-deprecated',
         ],
-        'link_settings': {
-          'libraries': [
-            '<@(linux_libs)',
-            '<@(extra_linux_libs)',
-          ],
-        },
         'conditions': [
-          ['use_libgtest==0', {
-            'include_dirs': [
-              '<(DEPTH)/third_party/gtest',
-              '<(DEPTH)/third_party/gtest/include',
-            ],
-          }],
           ['chromeos==1', {
             'defines': [
               'OS_CHROMEOS',
             ],
+          }],
+          ['target_platform!="NaCl"', {
+            'cflags': [
+              '<@(gcc_cflags)',
+            ],
+          }],
+          ['target_platform=="NaCl"', {
+            'target_conditions' : [
+              ['_toolset=="host"', {
+                'cflags': [
+                  '<@(gcc_cflags)',
+                ],
+              }],
+              ['_toolset=="target"', {
+                'cflags': [
+                  '<@(nacl_cflags)',
+                ],
+                'defines': [
+                  'MOZC_USE_PEPPER_FILE_IO',
+                ],
+              }],
+            ]
           }],
         ],
       }],
       ['OS=="mac"', {
         'defines': [
           'OS_MACOSX',
-        ],
-        'include_dirs': [
-          '<(DEPTH)/third_party/gtest',
-          '<(DEPTH)/third_party/gtest/include',
         ],
         'mac_framework_dirs': [
           '<(mac_dir)/Releases/GoogleBreakpad',
@@ -640,53 +783,9 @@
             '$(SDKROOT)/System/Library/Frameworks/IOKit.framework',
             '$(SDKROOT)/System/Library/Frameworks/Security.framework',
             '$(SDKROOT)/System/Library/Frameworks/SystemConfiguration.framework',
-            '/usr/lib/libcrypto.dylib',
-            '/usr/lib/libiconv.dylib',
-            '/usr/lib/libssl.dylib',
-            '/usr/lib/libz.dylib',
           ],
-        }
+        },
       }],
-      # code coverage.  Copied from Chromium:build/common.gypi
-      ['coverage!=0', {
-        'conditions': [
-          ['OS=="mac"', {
-            'xcode_settings': {
-              'GCC_INSTRUMENT_PROGRAM_FLOW_ARCS': 'YES',  # -fprofile-arcs
-              'GCC_GENERATE_TEST_COVERAGE_FILES': 'YES',  # -ftest-coverage
-            },
-            # Add -lgcov for types executable, shared_library, and
-            # loadable_module; not for static_library.
-            # This is a delayed conditional.
-            'target_conditions': [
-              ['_type!="static_library"', {
-                'xcode_settings': { 'OTHER_LDFLAGS': [ '-lgcov' ] },
-              }],
-            ],
-          }],
-          # Linux gyp (into scons) doesn't like target_conditions?
-          # TODO(team): track down why 'target_conditions' doesn't work
-          # on Linux gyp into scons like it does on Mac gyp into xcodeproj.
-          ['OS=="linux"', {
-            'cflags': [ '-ftest-coverage',
-                        '-fprofile-arcs' ],
-            'link_settings': { 'libraries': [ '-lgcov' ] },
-          }],
-          # Finally, for Windows, we simply turn on profiling.
-          ['OS=="win"', {
-            'msvs_settings': {
-              'VCLinkerTool': {
-                'Profile': 'true',
-              },
-              'VCCLCompilerTool': {
-                # /Z7, not /Zi, so coverage is happyb
-                'DebugInformationFormat': '1',
-                'AdditionalOptions': ['/Yd'],
-              }
-            }
-          }],  # OS==win
-        ],  # conditions for coverage
-      }],  # coverage!=0
     ],
   },
   'xcode_settings': {

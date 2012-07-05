@@ -30,6 +30,12 @@
 #include "dictionary/dictionary_impl.h"
 
 #include "base/singleton.h"
+#include "data_manager/user_dictionary_manager.h"
+#include "dictionary/pos_matcher.h"
+#include "dictionary/suppression_dictionary.h"
+#include "dictionary/system/system_dictionary.h"
+#include "dictionary/system/value_dictionary.h"
+#include "dictionary/user_dictionary.h"
 
 namespace mozc {
 namespace {
@@ -48,8 +54,16 @@ int g_dictionary_size = kDictionaryData_size;
 
 class MozcDictionaryImpl : public DictionaryImpl {
  private:
-  MozcDictionaryImpl() : DictionaryImpl(g_dictionary_address,
-                                        g_dictionary_size) {}
+  MozcDictionaryImpl() : DictionaryImpl(
+      SystemDictionary::CreateSystemDictionaryFromImage(g_dictionary_address,
+                                                        g_dictionary_size),
+      ValueDictionary::CreateValueDictionaryFromImage(
+          *UserDictionaryManager::GetUserDictionaryManager()->GetPOSMatcher(),
+          g_dictionary_address,
+          g_dictionary_size),
+      UserDictionaryManager::GetUserDictionaryManager()->GetUserDictionary(),
+      Singleton<SuppressionDictionary>::get(),
+      UserDictionaryManager::GetUserDictionaryManager()->GetPOSMatcher()) {}
   virtual ~MozcDictionaryImpl() {}
 
   friend class Singleton<MozcDictionaryImpl>;
@@ -58,7 +72,7 @@ class MozcDictionaryImpl : public DictionaryImpl {
 
 DictionaryInterface *DictionaryFactory::GetDictionary() {
   if (g_dictionary == NULL) {
-    if (!g_dictionary_address || !g_dictionary_size) {
+    if (!g_dictionary_address || g_dictionary_size == 0) {
       LOG(FATAL) << "Dictionary address/size is/are not set yet.";
       CHECK(false);
     }

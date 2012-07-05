@@ -162,6 +162,10 @@ class Util {
         NUMBER_SEPARATED_ARABIC_HALFWIDTH,
         // "１２３，４５６，７８９"
         NUMBER_SEPARATED_ARABIC_FULLWIDTH,
+        // "123億456万7890"
+        NUMBER_ARABIC_AND_KANJI_HALFWIDTH,
+        // "１２３億４５６万７８９０"
+        NUMBER_ARABIC_AND_KANJI_FULLWIDTH,
         // "一億二千三百四十五万六千七百八十九"
         NUMBER_KANJI,
         // "壱億弐千参百四拾五万六千七百八拾九"
@@ -172,14 +176,14 @@ class Util {
         NUMBER_ROMAN_SMALL,
         // "①②③"
         NUMBER_CIRCLED,
+        // "ニ〇〇"
+        NUMBER_KANJI_ARABIC,
         // "0x4d2" (1234 in decimal)
         NUMBER_HEX,
         // "02322" (1234 in decimal)
         NUMBER_OCT,
         // "0b10011010010" (1234 in decimal)
         NUMBER_BIN,
-        // "ニ〇〇"
-        NUMBER_KANJI_ARABIC,
     };
 
     NumberString(const string &value, const string &description, Style style)
@@ -241,6 +245,16 @@ class Util {
   // compiler.  It returns false when compiled by VisualC++.  On the other hand
   // it returns true and sets correct value when compiled by gcc.
   static bool SafeStrToDouble(const string &str, double *value);
+
+  // Converts the string to a float. Returns true if success or false if the
+  // string is in the wrong format.
+  static bool SafeStrToFloat(const string &str, float *value);
+  // Converts the string to a float.
+  static float StrToFloat(const string &str) {
+    float value;
+    Util::SafeStrToFloat(str, &value);
+    return value;
+  }
 
 #ifndef SWIG
   // C++ string version of sprintf.
@@ -307,6 +321,14 @@ class Util {
   // succeeded.
   static bool GetTmWithOffsetSecond(tm *time_with_offset, int offset_sec);
 
+  // Get the system frequency to calculate the time from ticks.
+  static uint64 GetFrequency();
+
+  // Get the current ticks. It may return incorrect value on Virtual Machines.
+  // If you'd like to get a value in secs, it is necessary to divide a result by
+  // GetFrequency().
+  static uint64 GetTicks();
+
   // Interface of the helper class.
   // Default implementation is defined in the .cc file.
   class ClockInterface {
@@ -315,6 +337,10 @@ class Util {
     virtual void GetTimeOfDay(uint64 *sec, uint32 *usec) = 0;
     virtual uint64 GetTime() = 0;
     virtual bool GetTmWithOffsetSecond(time_t offset_sec, tm *output) = 0;
+
+    // High accuracy clock.
+    virtual uint64 GetFrequency() = 0;
+    virtual uint64 GetTicks() = 0;
   };
 
   // This function is provided for test.
@@ -505,6 +531,9 @@ class Util {
   // return the directory name where the mozc server exist.
   static string GetServerDirectory();
 
+  // return the path of the mozc server.
+  static string GetServerPath();
+
   // Returns the directory name which holds some documents bundled to
   // the installed application package.  Typically it's
   // <server directory>/documents but it can change among platforms.
@@ -631,17 +660,22 @@ class Util {
   // return true if the string contains script_type char
   static bool ContainsScriptType(const string &str, ScriptType type);
 
+  // See 'Unicode Standard Annex #11: EAST ASIAN WIDTH'
+  // http://www.unicode.org/reports/tr11/
+  // http://www.unicode.org/Public/UNIDATA/EastAsianWidth.txt
   enum FormType {
     UNKNOWN_FORM,
-    HALF_WIDTH,
-    FULL_WIDTH,
+    HALF_WIDTH,  // [Na] and [H] in 'Unicode Standard Annex #11'
+    FULL_WIDTH,  // Any other characters
     FORM_TYPE_SIZE,
   };
 
-  // return Form type of single character
+  // return Form type of single character.
+  // This function never returns UNKNOWN_FORM.
   static FormType GetFormType(char32 w);
 
-  // return FormType of string
+  // return FormType of string.
+  // return UNKNOWN_FORM if |str| contains both HALF_WIDTH and FULL_WIDTH.
   static FormType GetFormType(const string &str);
 
   // Basically, if chraset >= JIX0212, the char is platform dependent char.
@@ -676,6 +710,9 @@ class Util {
 
   // return true if the version of Windows is 6.1 or later.
   static bool IsWindows7OrLater();
+
+  // return true if the version of Windows is 6.2 or later.
+  static bool IsWindows8OrLater();
 
   // return true if the version of Windows is x64 Edition.
   static bool IsWindowsX64();
@@ -754,11 +791,75 @@ class Util {
   // check endian-ness at runtime.
   static bool IsLittleEndian();
 
+  // Following mlock/munlock related functions work based on target environment.
+  // In the case of Android, Native Client, Windows, we don't want to call
+  // actual functions, so these functions do nothing and return -1. In other
+  // cases, these functions call actual mlock/munlock functions and return it's
+  // result.
+  // On Android, page-out is probably acceptable because
+  // - Smaller RAM on the device.
+  // - The storage is (usually) solid state thus page-in/out is expected to
+  //   be faster.
+  // On Linux, in the kernel version >= 2.6.9, user process can mlock. In older
+  // kernel, it fails if the process is running in user priviledge.
+  // TODO(horo): Check in mac that mlock is really necessary.
+  static int MaybeMLock(const void *addr, size_t len);
+
+  static int MaybeMUnlock(const void *addr, size_t len);
+
   // should never be allocated.
  private:
   Util() {}
   virtual ~Util() {}
 };
+
+// Const iterator implementation to traverse on a (utf8) string as a char32
+// string.
+//
+// Example usage:
+//   string utf8_str;
+//   for (ConstChar32Iterator iter(utf8_str); !iter.Done(); iter.Next()) {
+//     char32 c = iter.Get();
+//     ...
+//   }
+class ConstChar32Iterator {
+ public:
+  explicit ConstChar32Iterator(const string &utf8_string) {
+    ptr_ = utf8_string.data();
+    end_ = utf8_string.data() + utf8_string.size();
+    current_ = Util::UTF8ToUCS4(ptr_, end_, &current_char_size_);
+  }
+
+  ConstChar32Iterator(const char *utf8_ptr, size_t size) {
+    ptr_ = utf8_ptr;
+    end_ = utf8_ptr + size;
+    current_ = Util::UTF8ToUCS4(ptr_, end_, &current_char_size_);
+  }
+
+  char32 Get() const {
+    DCHECK(ptr_ < end_);
+    return current_;
+  }
+
+  void Next() {
+    DCHECK(ptr_ < end_);
+    ptr_ += current_char_size_;
+    current_ = Util::UTF8ToUCS4(ptr_, end_, &current_char_size_);
+  }
+
+  bool Done() const {
+    return ptr_ == end_;
+  }
+
+ private:
+  const char *ptr_;
+  const char *end_;
+  char32 current_;
+  size_t current_char_size_;
+
+  DISALLOW_COPY_AND_ASSIGN(ConstChar32Iterator);
+};
+
 }  // namespace mozc
 
 #endif  // MOZC_BASE_UTIL_H_

@@ -55,13 +55,6 @@ void ConverterMock::SetStartConversion(Segments *segments, bool result) {
   startconversion_output_.return_value = result;
 }
 
-void ConverterMock::SetStartConversionWithComposer(Segments *segments,
-                                                   bool result) {
-  startconversionwithcomposer_output_.initialized = true;
-  startconversionwithcomposer_output_.segments.CopyFrom(*segments);
-  startconversionwithcomposer_output_.return_value = result;
-}
-
 void ConverterMock::SetStartReverseConversion(Segments *segments, bool result) {
   startreverseconversion_output_.initialized = true;
   startreverseconversion_output_.segments.CopyFrom(*segments);
@@ -81,11 +74,11 @@ void ConverterMock::SetStartPrediction(Segments *segments, bool result) {
   startprediction_output_.return_value = result;
 }
 
-void ConverterMock::SetStartPredictionWithComposer(Segments *segments,
-                                                   bool result) {
-  startpredictionwithcomposer_output_.initialized = true;
-  startpredictionwithcomposer_output_.segments.CopyFrom(*segments);
-  startpredictionwithcomposer_output_.return_value = result;
+void ConverterMock::SetStartSuggestionForRequest(Segments *segments,
+                                                 bool result) {
+  startsuggestionforrequest_output_.initialized = true;
+  startsuggestionforrequest_output_.segments.CopyFrom(*segments);
+  startsuggestionforrequest_output_.return_value = result;
 }
 
 void ConverterMock::SetStartSuggestion(Segments *segments, bool result) {
@@ -94,11 +87,11 @@ void ConverterMock::SetStartSuggestion(Segments *segments, bool result) {
   startsuggestion_output_.return_value = result;
 }
 
-void ConverterMock::SetStartSuggestionWithComposer(Segments *segments,
-                                                   bool result) {
-  startsuggestionwithcomposer_output_.initialized = true;
-  startsuggestionwithcomposer_output_.segments.CopyFrom(*segments);
-  startsuggestionwithcomposer_output_.return_value = result;
+void ConverterMock::SetStartPartialPredictionForRequest(Segments *segments,
+                                                        bool result) {
+  startpartialpredictionforrequest_output_.initialized = true;
+  startpartialpredictionforrequest_output_.segments.CopyFrom(*segments);
+  startpartialpredictionforrequest_output_.return_value = result;
 }
 
 void ConverterMock::SetStartPartialPrediction(Segments *segments, bool result) {
@@ -107,24 +100,17 @@ void ConverterMock::SetStartPartialPrediction(Segments *segments, bool result) {
   startpartialprediction_output_.return_value = result;
 }
 
-void ConverterMock::SetStartPartialPredictionWithComposer(Segments *segments,
-                                                          bool result) {
-  startpartialpredictionwithcomposer_output_.initialized = true;
-  startpartialpredictionwithcomposer_output_.segments.CopyFrom(*segments);
-  startpartialpredictionwithcomposer_output_.return_value = result;
+void ConverterMock::SetStartPartialSuggestionForRequest(Segments *segments,
+                                                        bool result) {
+  startpartialsuggestionforrequest_output_.initialized = true;
+  startpartialsuggestionforrequest_output_.segments.CopyFrom(*segments);
+  startpartialsuggestionforrequest_output_.return_value = result;
 }
 
 void ConverterMock::SetStartPartialSuggestion(Segments *segments, bool result) {
   startpartialsuggestion_output_.initialized = true;
   startpartialsuggestion_output_.segments.CopyFrom(*segments);
   startpartialsuggestion_output_.return_value = result;
-}
-
-void ConverterMock::SetStartPartialSuggestionWithComposer(Segments *segments,
-                                                          bool result) {
-  startpartialsuggestionwithcomposer_output_.initialized = true;
-  startpartialsuggestionwithcomposer_output_.segments.CopyFrom(*segments);
-  startpartialsuggestionwithcomposer_output_.return_value = result;
 }
 
 void ConverterMock::SetFinishConversion(Segments *segments, bool result) {
@@ -205,12 +191,6 @@ void ConverterMock::GetStartConversion(Segments *segments, string *key) {
   *key = startconversion_input_.key;
 }
 
-void ConverterMock::GetStartConversionWithComposer(
-    Segments *segments, const composer::Composer **composer) {
-  segments->CopyFrom(startconversionwithcomposer_input_.segments);
-  *composer = startconversionwithcomposer_input_.composer;
-}
-
 void ConverterMock::GetStartReverseConversion(Segments *segments,
                                               string *key) {
   segments->CopyFrom(startreverseconversion_input_.segments);
@@ -228,10 +208,10 @@ void ConverterMock::GetStartPrediction(Segments *segments, string *key) {
   *key = startprediction_input_.key;
 }
 
-void ConverterMock::GetStartPredictionWithComposer(
-    Segments *segments, const composer::Composer **composer) {
-  segments->CopyFrom(startpredictionwithcomposer_input_.segments);
-  *composer = startpredictionwithcomposer_input_.composer;
+void ConverterMock::GetStartSuggestionForRequest(
+    Segments *segments, ConversionRequest *request) {
+  segments->CopyFrom(startsuggestionforrequest_input_.segments);
+  *request = startsuggestionforrequest_input_.request;
 }
 
 void ConverterMock::GetStartSuggestion(Segments *segments, string *key) {
@@ -239,10 +219,10 @@ void ConverterMock::GetStartSuggestion(Segments *segments, string *key) {
   *key = startsuggestion_input_.key;
 }
 
-void ConverterMock::GetStartSuggestionWithComposer(
-    Segments *segments, const composer::Composer **composer) {
-  segments->CopyFrom(startsuggestionwithcomposer_input_.segments);
-  *composer = startsuggestionwithcomposer_input_.composer;
+void ConverterMock::GetStartPartialPredictionForRequest(
+    Segments *segments, ConversionRequest *request) {
+  segments->CopyFrom(startpartialpredictionforrequest_input_.segments);
+  *request = startpartialpredictionforrequest_input_.request;
 }
 
 void ConverterMock::GetStartPartialPrediction(Segments *segments, string *key) {
@@ -250,21 +230,9 @@ void ConverterMock::GetStartPartialPrediction(Segments *segments, string *key) {
   *key = startpartialprediction_input_.key;
 }
 
-void ConverterMock::GetStartPartialPredictionWithComposer(
-    Segments *segments, const composer::Composer **composer) {
-  segments->CopyFrom(startpartialpredictionwithcomposer_input_.segments);
-  *composer = startpartialpredictionwithcomposer_input_.composer;
-}
-
 void ConverterMock::GetStartPartialSuggestion(Segments *segments, string *key) {
   segments->CopyFrom(startpartialsuggestion_input_.segments);
   *key = startpartialsuggestion_input_.key;
-}
-
-void ConverterMock::GetStartPartialSuggestionWithComposer(
-    Segments *segments, const composer::Composer **composer) {
-  segments->CopyFrom(startpartialsuggestionwithcomposer_input_.segments);
-  *composer = startpartialsuggestionwithcomposer_input_.composer;
 }
 
 void ConverterMock::GetFinishConversion(Segments *segments) {
@@ -369,20 +337,6 @@ bool ConverterMock::StartConversion(Segments *segments,
   }
 }
 
-bool ConverterMock::StartConversionWithComposer(
-    Segments *segments, const composer::Composer *composer) const {
-  VLOG(2) << "mock function: StartConversionWithComposer";
-  startconversionwithcomposer_input_.segments.CopyFrom(*segments);
-  startconversionwithcomposer_input_.composer = composer;
-
-  if (!startconversionwithcomposer_output_.initialized) {
-    return false;
-  } else {
-    segments->CopyFrom(startconversionwithcomposer_output_.segments);
-    return startconversionwithcomposer_output_.return_value;
-  }
-}
-
 bool ConverterMock::StartReverseConversion(Segments *segments,
                                            const string &key) const {
   VLOG(2) << "mock function: StartReverseConversion";
@@ -426,17 +380,17 @@ bool ConverterMock::StartPrediction(Segments *segments,
   }
 }
 
-bool ConverterMock::StartPredictionWithComposer(
-    Segments *segments, const composer::Composer *composer) const {
-  VLOG(2) << "mock function: StartPredictionWithComposer";
-  startpredictionwithcomposer_input_.segments.CopyFrom(*segments);
-  startpredictionwithcomposer_input_.composer = composer;
+bool ConverterMock::StartSuggestionForRequest(const ConversionRequest &request,
+                                              Segments *segments) const {
+  VLOG(2) << "mock function: StartSuggestionForRequest";
+  startsuggestionforrequest_input_.segments.CopyFrom(*segments);
+  startsuggestionforrequest_input_.request = request;
 
-  if (!startpredictionwithcomposer_output_.initialized) {
+  if (!startsuggestionforrequest_output_.initialized) {
     return false;
   } else {
-    segments->CopyFrom(startpredictionwithcomposer_output_.segments);
-    return startpredictionwithcomposer_output_.return_value;
+    segments->CopyFrom(startsuggestionforrequest_output_.segments);
+    return startsuggestionforrequest_output_.return_value;
   }
 }
 
@@ -454,17 +408,17 @@ bool ConverterMock::StartSuggestion(Segments *segments,
   }
 }
 
-bool ConverterMock::StartSuggestionWithComposer(
-    Segments *segments, const composer::Composer *composer) const {
-  VLOG(2) << "mock function: StartSuggestionWithComposer";
-  startsuggestionwithcomposer_input_.segments.CopyFrom(*segments);
-  startsuggestionwithcomposer_input_.composer = composer;
+bool ConverterMock::StartPartialPredictionForRequest(
+    const ConversionRequest &request, Segments *segments) const {
+  VLOG(2) << "mock function: StartPartialPredictionForRequest";
+  startpartialpredictionforrequest_input_.segments.CopyFrom(*segments);
+  startpartialpredictionforrequest_input_.request = request;
 
-  if (!startsuggestionwithcomposer_output_.initialized) {
+  if (!startpartialpredictionforrequest_output_.initialized) {
     return false;
   } else {
-    segments->CopyFrom(startsuggestionwithcomposer_output_.segments);
-    return startsuggestionwithcomposer_output_.return_value;
+    segments->CopyFrom(startpartialpredictionforrequest_output_.segments);
+    return startpartialpredictionforrequest_output_.return_value;
   }
 }
 
@@ -482,17 +436,17 @@ bool ConverterMock::StartPartialPrediction(Segments *segments,
   }
 }
 
-bool ConverterMock::StartPartialPredictionWithComposer(
-    Segments *segments, const composer::Composer *composer) const {
-  VLOG(2) << "mock function: StartParialPredictionWithComposer";
-  startpartialpredictionwithcomposer_input_.segments.CopyFrom(*segments);
-  startpartialpredictionwithcomposer_input_.composer = composer;
+bool ConverterMock::StartPartialSuggestionForRequest(
+    const ConversionRequest &request, Segments *segments) const {
+  VLOG(2) << "mock function: StartPartialSuggestionForRequest";
+  startpartialsuggestionforrequest_input_.segments.CopyFrom(*segments);
+  startpartialsuggestionforrequest_input_.request = request;
 
-  if (!startpartialpredictionwithcomposer_output_.initialized) {
+  if (!startpartialsuggestionforrequest_output_.initialized) {
     return false;
   } else {
-    segments->CopyFrom(startpartialpredictionwithcomposer_output_.segments);
-    return startpartialpredictionwithcomposer_output_.return_value;
+    segments->CopyFrom(startpartialsuggestionforrequest_output_.segments);
+    return startpartialsuggestionforrequest_output_.return_value;
   }
 }
 
@@ -507,20 +461,6 @@ bool ConverterMock::StartPartialSuggestion(Segments *segments,
   } else {
     segments->CopyFrom(startpartialsuggestion_output_.segments);
     return startpartialsuggestion_output_.return_value;
-  }
-}
-
-bool ConverterMock::StartPartialSuggestionWithComposer(
-    Segments *segments, const composer::Composer *composer) const {
-  VLOG(2) << "mock function: StartParialSuggestionWithComposer";
-  startpartialsuggestionwithcomposer_input_.segments.CopyFrom(*segments);
-  startpartialsuggestionwithcomposer_input_.composer = composer;
-
-  if (!startpartialsuggestionwithcomposer_output_.initialized) {
-    return false;
-  } else {
-    segments->CopyFrom(startpartialsuggestionwithcomposer_output_.segments);
-    return startpartialsuggestionwithcomposer_output_.return_value;
   }
 }
 
@@ -656,6 +596,7 @@ bool ConverterMock::SubmitFirstSegment(Segments *segments,
 }
 
 bool ConverterMock::ResizeSegment(Segments *segments,
+                                  const ConversionRequest &request,
                                   size_t segment_index,
                                   int offset_length) const {
   VLOG(2) << "mock function: ResizeSegment";
@@ -672,6 +613,7 @@ bool ConverterMock::ResizeSegment(Segments *segments,
 }
 
 bool ConverterMock::ResizeSegment(Segments *segments,
+                                  const ConversionRequest &request,
                                   size_t start_segment_index,
                                   size_t segments_size,
                                   const uint8 *new_size_array,

@@ -37,15 +37,17 @@
 #include <sddl.h>
 #include <stdio.h>  // MSVC requires this for _vsnprintf
 // #include <KnownFolders.h>
-#else
+#else  // OS_WINDOWS
+#ifdef OS_MACOSX
+#include <mach/mach.h>
+#include <mach/mach_time.h>
+#include <sys/sysctl.h>
+#endif  // OS_MACOSX
 #include <pwd.h>
 #include <string.h>
 #include <sys/stat.h>
-#ifdef OS_MACOSX
-#include <sys/sysctl.h>
-#endif  // OS_MACOSX
-#include <sys/types.h>
 #include <sys/time.h>
+#include <sys/types.h>
 #include <unistd.h>
 #endif  // OS_WINDOWS
 #include <algorithm>
@@ -72,6 +74,7 @@
 #ifdef OS_MACOSX
 #include "base/mac_util.h"
 #endif
+
 
 
 namespace {
@@ -131,9 +134,17 @@ const char *const kNumKanjiBiggerRanks[] = {
   "", "\xe4\xb8\x87", "\xe5\x84\x84", "\xe5\x85\x86", "\xe4\xba\xac"
   //   "", "万", "億", "兆", "京"
 };
+const char *const kNumKanjiOldRanks[] = {
+  NULL, "", "\xe6\x8b\xbe", "\xe7\x99\xbe", "\xe9\x98\xa1"
+  //   NULL, "", "拾", "百", "阡"
+};
+const char *const kNumKanjiBiggerOldRanks[] = {
+  "", "\xe8\x90\xac", "\xe5\x84\x84", "\xe5\x85\x86", "\xe4\xba\xac"
+  //   "", "萬", "億", "兆", "京"
+};
 
 const char *const *const kKanjiDigitsVariations[] = {
-  kNumKanjiDigits, kNumKanjiOldDigits, NULL
+  kNumHalfDigits, kNumWideDigits, kNumKanjiDigits, kNumKanjiOldDigits, NULL
 };
 const char *const *const kSingleDigitsVariations[] = {
   kNumKanjiDigits, kNumWideDigits, NULL
@@ -191,46 +202,10 @@ const int kSpecialNumericSizes[] = {
 
 const char *const kNumZero = "\xe9\x9b\xb6";
 // const char* const kNumZero = "零";
-const char *const kNumOldTen = "\xe6\x8b\xbe";
-// const char* const kNumOldTen = "拾";
-const char *const kNumOldTwenty = "\xe5\xbb\xbf";
-// const char* const kNumOldTwenty = "廿";
-const char *const kNumOldThousand = "\xe9\x98\xa1";
-// const char* const kNumOldThousand = "阡";
-const char *const kNumOldTenThousand = "\xe8\x90\xac";
-// const char* const kNumOldTenThousand = "萬";
+
 const char *const kNumGoogol =
 "100000000000000000000000000000000000000000000000000"
 "00000000000000000000000000000000000000000000000000";
-
-// Helper functions.
-void AppendToEachElement(
-    const string &s,
-    vector<pair<string, mozc::Util::NumberString::Style> > *out) {
-  for (int i = 0; i < out->size(); i++) {
-    (*out)[i].first.append(s);
-  }
-}
-
-void AppendReplacedElements(
-    const string &before,
-    const string &after,
-    vector<pair<string, mozc::Util::NumberString::Style> > *texts) {
-  for (size_t i = 0; i < texts->size(); ++i) {
-    size_t tpos = (*texts)[i].first.find(before);
-    if (tpos == string::npos) {
-      continue;
-    }
-    string replaced = (*texts)[i].first;
-    do {
-      replaced.replace(tpos, before.size(), after);
-      tpos = replaced.find(before, tpos);
-    }while (tpos != string::npos);
-
-    texts->push_back(make_pair(replaced,
-                               mozc::Util::NumberString::NUMBER_OLD_KANJI));
-  }
-}
 
 // Judges given string is number or not.
 bool IsDecimalNumeric(const string &str) {
@@ -848,28 +823,24 @@ inline bool IsArabicDecimalChar32(char32 ucs4) {
 }  // namespace
 
 bool Util::IsArabicNumber(const string &input_string) {
-  const char *begin = input_string.data();
-  const char *end = input_string.data() + input_string.size();
-
-  while (begin < end) {
-    size_t mblen;
-    const char32 ucs4 = Util::UTF8ToUCS4(begin, end, &mblen);
-    if (!IsArabicDecimalChar32(ucs4)) {
+  for (ConstChar32Iterator iter(input_string); !iter.Done(); iter.Next()) {
+    if (!IsArabicDecimalChar32(iter.Get())) {
       // Found non-arabic decimal character.
       return false;
     }
-    begin += mblen;
   }
 
   // All characters are numbers.
   return true;
 }
 
+namespace {
 void PushBackNumberString(const string &value, const string &description,
                           Util::NumberString::Style style,
                           vector<Util::NumberString> *output) {
   output->push_back(Util::NumberString(value, description, style));
 }
+}  // namespace
 
 // Number Converters main functions.
 // They receives two arguments:
@@ -880,116 +851,148 @@ void PushBackNumberString(const string &value, const string &description,
 bool Util::ArabicToKanji(const string &input_num,
                          vector<NumberString> *output) {
   DCHECK(output);
+  const int kDigitsInBigRank = 4;
 
   if (!IsDecimalNumeric(input_num)) {
     return false;
   }
 
-  for (const char *const *const *digits_ptr = kKanjiDigitsVariations;
-       *digits_ptr; digits_ptr++) {
-    bool is_old = (*digits_ptr == kNumKanjiOldDigits);
-    const char *const *const digits = *digits_ptr;
-
-    const char *input_ptr = input_num.data();
-    int input_len = static_cast<int>(input_num.size());
-    while (input_len > 0 && *input_ptr == '0') {
-      ++input_ptr;
-      --input_len;
+  // We don't convert a number starting with '0', other than 0 itself.
+  if (input_num[0] == '0') {
+    const char *p = input_num.c_str();
+    while (*p == '0') {
+      ++p;
     }
-    if (input_len == 0) {
+    if (*p == '\0') {
       // "大字"
-      // http://ja.wikipedia.org/wiki/%E5%A4%A7%E5%AD%97_(%E6%95%B0%E5%AD%97)
       PushBackNumberString(kNumZero, "\xE5\xA4\xA7\xE5\xAD\x97",
-                           Util::NumberString::NUMBER_OLD_KANJI, output);
-      break;
+                           NumberString::NUMBER_OLD_KANJI, output);
+      return true;
     }
-    int bigger_ranks = input_len / 4;
-    if (bigger_ranks * 4 == input_len) {
-      --bigger_ranks;
+  }
+
+  // If given number needs higher ranks than our expectations,
+  // we don't convert it.
+  if (arraysize(kNumKanjiBiggerRanks) * kDigitsInBigRank < input_num.size()) {
+    return false;
+  }
+
+  // The order in this array must be same with kKanjiDigitsVariations[].
+  const NumberString::Style kStyles[] = {
+    NumberString::NUMBER_ARABIC_AND_KANJI_HALFWIDTH,
+    NumberString::NUMBER_ARABIC_AND_KANJI_FULLWIDTH,
+    NumberString::NUMBER_KANJI,
+    NumberString::NUMBER_OLD_KANJI,
+  };
+  // To know what "大字" means, please refer
+  // http://ja.wikipedia.org/wiki/%E5%A4%A7%E5%AD%97_(%E6%95%B0%E5%AD%97)
+  const char *kDescriptions[] = {
+    // "数字"
+    "\xE6\x95\xB0\xE5\xAD\x97",
+    // "数字"
+    "\xE6\x95\xB0\xE5\xAD\x97",
+    // "漢数字"
+    "\xE6\xBC\xA2\xE6\x95\xB0\xE5\xAD\x97",
+    // "大字"
+    "\xE5\xA4\xA7\xE5\xAD\x97",
+  };
+
+  // Fill '0' in the beginning of input_num to make its length
+  // (N * kDigitsInBigRank).
+  const int filled_zero_num = (kDigitsInBigRank -
+      (input_num.size() % kDigitsInBigRank)) % kDigitsInBigRank;
+  string input(filled_zero_num, '0');
+  input.append(input_num);
+
+  // Segment into kDigitsInBigRank-digits pieces
+  vector<string> ranked_numbers;
+  for (int i = static_cast<int>(input.size()) - kDigitsInBigRank; i >= 0;
+       i -= kDigitsInBigRank) {
+    ranked_numbers.push_back(input.substr(i, kDigitsInBigRank));
+  }
+  const size_t rank_size = ranked_numbers.size();
+
+  for (size_t variation_index = 0;
+       kKanjiDigitsVariations[variation_index] != NULL; ++variation_index) {
+    const char *const *const digits = kKanjiDigitsVariations[variation_index];
+    const NumberString::Style style = kStyles[variation_index];
+
+    if (rank_size == 1 &&
+        (style == NumberString::NUMBER_ARABIC_AND_KANJI_HALFWIDTH ||
+         style == NumberString::NUMBER_ARABIC_AND_KANJI_FULLWIDTH)) {
+      continue;
     }
-    if (bigger_ranks < static_cast<int>(arraysize(kNumKanjiBiggerRanks))) {
-      // pair of value and type
-      vector<pair<string, Util::NumberString::Style> > results;
-      const Util::NumberString::Style kStyle = is_old ?
-          Util::NumberString::NUMBER_OLD_KANJI :
-          Util::NumberString::NUMBER_KANJI;
-      results.push_back(make_pair("", kStyle));
-      for (; bigger_ranks >= 0; --bigger_ranks) {
-        bool is_printed = false;
-        int smaller_rank_len = input_len - bigger_ranks * 4;
-        for (int i = smaller_rank_len; i > 0; --i, ++input_ptr, --input_len) {
-          uint32 n = *input_ptr - '0';
-          if (n != 0) {
-            is_printed = true;
-          }
-          if (!is_old && i == 4 && bigger_ranks > 0 &&
-              strncmp(input_ptr, "1000", 4) == 0) {
-            AppendToEachElement(digits[n], &results);
-            AppendToEachElement(kNumKanjiRanks[i], &results);
-            input_ptr += 4;
-            input_len -= 4;
-            break;
-          }
-          if (n == 1) {
-            if (is_old) {
-              AppendToEachElement(digits[n], &results);
-            } else if (i == 4) {
-              if (is_old) {
-                AppendToEachElement(digits[n], &results);
-              } else {
-                const size_t len = results.size();
-                for (size_t j = 0; j < len; ++j) {
-                  results.push_back(make_pair(results[j].first + digits[n],
-                                              kStyle));
-                }
-              }
-            } else if (i == 1) {
-              AppendToEachElement(digits[n], &results);
-            }
-          } else if (n >= 2 && n <= 9) {
-            AppendToEachElement(digits[n], &results);
-          }
-          if (n > 0 && n <= 9) {
-            AppendToEachElement(
-                (i == 2 && is_old)? kNumOldTen : kNumKanjiRanks[i], &results);
-          }
+
+    const char *const *ranks = (style == NumberString::NUMBER_OLD_KANJI) ?
+        kNumKanjiOldRanks : kNumKanjiRanks;
+    const char *const *bigger_ranks =
+        (style == NumberString::NUMBER_OLD_KANJI) ?
+        kNumKanjiBiggerOldRanks : kNumKanjiBiggerRanks;
+
+    // Converts each segment, and merges them with rank Kanjis.
+    string result;
+    for (int rank = rank_size - 1; rank >= 0; --rank) {
+      const string &segment = ranked_numbers[rank];
+      string segment_result;
+      bool leading = true;
+      for (size_t i = 0; i < segment.size(); ++i) {
+        if (leading && segment[i] == '0') {
+          continue;
         }
-        if (is_printed) {
-          AppendToEachElement(kNumKanjiBiggerRanks[bigger_ranks], &results);
-        }
-      }
-      if (is_old) {
-        AppendReplacedElements("\xe5\x8d\x83", kNumOldThousand, &results);
-        // AppendReplacedElements("千", kNumOldThousand, &results);
-        AppendReplacedElements("\xe5\xbc\x90\xe6\x8b\xbe", kNumOldTwenty,
-                               &results);
-        // AppendReplacedElements("弐拾", kNumOldTwenty, &results);
-        AppendReplacedElements(kNumKanjiBiggerRanks[1], kNumOldTenThousand,
-                               &results);
-      }
-      if (is_old && input_num == "10") {
-        // add "拾" in case of input_num == "10"
-        results.push_back(make_pair("\xE6\x8B\xBE",
-                                    Util::NumberString::NUMBER_OLD_KANJI));
-      }
-      for (vector<pair<string, Util::NumberString::Style> >::const_iterator it =
-           results.begin();
-           it != results.end(); ++it) {
-        if (it->second == Util::NumberString::NUMBER_OLD_KANJI) {
-          // "大字"
-          // http://ja.wikipedia.org/wiki/%E5%A4%A7%E5%AD%97_(%E6%95%B0%E5%AD%97)
-          PushBackNumberString(it->first,
-                               "\xE5\xA4\xA7\xE5\xAD\x97",
-                               it->second, output);
+
+        if (style == NumberString::NUMBER_ARABIC_AND_KANJI_HALFWIDTH ||
+            style == NumberString::NUMBER_ARABIC_AND_KANJI_FULLWIDTH) {
+          segment_result += digits[segment[i] - '0'];
         } else {
-          // "漢数字"
-          PushBackNumberString(it->first,
-                               "\xE6\xBC\xA2\xE6\x95\xB0\xE5\xAD\x97",
-                               it->second, output);
+          if (segment[i] == '0') {
+            continue;
+          }
+          // In "大字" style, "壱" is also required on every rank.
+          if (style == NumberString::NUMBER_OLD_KANJI ||
+              i == kDigitsInBigRank - 1 || segment[i] != '1') {
+            segment_result += digits[segment[i] - '0'];
+          }
+          segment_result += ranks[kDigitsInBigRank - i];
         }
+
+        leading = false;
+      }
+      if (!segment_result.empty()) {
+        result += segment_result + bigger_ranks[rank];
+      }
+    }
+
+    const char *description = kDescriptions[variation_index];
+    // Add simply converted numbers.
+    PushBackNumberString(result, description, style, output);
+
+    // Add specialized style numbers.
+    if (style == NumberString::NUMBER_OLD_KANJI) {
+      // "弐拾"
+      const char *kOldTwoTen = "\xE5\xBC\x90\xE6\x8B\xBE";
+      // "廿"
+      const char *kOldTwenty = "\xE5\xBB\xBF";
+      size_t id;
+      string result2(result);
+      while ((id = result2.find(kOldTwoTen)) != string::npos) {
+        result2.replace(id, strlen(kOldTwoTen), kOldTwenty);
+      }
+      if (result2 != result) {
+        PushBackNumberString(result2, description, style, output);
+      }
+
+      // for single kanji
+      if (input == "0010") {
+        // "拾"
+        PushBackNumberString("\xE6\x8B\xBE", description, style, output);
+      }
+      if (input == "1000") {
+        // "阡"
+        PushBackNumberString("\xE9\x98\xA1", description, style, output);
       }
     }
   }
+
   return true;
 }
 
@@ -1253,6 +1256,20 @@ bool Util::SafeStrToDouble(const string &str, double *value) {
   return (*endptr == '\0') && (errno == 0);
 }
 
+bool Util::SafeStrToFloat(const string &str, float *value) {
+  double double_value;
+  if (!SafeStrToDouble(str, &double_value)) {
+    return false;
+  }
+  *value = static_cast<float>(double_value);
+
+  if ((*value ==  numeric_limits<float>::infinity()) ||
+      (*value == -numeric_limits<float>::infinity())) {
+    return false;
+  }
+  return true;
+}
+
 string Util::StringPrintf(const char *format, ...) {
   va_list ap;
   va_start(ap, format);
@@ -1334,7 +1351,7 @@ class ClockImpl : public Util::ClockInterface {
   ClockImpl() {}
   virtual ~ClockImpl() {}
 
-  void GetTimeOfDay(uint64 *sec, uint32 *usec) {
+  virtual void GetTimeOfDay(uint64 *sec, uint32 *usec) {
 #ifdef OS_WINDOWS
     FILETIME file_time;
     GetSystemTimeAsFileTime(&file_time);
@@ -1361,7 +1378,7 @@ class ClockImpl : public Util::ClockInterface {
 #endif
   }
 
-  uint64 GetTime() {
+  virtual uint64 GetTime() {
 #ifdef OS_WINDOWS
     return static_cast<uint64>(_time64(NULL));
 # else
@@ -1369,7 +1386,7 @@ class ClockImpl : public Util::ClockInterface {
 # endif
   }
 
-  bool GetTmWithOffsetSecond(time_t offset_sec, tm *output) {
+  virtual bool GetTmWithOffsetSecond(time_t offset_sec, tm *output) {
     const time_t current_sec = static_cast<time_t>(this->GetTime());
     const time_t modified_sec = current_sec + offset_sec;
 
@@ -1383,6 +1400,59 @@ class ClockImpl : public Util::ClockInterface {
     }
 #endif
     return true;
+  }
+
+  virtual uint64 GetFrequency() {
+#if defined(OS_WINDOWS)
+    LARGE_INTEGER timestamp;
+    // TODO(yukawa): Consider the case where QueryPerformanceCounter is not
+    // available.
+    const BOOL result = ::QueryPerformanceFrequency(&timestamp);
+    return static_cast<uint64>(timestamp.QuadPart);
+#elif defined(OS_MACOSX)
+    static mach_timebase_info_data_t timebase_info;
+    mach_timebase_info(&timebase_info);
+    return static_cast<uint64>(
+        1.0e9 * timebase_info.denom / timebase_info.numer);
+#elif defined(OS_LINUX)
+#if defined(HAVE_LIBRT)
+    return 1000000000uLL;
+#else
+    return 1000000uLL;
+#endif  // HAVE_LIBRT
+#else
+#error "Not supported platform"
+#endif  // platforms (OS_WINDOWS, OS_MACOSX, OS_LINUX, ...)
+  }
+
+  virtual uint64 GetTicks() {
+#if defined(OS_WINDOWS)
+    LARGE_INTEGER timestamp;
+    // TODO(yukawa): Consider the case where QueryPerformanceCounter is not
+    // available.
+    const BOOL result = ::QueryPerformanceCounter(&timestamp);
+    return static_cast<uint64>(timestamp.QuadPart);
+#elif defined(OS_MACOSX)
+    return static_cast<uint64>(mach_absolute_time());
+#elif defined(OS_LINUX)
+#if defined(HAVE_LIBRT)
+    struct timespec timestamp;
+    if (-1 == clock_gettime(CLOCK_REALTIME, &timestamp)) {
+      return 0;
+    }
+    return timestamp.tv_sec * 1000000000uLL + timestamp.tv_nsec;
+#else
+    // librt is not linked on Android, so we uses GetTimeOfDay instead.
+    // GetFrequency() always returns 1MHz when librt is not available,
+    // so we uses microseconds as ticks.
+    uint64 sec;
+    uint32 usec;
+    GetTimeOfDay(&sec, &usec);
+    return sec * 1000000 + usec;
+#endif  // HAVE_LIBRT
+#else
+#error "Not supported platform"
+#endif  // platforms (OS_WINDOWS, OS_MACOSX, OS_LINUX, ...)
   }
 };
 
@@ -1415,6 +1485,14 @@ bool Util::GetCurrentTm(tm *current_time) {
 
 bool Util::GetTmWithOffsetSecond(tm *time_with_offset, int offset_sec) {
   return GetClockHandler()->GetTmWithOffsetSecond(offset_sec, time_with_offset);
+}
+
+uint64 Util::GetFrequency() {
+  return GetClockHandler()->GetFrequency();
+}
+
+uint64 Util::GetTicks() {
+  return GetClockHandler()->GetTicks();
 }
 
 void Util::Sleep(uint32 msec) {
@@ -2020,12 +2098,8 @@ bool Util::IsCloseBracket(const string &key, string *open_bracket) {
 }
 
 bool Util::IsFullWidthSymbolInHalfWidthKatakana(const string &input) {
-  const char *begin = input.data();
-  const char *end = begin + input.size();
-  while (begin < end) {
-    size_t mblen = 0;
-    char32 w = UTF8ToUCS4(begin, end, &mblen);
-    switch (w) {
+  for (ConstChar32Iterator iter(input); !iter.Done(); iter.Next()) {
+    switch (iter.Get()) {
       case 0x3002:  // FULLSTOP "。"
       case 0x300C:  // LEFT CORNER BRACKET "「"
       case 0x300D:  // RIGHT CORNER BRACKET "」"
@@ -2034,23 +2108,17 @@ bool Util::IsFullWidthSymbolInHalfWidthKatakana(const string &input) {
       case 0x30FC:  // SOUND_MARK "ー"
       case 0x3099:  // VOICE SOUND MARK "゙"
       case 0x309A:  // SEMI VOICE SOUND MARK "゚"
-        begin += mblen;
         break;
       default:
         return false;
     }
-    begin += mblen;
   }
   return true;
 }
 
 bool Util::IsHalfWidthKatakanaSymbol(const string &input) {
-  const char *begin = input.data();
-  const char *end = begin + input.size();
-  while (begin < end) {
-    size_t mblen = 0;
-    char32 w = UTF8ToUCS4(begin, end, &mblen);
-    switch (w) {
+  for (ConstChar32Iterator iter(input); !iter.Done(); iter.Next()) {
+    switch (iter.Get()) {
       case 0xFF61:  // FULLSTOP "｡"
       case 0xFF62:  // LEFT CORNER BRACKET "｢"
       case 0xFF63:  // RIGHT CORNER BRACKET "｣"
@@ -2059,7 +2127,6 @@ bool Util::IsHalfWidthKatakanaSymbol(const string &input) {
       case 0xFF70:  // SOUND_MARK "ｰ"
       case 0xFF9E:  // VOICE SOUND MARK "ﾞ"
       case 0xFF9F:  // SEMI VOICE SOUND MARK "ﾟ"
-        begin += mblen;
         break;
       default:
         return false;
@@ -2069,12 +2136,8 @@ bool Util::IsHalfWidthKatakanaSymbol(const string &input) {
 }
 
 bool Util::IsKanaSymbolContained(const string &input) {
-  const char *begin = input.data();
-  const char *end = begin + input.size();
-  while (begin < end) {
-    size_t mblen = 0;
-    char32 w = UTF8ToUCS4(begin, end, &mblen);
-    switch (w) {
+  for (ConstChar32Iterator iter(input); !iter.Done(); iter.Next()) {
+    switch (iter.Get()) {
       case 0x3002:  // FULLSTOP "。"
       case 0x300C:  // LEFT CORNER BRACKET "「"
       case 0x300D:  // RIGHT CORNER BRACKET "」"
@@ -2092,8 +2155,6 @@ bool Util::IsKanaSymbolContained(const string &input) {
       case 0xFF9E:  // VOICE SOUND MARK "ﾞ"
       case 0xFF9F:  // SEMI VOICE SOUND MARK "ﾟ"
         return true;
-      default:
-        begin += mblen;
     }
   }
   return false;
@@ -2690,6 +2751,15 @@ string Util::GetServerDirectory() {
 #endif  // OS_LINUX
 }
 
+string Util::GetServerPath() {
+  const string server_path = mozc::Util::GetServerDirectory();
+  // if server path is empty, return empty path
+  if (server_path.empty()) {
+    return "";
+  }
+  return mozc::Util::JoinPath(server_path, kMozcServerName);
+}
+
 string Util::GetDocumentDirectory() {
 #ifdef OS_MACOSX
   return Util::GetServerDirectory();
@@ -2721,6 +2791,7 @@ string Util::GetUserNameAsString() {
 
 #ifdef OS_WINDOWS
 namespace {
+
 string GetObjectNameAsString(HANDLE handle) {
   if (handle == NULL) {
     LOG(ERROR) << "Unknown handle";
@@ -2760,8 +2831,20 @@ string GetObjectNameAsString(HANDLE handle) {
 
   return result;
 }
+
+bool GetCurrentSessionId(DWORD *session_id) {
+  DCHECK(session_id);
+  *session_id = 0;
+  if (!::ProcessIdToSessionId(::GetCurrentProcessId(),
+                              session_id)) {
+    LOG(ERROR) << "cannot get session id: " << ::GetLastError();
+    return false;
+  }
+  return true;
 }
-#endif
+
+}
+#endif  // OS_WINDOWS
 
 string Util::GetDesktopNameAsString() {
 #ifdef OS_LINUX
@@ -2778,9 +2861,7 @@ string Util::GetDesktopNameAsString() {
 
 #ifdef OS_WINDOWS
   DWORD session_id = 0;
-  if (!::ProcessIdToSessionId(::GetCurrentProcessId(),
-                              &session_id)) {
-    LOG(ERROR) << "cannot get session id: " << ::GetLastError();
+  if (!GetCurrentSessionId(&session_id)) {
     return "";
   }
 
@@ -3117,10 +3198,43 @@ Util::ScriptType Util::GetScriptType(char32 w) {
 }
 
 Util::FormType Util::GetFormType(char32 w) {
+  // 'Unicode Standard Annex #11: EAST ASIAN WIDTH'
+  // http://www.unicode.org/reports/tr11/
+
+  // Characters marked as 'Na' in
+  // http://www.unicode.org/Public/UNIDATA/EastAsianWidth.txt
   if (INRANGE(w, 0x0020, 0x007F) ||  // ascii
-      INRANGE(w, 0xFF61, 0xFF9F)) {  // half-width katakana
+      INRANGE(w, 0x27E6, 0x27ED) ||  // narrow mathematical symbols
+      INRANGE(w, 0x2985, 0x2986)) {  // narrow white parentheses
     return HALF_WIDTH;
   }
+
+  // Other characters marked as 'Na' in
+  // http://www.unicode.org/Public/UNIDATA/EastAsianWidth.txt
+  if (INRANGE(w, 0x00A2, 0x00AF)) {
+    switch (w) {
+      case 0x00A2:  // CENT SIGN
+      case 0x00A3:  // POUND SIGN
+      case 0x00A5:  // YEN SIGN
+      case 0x00A6:  // BROKEN BAR
+      case 0x00AC:  // NOT SIGN
+      case 0x00AF:  // MACRON
+        return HALF_WIDTH;
+    }
+  }
+
+  // Characters marked as 'H' in
+  // http://www.unicode.org/Public/UNIDATA/EastAsianWidth.txt
+  if (w == 0x20A9 ||                 // WON SIGN
+      INRANGE(w, 0xFF61, 0xFF9F) ||  // half-width katakana
+      INRANGE(w, 0xFFA0, 0xFFBE) ||  // half-width hangul
+      INRANGE(w, 0xFFC2, 0xFFCF) ||  // half-width hangul
+      INRANGE(w, 0xFFD2, 0xFFD7) ||  // half-width hangul
+      INRANGE(w, 0xFFDA, 0xFFDC) ||  // half-width hangul
+      INRANGE(w, 0xFFE8, 0xFFEE)) {  // half-width symbols
+    return HALF_WIDTH;
+  }
+
   return FULL_WIDTH;
 }
 
@@ -3136,37 +3250,34 @@ Util::ScriptType Util::GetScriptType(const char *begin,
 namespace {
 Util::ScriptType GetScriptTypeInternal(const string &str,
                                        bool ignore_symbols) {
-  const char *begin = str.data();
-  const char *end = str.data() + str.size();
-  size_t mblen = 0;
   Util::ScriptType result = Util::SCRIPT_TYPE_SIZE;
 
-  while (begin < end) {
-    const char32 w = Util::UTF8ToUCS4(begin, end, &mblen);
+  for (ConstChar32Iterator iter(str); !iter.Done(); iter.Next()) {
+    const char32 w = iter.Get();
     Util::ScriptType type = Util::GetScriptType(w);
-    if ((w == 0x30FC || w == 0x30FB ||
-         (w >= 0x3099 && w <= 0x309C)) &&
-        // PROLONGEDSOUND MARK|MIDLE_DOT|VOICDE_SOUND_MARKS
+    if ((w == 0x30FC || w == 0x30FB || (w >= 0x3099 && w <= 0x309C)) &&
+        // PROLONGEDSOUND MARK|MIDLE_DOT|VOICED_SOUND_MARKS
         // are HIRAGANA as well
         (result == Util::SCRIPT_TYPE_SIZE ||
          result == Util::HIRAGANA || result == Util::KATAKANA)) {
       type = result;  // restore the previous state
     }
+
     // Ignore symbols
     // Regard UNKNOWN_SCRIPT as symbols here
     if (ignore_symbols &&
         result != Util::UNKNOWN_SCRIPT &&
         type == Util::UNKNOWN_SCRIPT) {
-      begin += mblen;
       continue;
     }
-    // not first character
-    if (str.data() != begin &&
-        result != Util::SCRIPT_TYPE_SIZE && type != result) {
+
+    // Not first character.
+    // Note: GetScriptType doesn't return SCRIPT_TYPE_SIZE, thus if result
+    // is not SCRIPT_TYPE_SIZE, it is not the first character.
+    if (result != Util::SCRIPT_TYPE_SIZE && type != result) {
       return Util::UNKNOWN_SCRIPT;
     }
     result = type;
-    begin += mblen;
   }
 
   if (result == Util::SCRIPT_TYPE_SIZE) {  // everything is "ー"
@@ -3194,15 +3305,10 @@ Util::ScriptType Util::GetScriptTypeWithoutSymbols(const string &str) {
 
 // return true if all script_type in str is "type"
 bool Util::IsScriptType(const string &str, Util::ScriptType type) {
-  const char *begin = str.data();
-  const char *end = str.data() + str.size();
-  size_t mblen = 0;
-  while (begin < end) {
-    const char32 w = Util::UTF8ToUCS4(begin, end, &mblen);
+  for (ConstChar32Iterator iter(str); !iter.Done(); iter.Next()) {
+    const char32 w = iter.Get();
     // Exception: 30FC (PROLONGEDSOUND MARK is categorized as HIRAGANA as well)
-    if ((w == 0x30FC && type == HIRAGANA) || type == GetScriptType(w)) {
-      begin += mblen;
-    } else {
+    if (type != GetScriptType(w) && (w != 0x30FC || type != HIRAGANA)) {
       return false;
     }
   }
@@ -3211,34 +3317,26 @@ bool Util::IsScriptType(const string &str, Util::ScriptType type) {
 
 // return true if the string contains script_type char
 bool Util::ContainsScriptType(const string &str, ScriptType type) {
-  const char *begin = str.data();
-  const char *end = str.data() + str.size();
-  while (begin < end) {
-    size_t mblen;
-    const char32 w = Util::UTF8ToUCS4(begin, end, &mblen);
-    if (type == Util::GetScriptType(w)) {
+  for (ConstChar32Iterator iter(str); !iter.Done(); iter.Next()) {
+    if (type == Util::GetScriptType(iter.Get())) {
       return true;
     }
-    begin += mblen;
   }
   return false;
 }
 
 // return the Form Type of string
 Util::FormType Util::GetFormType(const string &str) {
-  const char *begin = str.data();
-  const char *end = str.data() + str.size();
-  size_t mblen = 0;
-  Util::FormType result = Util::UNKNOWN_FORM;
+  // TODO(hidehiko): get rid of using FORM_TYPE_SIZE.
+  Util::FormType result = Util::FORM_TYPE_SIZE;
 
-  while (begin < end) {
-    const char32 w = Util::UTF8ToUCS4(begin, end, &mblen);
-    const Util::FormType type = GetFormType(w);
-    if (type == UNKNOWN_FORM || (str.data() != begin && type != result)) {
+  for (ConstChar32Iterator iter(str); !iter.Done(); iter.Next()) {
+    const Util::FormType type = GetFormType(iter.Get());
+    if (type == UNKNOWN_FORM ||
+        (result != Util::FORM_TYPE_SIZE && type != result)) {
       return UNKNOWN_FORM;
     }
     result = type;
-    begin += mblen;
   }
 
   return result;
@@ -3248,17 +3346,10 @@ Util::FormType Util::GetFormType(const string &str) {
 #include "base/character_set.h"
 
 Util::CharacterSet Util::GetCharacterSet(const string &str) {
-  const char *begin = str.data();
-  const char *end = str.data() + str.size();
-  size_t mblen = 0;
   Util::CharacterSet result = Util::ASCII;
-
-  while (begin < end) {
-    const char32 w = Util::UTF8ToUCS4(begin, end, &mblen);
-    result = max(result, GetCharacterSet(w));
-    begin += mblen;
+  for (ConstChar32Iterator iter(str); !iter.Done(); iter.Next()) {
+    result = max(result, GetCharacterSet(iter.Get()));
   }
-
   return result;
 }
 
@@ -3430,6 +3521,7 @@ class IsWindowsVerXOrLaterCache {
 
 typedef IsWindowsVerXOrLaterCache<6, 0> IsWindowsVistaOrLaterCache;
 typedef IsWindowsVerXOrLaterCache<6, 1> IsWindows7OrLaterCache;
+typedef IsWindowsVerXOrLaterCache<6, 2> IsWindows8OrLaterCache;
 
 // TODO(yukawa): Use API wrapper so that unit test can emulate any case.
 class IsWindowsX64Cache {
@@ -3501,6 +3593,11 @@ bool Util::IsVistaOrLater() {
 bool Util::IsWindows7OrLater() {
   DCHECK(Singleton<IsWindows7OrLaterCache>::get()->succeeded());
   return Singleton<IsWindows7OrLaterCache>::get()->is_ver_x_or_later();
+}
+
+bool Util::IsWindows8OrLater() {
+  DCHECK(Singleton<IsWindows8OrLaterCache>::get()->succeeded());
+  return Singleton<IsWindows8OrLaterCache>::get()->is_ver_x_or_later();
 }
 
 bool Util::IsWindowsX64() {
@@ -3669,6 +3766,8 @@ string Util::GetFileVersionString(const wstring &file_fullpath) {
 
   return buf.str();
 }
+
+
 #endif  // OS_WINDOWS
 
 // TODO(toshiyuki): move this to the initialization module and calculate
@@ -3793,6 +3892,27 @@ bool Util::IsLittleEndian() {
 #endif
 }
 
+int Util::MaybeMLock(const void *addr, size_t len) {
+  // TODO(yukawa): Integrate mozc_cache service.
+#if defined(OS_WINDOWS) || defined(OS_ANDROID) || defined(__native_client__)
+  return -1;
+#else  // defined(OS_WINDOWS) || defined(OS_ANDROID) ||
+       // defined(__native_client__)
+  return mlock(addr, len);
+#endif  // defined(OS_WINDOWS) || defined(OS_ANDROID) ||
+        // defined(__native_client__)
+}
+
+int Util::MaybeMUnlock(const void *addr, size_t len) {
+#if defined(OS_WINDOWS) || defined(OS_ANDROID) || defined(__native_client__)
+  return -1;
+#else  // defined(OS_WINDOWS) || defined(OS_ANDROID) ||
+       // defined(__native_client__)
+  return munlock(addr, len);
+#endif  // defined(OS_WINDOWS) || defined(OS_ANDROID) ||
+        // defined(__native_client__)
+}
+
 #ifdef OS_WINDOWS
 // TODO(team): Support other platforms.
 bool Util::EnsureVitalImmutableDataIsAvailable() {
@@ -3800,6 +3920,9 @@ bool Util::EnsureVitalImmutableDataIsAvailable() {
     return false;
   }
   if (!Singleton<IsWindows7OrLaterCache>::get()->succeeded()) {
+    return false;
+  }
+  if (!Singleton<IsWindows8OrLaterCache>::get()->succeeded()) {
     return false;
   }
   if (!Singleton<SystemDirectoryCache>::get()->succeeded()) {

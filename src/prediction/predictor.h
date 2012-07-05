@@ -30,17 +30,26 @@
 #ifndef MOZC_PREDICTION_PREDICTOR_H_
 #define MOZC_PREDICTION_PREDICTOR_H_
 
+#include "converter/conversion_request.h"
 #include "prediction/predictor_interface.h"
 
 namespace mozc {
 
 class BasePredictor : public PredictorInterface {
  public:
-  BasePredictor();
+  // Initializes the composite of predictor with given sub-predictors. All the
+  // predictors are owned by this class and deleted on destruction of this
+  // instance.
+  BasePredictor(PredictorInterface *dictionary_predictor,
+                PredictorInterface *user_history_predictor,
+                PredictorInterface *extra_predictor);
   virtual ~BasePredictor();
 
   // Overwrite predictor
   virtual bool Predict(Segments *segments) const = 0;
+
+  virtual bool PredictForRequest(const ConversionRequest &request,
+                                 Segments *segments) const = 0;
 
   // Hook(s) for all mutable operations
   virtual void Finish(Segments *segments);
@@ -59,11 +68,32 @@ class BasePredictor : public PredictorInterface {
 
   // Reload usre history
   virtual bool Reload();
+
+  virtual const string &GetPredictorName() const = 0;
+
+ protected:
+  scoped_ptr<PredictorInterface> dictionary_predictor_;
+  scoped_ptr<PredictorInterface> user_history_predictor_;
+  scoped_ptr<PredictorInterface> extra_predictor_;
 };
 
 class DefaultPredictor : public BasePredictor {
  public:
+  DefaultPredictor(PredictorInterface *dictionary_predictor,
+                   PredictorInterface *user_history_predictor,
+                   PredictorInterface *extra_predictor);
+  virtual ~DefaultPredictor();
+
+  virtual bool PredictForRequest(const ConversionRequest &request,
+                                 Segments *segments) const;
+
   virtual bool Predict(Segments *segments) const;
+
+  virtual const string &GetPredictorName() const { return predictor_name_; }
+
+ private:
+  const ConversionRequest empty_request_;
+  const string predictor_name_;
 };
 
 

@@ -30,9 +30,11 @@
 #include <string>
 
 #include "base/util.h"
+#include "converter/conversion_request.h"
 #include "converter/segments.h"
 #include "rewriter/english_variants_rewriter.h"
 #include "session/commands.pb.h"
+#include "session/request_handler.h"
 #include "testing/base/public/gunit.h"
 
 DECLARE_string(test_tmpdir);
@@ -103,6 +105,7 @@ TEST_F(EnglishVariantsRewriterTest, ExpandEnglishVariants) {
 TEST_F(EnglishVariantsRewriterTest, RewriteTest) {
   EnglishVariantsRewriter rewriter;
   Segments segments;
+  const ConversionRequest request;
   Segment *seg = segments.push_back_segment();
 
   // T13N
@@ -121,7 +124,7 @@ TEST_F(EnglishVariantsRewriterTest, RewriteTest) {
     EXPECT_EQ(1, seg->candidates_size());
     EXPECT_EQ("Google", seg->candidate(0).value);
     EXPECT_EQ("Google", seg->candidate(0).content_value);
-    EXPECT_TRUE(rewriter.Rewrite(&segments));
+    EXPECT_TRUE(rewriter.Rewrite(request, &segments));
     EXPECT_EQ(3, seg->candidates_size());
     EXPECT_EQ("Google", seg->candidate(0).value);
     EXPECT_EQ("Google", seg->candidate(0).content_value);
@@ -151,7 +154,7 @@ TEST_F(EnglishVariantsRewriterTest, RewriteTest) {
       candidate2->attributes &= ~Segment::Candidate::NO_VARIANTS_EXPANSION;
     }
 
-    EXPECT_TRUE(rewriter.Rewrite(&segments));
+    EXPECT_TRUE(rewriter.Rewrite(request, &segments));
     EXPECT_EQ(40, seg->candidates_size());
 
     for (int i = 0; i < 10; ++i) {
@@ -170,6 +173,7 @@ TEST_F(EnglishVariantsRewriterTest, RewriteTest) {
 TEST_F(EnglishVariantsRewriterTest, Regression3242753) {
   EnglishVariantsRewriter rewriter;
   Segments segments;
+  const ConversionRequest request;
   Segment *seg = segments.push_back_segment();
 
   // Multi-word English candidate should not be expanded.
@@ -193,7 +197,7 @@ TEST_F(EnglishVariantsRewriterTest, Regression3242753) {
     EXPECT_EQ(1, seg->candidates_size());
     EXPECT_EQ("Michael Jackson", seg->candidate(0).value);
     EXPECT_EQ("Michael Jackson", seg->candidate(0).content_value);
-    EXPECT_TRUE(rewriter.Rewrite(&segments));
+    EXPECT_TRUE(rewriter.Rewrite(request, &segments));
     EXPECT_EQ(1, seg->candidates_size());
     EXPECT_EQ("Michael Jackson", seg->candidate(0).value);
     EXPECT_EQ("Michael Jackson", seg->candidate(0).content_value);
@@ -205,6 +209,7 @@ TEST_F(EnglishVariantsRewriterTest, Regression3242753) {
 TEST_F(EnglishVariantsRewriterTest, Regression5137299) {
   EnglishVariantsRewriter rewriter;
   Segments segments;
+  const ConversionRequest request;
   Segment *seg = segments.push_back_segment();
 
   {
@@ -221,7 +226,7 @@ TEST_F(EnglishVariantsRewriterTest, Regression5137299) {
     EXPECT_EQ(1, seg->candidates_size());
     EXPECT_EQ("Google", seg->candidate(0).value);
     EXPECT_EQ("Google", seg->candidate(0).content_value);
-    EXPECT_FALSE(rewriter.Rewrite(&segments));
+    EXPECT_FALSE(rewriter.Rewrite(request, &segments));
     EXPECT_EQ(1, seg->candidates_size());
   }
 
@@ -242,7 +247,7 @@ TEST_F(EnglishVariantsRewriterTest, Regression5137299) {
     EXPECT_EQ(1, seg->candidates_size());
     EXPECT_EQ("Google", seg->candidate(0).value);
     EXPECT_EQ("Google", seg->candidate(0).content_value);
-    EXPECT_TRUE(rewriter.Rewrite(&segments));
+    EXPECT_TRUE(rewriter.Rewrite(request, &segments));
     EXPECT_EQ(3, seg->candidates_size());
     EXPECT_EQ("Google", seg->candidate(0).value);
     EXPECT_EQ("Google", seg->candidate(0).content_value);
@@ -257,6 +262,7 @@ TEST_F(EnglishVariantsRewriterTest, ExpandEnglishEntry) {
   // Fix variants
   EnglishVariantsRewriter rewriter;
   Segments segments;
+  const ConversionRequest request;
   Segment *seg = segments.push_back_segment();
 
   {
@@ -271,7 +277,7 @@ TEST_F(EnglishVariantsRewriterTest, ExpandEnglishEntry) {
     EXPECT_EQ(1, seg->candidates_size());
     EXPECT_EQ("Google", seg->candidate(0).value);
     EXPECT_EQ("Google", seg->candidate(0).content_value);
-    EXPECT_TRUE(rewriter.Rewrite(&segments));
+    EXPECT_TRUE(rewriter.Rewrite(request, &segments));
     EXPECT_EQ(1, seg->candidates_size());
     EXPECT_EQ("Google", seg->candidate(0).value);
     EXPECT_EQ("Google", seg->candidate(0).content_value);
@@ -280,5 +286,17 @@ TEST_F(EnglishVariantsRewriterTest, ExpandEnglishEntry) {
   }
 }
 
+TEST_F(EnglishVariantsRewriterTest, MobileEnvironmentTest) {
+  commands::Request input;
+  EnglishVariantsRewriter rewriter;
+
+  input.set_mixed_conversion(true);
+  commands::RequestHandler::SetRequest(input);
+  EXPECT_EQ(RewriterInterface::ALL, rewriter.capability());
+
+  input.set_mixed_conversion(false);
+  commands::RequestHandler::SetRequest(input);
+  EXPECT_EQ(RewriterInterface::CONVERSION, rewriter.capability());
+}
 
 }  // namespace mozc

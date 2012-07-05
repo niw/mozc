@@ -37,10 +37,18 @@
         'skk_util_test.cc',
       ],
       'dependencies': [
-        '../../dictionary/dictionary.gyp:gen_embedded_dictionary_data',
+        '../../dictionary/dictionary.gyp:gen_embedded_dictionary_data#host',
         '../../dictionary/system/system_dictionary.gyp:system_dictionary',
+        '../../net/net.gyp:jsoncpp',
         '../../testing/testing.gyp:gtest_main',
-        '<(DEPTH)/third_party/jsoncpp/jsoncpp.gyp:jsoncpp',
+      ],
+    },
+    # Test cases meta target: this target is referred from gyp/tests.gyp
+    {
+      'target_name': 'skk_util_all_test',
+      'type': 'none',
+      'dependencies': [
+        'skk_util_test',
       ],
     },
   ],

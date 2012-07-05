@@ -30,21 +30,46 @@
 #ifndef MOZC_REWRITER_NUMBER_REWRITER_H_
 #define MOZC_REWRITER_NUMBER_REWRITER_H_
 
+#include "converter/segments.h"
 #include "rewriter/rewriter_interface.h"
 
 namespace mozc {
+class ConversionRequest;
+class POSMatcher;
+struct RewriteCandidateInfo;
 
-class Segments;
-
-class NumberRewriter: public RewriterInterface  {
+class NumberRewriter : public RewriterInterface  {
  public:
-  NumberRewriter();
+  // Rewrite type
+  enum RewriteType {
+    NO_REWRITE = 0,
+    ARABIC_FIRST,  // arabic candidates first ordering
+    KANJI_FIRST,  // kanji candidates first ordering
+  };
+
+  explicit NumberRewriter(const POSMatcher *pos_matcher);
   virtual ~NumberRewriter();
 
   virtual int capability() const;
 
-  virtual bool Rewrite(Segments *segments) const;
-};
-}
+  virtual bool Rewrite(const ConversionRequest &request,
+                       Segments *segments) const;
 
+ private:
+  bool RewriteOneSegment(bool exec_radix_conversion, Segment *seg) const;
+  void GetRewriteCandidateInfos(const Segment &seg,
+                                vector<RewriteCandidateInfo>
+                                *rewrite_candidate_info) const;
+
+  RewriteType GetRewriteTypeAndBase(
+      const Segment &seg,
+      int base_candidate_pos,
+      Segment::Candidate *arabic_candidate) const;
+
+  bool IsNumber(uint16 lid) const;
+
+  const POSMatcher *pos_matcher_;
+};
+
+}  // namespace mozc
 #endif  // MOZC_REWRITER_NUMBER_REWRITER_H_

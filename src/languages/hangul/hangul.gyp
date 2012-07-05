@@ -47,13 +47,14 @@
       ],
     },
     {
-      'target_name': 'language_dependent_spec_hangul',
-      'type': 'static_library',
-      'sources': [
-        'lang_dep_spec.cc',
-      ],
-      'dependencies': [
-        '../languages.gyp:language_spec_base',
+      'target_name': 'hangul_all_test',
+      'type': 'none',
+      'conditions': [
+        ['OS == "linux" and chromeos==1', {
+          'dependencies': [
+            'hangul_session_test',
+          ],
+        }],
       ],
     },
   ],
@@ -61,32 +62,14 @@
     ['OS=="linux"', {
       'targets': [
         {
-          'target_name': 'ibus_mozc_hangul_metadata',
-          'type': 'static_library',
-          'sources': [
-            'unix/ibus/mozc_engine_property.cc',
-          ],
-          'dependencies': [
-            '../../session/session_base.gyp:session_protocol',
-          ],
-          'includes': [
-            '../../unix/ibus/ibus_libraries.gypi',
-          ],
-        },
-        {
           'target_name': 'ibus_mozc_hangul',
           'type': 'executable',
           'sources': [
             'unix/ibus/main.cc',
+            'unix/ibus/mozc_engine_property.cc',
           ],
           'dependencies': [
             '../../unix/ibus/ibus.gyp:ibus_mozc_lib',
-            '../languages.gyp:global_language_spec',
-            'ibus_mozc_hangul_metadata',
-            'language_dependent_spec_hangul',
-          ],
-          'includes': [
-            '../../unix/ibus/ibus_libraries.gypi',
           ],
           'conditions': [
             ['chromeos==1', {
@@ -112,9 +95,7 @@
           ],
           'dependencies': [
             '../../server/server.gyp:mozc_server_lib',
-            '../languages.gyp:global_language_spec',
             'hangul_session',
-            'language_dependent_spec_hangul',
           ],
           'includes': [
             'hangul_libraries.gypi',

@@ -34,13 +34,17 @@
 #include "base/util.h"
 #include "config/config_handler.h"
 #include "config/config.pb.h"
+#include "converter/conversion_request.h"
 #include "converter/converter_interface.h"
 #include "converter/segments.h"
 #include "rewriter/calculator/calculator_interface.h"
 
 namespace mozc {
 
-CalculatorRewriter::CalculatorRewriter() {
+CalculatorRewriter::CalculatorRewriter(
+    const ConverterInterface *parent_converter)
+    : parent_converter_(parent_converter) {
+  DCHECK(parent_converter_);
 }
 
 CalculatorRewriter::~CalculatorRewriter() {}
@@ -51,7 +55,8 @@ CalculatorRewriter::~CalculatorRewriter() {}
 // ResizeSegment(), otherwise do calculation and insertion.
 // TODO(tok): It currently calculates same expression twice, if |segments| is
 //            a valid expression.
-bool CalculatorRewriter::Rewrite(Segments *segments) const {
+bool CalculatorRewriter::Rewrite(const ConversionRequest &request,
+                                 Segments *segments) const {
   if (!GET_CONFIG(use_calculator)) {
     return false;
   }
@@ -91,13 +96,12 @@ bool CalculatorRewriter::Rewrite(Segments *segments) const {
   }
 
   // Merge all conversion segments.
-  ConverterInterface *converter = ConverterFactory::GetConverter();
   int offset = Util::CharsLen(merged_key) -
                    Util::CharsLen(segments->conversion_segment(0).key());
   // ConverterInterface::ResizeSegment() calls Rewriter::Rewrite(), so
   // CalculatorRewriter::Rewrite() is recursively called with merged
   // conversion segment.
-  if (!converter->ResizeSegment(segments, 0, offset)) {
+  if (!parent_converter_->ResizeSegment(segments, request, 0, offset)) {
     LOG(ERROR) << "Failed to merge conversion segments";
     return false;
   }

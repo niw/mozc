@@ -35,8 +35,6 @@
 #include "base/logging.h"
 #include "base/version.h"
 #include "config/config_handler.h"
-#include "languages/global_language_spec.h"
-#include "languages/japanese/lang_dep_spec.h"
 #include "session/japanese_session_factory.h"
 #include "unix/ibus/main.h"
 #include "unix/ibus/mozc_engine.h"
@@ -47,10 +45,7 @@ DEFINE_bool(ibus, false, "The engine is started by ibus-daemon");
 namespace {
 
 IBusBus *g_bus = NULL;
-#ifdef OS_CHROMEOS
-// We use the ibus configuration daemon only on Chromium OS.
 IBusConfig *g_config = NULL;
-#endif
 
 #ifndef OS_CHROMEOS
 #ifndef NO_LOGGING
@@ -106,15 +101,12 @@ void InitIBusComponent(bool executed_by_ibus_daemon) {
                    "disconnected",
                    G_CALLBACK(mozc::ibus::MozcEngine::Disconnected),
                    NULL);
-
-#ifdef OS_CHROMEOS
   g_config = ibus_bus_get_config(g_bus);
   g_object_ref_sink(g_config);
   g_signal_connect(g_config,
                    "value-changed",
                    G_CALLBACK(mozc::ibus::MozcEngine::ConfigValueChanged),
                    NULL);
-#endif
 
   IBusComponent *component = GetIBusComponent();
   IBusFactory *factory = ibus_factory_new(ibus_bus_get_connection(g_bus));
@@ -142,8 +134,6 @@ void InitIBusComponent(bool executed_by_ibus_daemon) {
 
 int main(gint argc, gchar **argv) {
   InitGoogle(argv[0], &argc, &argv, true);
-  mozc::japanese::LangDepSpecJapanese spec;
-  mozc::language::GlobalLanguageSpec::SetLanguageDependentSpec(&spec);
 #ifdef OS_CHROMEOS
   // On Chrome OS, mozc does not store the config data to a local file.
   mozc::config::ConfigHandler::SetConfigFileName("memory://config.1.db");
@@ -152,9 +142,8 @@ int main(gint argc, gchar **argv) {
 #endif  // OS_CHROMEOS
   ibus_init();
   InitIBusComponent(FLAGS_ibus);
-#ifdef OS_CHROMEOS
   mozc::ibus::MozcEngine::InitConfig(g_config);
-#else
+#ifndef OS_CHROMEOS
 #ifndef NO_LOGGING
   EnableVerboseLog();
 #endif  // NO_LOGGING
@@ -162,11 +151,9 @@ int main(gint argc, gchar **argv) {
 #endif  // OS_CHROMEOS
   ibus_main();
 
-#ifdef OS_CHROMEOS
   if (g_config) {
     g_object_unref(g_config);
   }
-#endif
 
   return 0;
 }

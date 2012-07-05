@@ -32,6 +32,7 @@
     {
       'target_name': 'storage',
       'type': 'static_library',
+      'toolsets': ['target', 'host'],
       'sources': [
         'existence_filter.cc',
         'lru_storage.cc',
@@ -41,6 +42,14 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
+      ],
+      'conditions': [
+        ['target_platform=="NaCl" and _toolset=="target"', {
+          'sources!': [
+            'registry.cc',
+            'tiny_storage.cc',
+          ],
+        }],
       ],
     },
     {
@@ -61,6 +70,9 @@
         'test_size': 'small',
       },
     },
+    # For Android build, base.gyp:encryptor cannot be compiled for the host,
+    # while storage is depended from some build tools. So it is necessary
+    # to split the following rules from storage/storage_test.
     {
       'target_name': 'encrypted_string_storage',
       'type': 'static_library',

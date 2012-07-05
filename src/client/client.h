@@ -77,12 +77,18 @@ class ServerLauncher : public ServerLauncherInterface {
     restricted_ = restricted;
   }
 
+  // Sets the flag of error dialog suppression.
+  void set_suppress_error_dialog(bool suppress) {
+    suppress_error_dialog_ = suppress;
+  }
+
   ServerLauncher();
   virtual ~ServerLauncher();
 
  private:
   string server_program_;
   bool restricted_;
+  bool suppress_error_dialog_;
 };
 
 class Client : public ClientInterface {
@@ -125,6 +131,12 @@ class Client : public ClientInterface {
   bool NoOperation();
   bool PingServer() const;
 
+  // these methods are expected to be called from
+  // the converter process.
+  bool StartCloudSync();
+  bool ClearCloudSync();
+  bool GetCloudSyncStatus(commands::CloudSyncStatus *cloud_sync_status);
+  bool AddAuthCode(const commands::Input::AuthorizationInfo &auth_info);
 
   void Reset();
 
@@ -133,6 +145,7 @@ class Client : public ClientInterface {
   void set_timeout(int timeout);
   void set_restricted(bool restricted);
   void set_server_program(const string &server_program);
+  void set_suppress_error_dialog(bool suppress);
   void set_client_capability(const commands::Capability &capability);
 
   bool LaunchTool(const string &mode, const string &arg);

@@ -143,6 +143,7 @@
     {
       'target_name': 'genproto_session',
       'type': 'none',
+      'toolsets': ['host'],
       'sources': [
         'candidates.proto',
         'commands.proto',
@@ -153,6 +154,7 @@
       ],
       'dependencies': [
         '../config/config.gyp:genproto_config',
+        '../dictionary/dictionary_base.gyp:genproto_dictionary',
       ],
     },
     {
@@ -167,10 +169,11 @@
       'dependencies': [
         '../config/config.gyp:config_protocol',
         '../protobuf/protobuf.gyp:protobuf',
-        'genproto_session',
+        '../dictionary/dictionary_base.gyp:dictionary_protocol',
+        'genproto_session#host',
       ],
       'export_dependent_settings': [
-        'genproto_session',
+        'genproto_session#host',
       ],
     },
   ],

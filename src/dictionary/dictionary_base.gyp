@@ -39,44 +39,66 @@
     {
       'target_name': 'text_dictionary_loader',
       'type': 'static_library',
+      'toolsets': ['target', 'host'],
       'sources': [
         'dictionary_token.h',
         'text_dictionary_loader.cc',
       ],
       'dependencies': [
         '../base/base.gyp:base',
-        'gen_pos_matcher',
+        'pos_matcher',
+      ],
+    },
+    {
+      'target_name': 'pos_util',
+      'type': 'none',
+      'toolsets': ['host'],
+      'sources': [
+        '../build_tools/code_generator_util.py',
+        'pos_util.py',
       ],
     },
     {
       'target_name': 'gen_pos_matcher',
       'type': 'none',
+      'toolsets': ['host'],
+      'dependencies': [
+        'pos_util',
+      ],
       'actions': [
         {
           'action_name': 'gen_pos_matcher',
           'variables': {
-            'input_files%': [
-              '../data/dictionary/id.def',
-              '../data/rules/special_pos.def',
-              '../data/rules/pos_matcher_rule.def',
-            ],
+            'pos_matcher_rule': '../data/rules/pos_matcher_rule.def',
+            'pos_matcher_header': '<(gen_out_dir)/pos_matcher.h',
           },
           'inputs': [
             'gen_pos_matcher_code.py',
-            '<@(input_files)',
+            '<(pos_matcher_rule)'
           ],
           'outputs': [
-            '<(gen_out_dir)/pos_matcher.h',
+            '<(pos_matcher_header)',
           ],
           'action': [
-            'python', '../build_tools/redirect.py',
-            '<(gen_out_dir)/pos_matcher.h',
-            'gen_pos_matcher_code.py',
-            '<@(input_files)',
+            'python', 'gen_pos_matcher_code.py',
+            '--pos_matcher_rule_file=<(pos_matcher_rule)',
+            '--output_pos_matcher_h=<(pos_matcher_header)',
           ],
-          'message': 'Generating <(gen_out_dir)/pos_matcher.h.',
+          'message': ('Generating <(pos_matcher_header)'),
         },
       ],
+    },
+    {
+      'target_name': 'pos_matcher',
+      'type': 'none',
+      'toolsets': ['target', 'host'],
+      'hard_dependency': 1,
+      'dependencies': [
+        'gen_pos_matcher#host',
+      ],
+      'export_dependent_settings': [
+        'gen_pos_matcher#host',
+      ]
     },
     {
       'target_name': 'install_dictionary_test_data',
@@ -98,6 +120,164 @@
         ],
       },
       'includes': [ '../gyp/install_testdata.gypi' ],
+    },
+    {
+      'target_name': 'user_pos',
+      'type': 'static_library',
+      'toolsets': ['target', 'host'],
+      'sources' : [
+        'user_pos.cc',
+      ],
+      'dependencies': [
+        '../base/base.gyp:base',
+      ],
+    },
+    {
+      'target_name': 'gen_user_pos_data',
+      'type': 'none',
+      'toolsets': ['host'],
+      'dependencies': [
+        'pos_util',
+      ],
+      'actions': [
+        {
+          'action_name': 'gen_user_pos_data',
+          'variables': {
+            'id_def': '../data/dictionary/id.def',
+            'special_pos': '../data/rules/special_pos.def',
+            'user_pos': '../data/rules/user_pos.def',
+            'cforms': '../data/rules/cforms.def',
+            'user_pos_data': '<(gen_out_dir)/user_pos_data.h',
+          },
+          'inputs': [
+            'gen_user_pos_data.py',
+            '<(id_def)',
+            '<(special_pos)',
+            '<(user_pos)',
+            '<(cforms)',
+          ],
+          'outputs': [
+            '<(user_pos_data)',
+          ],
+          'action': [
+            'python', 'gen_user_pos_data.py',
+            '--id_file=<(id_def)',
+            '--special_pos_file=<(special_pos)',
+            '--user_pos_file=<(user_pos)',
+            '--cforms_file=<(cforms)',
+            '--output=<(user_pos_data)',
+          ],
+          'message': 'Generating <(user_pos_data).',
+        },
+      ],
+    },
+    {
+      'target_name': 'user_pos_data',
+      'type': 'none',
+      'toolsets': ['target', 'host'],
+      'hard_dependency': 1,
+      'dependencies': [
+        '../base/base.gyp:base',
+        'gen_user_pos_data#host',
+      ],
+      'export_dependent_settings': [
+        'gen_user_pos_data#host',
+      ],
+    },
+    {
+      'target_name': 'genproto_dictionary',
+      'type': 'none',
+      'toolsets': ['host'],
+      'sources': [
+        'user_dictionary_storage.proto',
+      ],
+      'includes': [
+        '../protobuf/genproto.gypi',
+      ],
+    },
+    {
+      'target_name': 'dictionary_protocol',
+      'type': 'static_library',
+      'hard_dependency': 1,
+      'sources': [
+        '<(proto_out_dir)/<(relative_dir)/user_dictionary_storage.pb.cc',
+      ],
+      'dependencies': [
+        '../protobuf/protobuf.gyp:protobuf',
+        'genproto_dictionary#host',
+      ],
+      'export_dependent_settings': [
+        'genproto_dictionary#host',
+      ],
+    },
+    {
+      'target_name': 'gen_pos_map',
+      'type': 'none',
+      'toolsets': ['host'],
+      'actions': [
+        {
+          'action_name': 'gen_pos_map',
+          'variables': {
+            'input_files': [
+              '../data/rules/user_pos.def',
+              '../data/rules/third_party_pos_map.def',
+            ],
+          },
+          'inputs': [
+            'gen_pos_map.py',
+            '<@(input_files)',
+          ],
+          'outputs': [
+            '<(gen_out_dir)/pos_map.h',
+          ],
+          'action': [
+            'python', '../build_tools/redirect.py',
+            '<(gen_out_dir)/pos_map.h',
+            'gen_pos_map.py',
+            '<@(input_files)',
+          ],
+        },
+      ],
+    },
+    {
+      'target_name': 'suppression_dictionary',
+      'type': 'static_library',
+      'sources': [
+        'suppression_dictionary.cc',
+      ],
+      'dependencies': [
+        '../base/base.gyp:base',
+      ],
+    },
+    {
+      'target_name': 'user_dictionary',
+      'type': 'static_library',
+      'sources': [
+        '<(gen_out_dir)/pos_map.h',
+        'user_dictionary.cc',
+        'user_dictionary_importer.cc',
+        'user_dictionary_storage.cc',
+        'user_dictionary_util.cc',
+      ],
+      'dependencies': [
+        '../base/base.gyp:base',
+        '../base/base.gyp:config_file_stream',
+        '../config/config.gyp:config_handler',
+        '../config/config.gyp:config_protocol',
+        '../usage_stats/usage_stats.gyp:usage_stats',
+        'dictionary_protocol',
+        'gen_pos_map#host',
+        'gen_pos_matcher#host',
+        'suppression_dictionary',
+      ],
+      'conditions': [
+        ['target_platform=="NaCl" and _toolset=="target"', {
+          'sources!': [
+            'user_dictionary.cc',
+            'user_dictionary_storage.cc',
+          ],
+        }],
+      ],
     },
   ],
 }

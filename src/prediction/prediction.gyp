@@ -51,19 +51,29 @@
         '../converter/converter_base.gyp:segments',
         '../dictionary/dictionary.gyp:dictionary',
         '../dictionary/dictionary.gyp:suffix_dictionary',
-        '../dictionary/dictionary.gyp:suppression_dictionary',
+        '../dictionary/dictionary_base.gyp:suppression_dictionary',
         '../rewriter/rewriter.gyp:rewriter',
+        '../session/session_base.gyp:request_handler',
         '../session/session_base.gyp:session_protocol',
         '../storage/storage.gyp:encrypted_string_storage',
         '../storage/storage.gyp:storage',
         '../usage_stats/usage_stats.gyp:usage_stats',
-        'gen_suggestion_filter_data',
+        'gen_suggestion_filter_data#host',
+        'gen_zero_query_number_data#host',
         'prediction_protocol',
+      ],
+      'conditions': [
+        ['target_platform=="NaCl" and _toolset=="target"', {
+          'dependencies!': [
+            '../storage/storage.gyp:encrypted_string_storage',
+          ],
+        }],
       ],
     },
     {
       'target_name': 'gen_suggestion_filter_data',
       'type': 'none',
+      'toolsets': ['host'],
       'actions': [
         {
           'action_name': 'gen_suggestion_filter_data',
@@ -89,8 +99,38 @@
       ],
     },
     {
+      'target_name': 'gen_zero_query_number_data',
+      'type': 'none',
+      'toolsets': ['host'],
+      'actions': [
+        {
+          'action_name': 'gen_zero_query_number_data',
+          'variables': {
+            'input_files': [
+              '../data/zero_query/zero_query_number.def',
+            ],
+          },
+          'inputs': [
+            'gen_zero_query_number_data.py',
+            '<@(input_files)',
+          ],
+          'outputs': [
+            '<(gen_out_dir)/zero_query_number_data.h',
+          ],
+          'action': [
+            'python', '../build_tools/redirect.py',
+            '<(gen_out_dir)/zero_query_number_data.h',
+            'gen_zero_query_number_data.py',
+            '<@(input_files)',
+          ],
+          'message': 'Generating <(gen_out_dir)/zero_query_number_data.h',
+        },
+      ],
+    },
+    {
       'target_name': 'gen_suggestion_filter_main',
       'type': 'executable',
+      'toolsets': ['host'],
       'sources': [
         'gen_suggestion_filter_main.cc',
       ],
@@ -101,6 +141,7 @@
     {
       'target_name': 'install_gen_suggestion_filter_main',
       'type': 'none',
+      'toolsets': ['host'],
       'variables': {
         'bin_name': 'gen_suggestion_filter_main'
       },
@@ -111,6 +152,7 @@
     {
       'target_name': 'genproto_prediction',
       'type': 'none',
+      'toolsets': ['host'],
       'sources': [
         'user_history_predictor.proto',
       ],
@@ -127,38 +169,10 @@
       ],
       'dependencies': [
         '../protobuf/protobuf.gyp:protobuf',
-        'genproto_prediction',
+        'genproto_prediction#host',
       ],
       'export_dependent_settings': [
-        'genproto_prediction',
-      ],
-    },
-    {
-      'target_name': 'prediction_test',
-      'type': 'executable',
-      'sources': [
-        'dictionary_predictor_test.cc',
-        'suggestion_filter_test.cc',
-        'user_history_predictor_test.cc',
-        'predictor_test.cc',
-      ],
-      'dependencies': [
-        '../dictionary/dictionary.gyp:dictionary_mock',
-        '../dictionary/dictionary_base.gyp:install_dictionary_test_data',
-        '../config/config.gyp:config_handler',
-        '../testing/testing.gyp:gtest_main',
-        'prediction',
-      ],
-      'variables': {
-        'test_size': 'small',
-      },
-    },
-    # Test cases meta target: this target is referred from gyp/tests.gyp
-    {
-      'target_name': 'prediction_all_test',
-      'type': 'none',
-      'dependencies': [
-        'prediction_test',
+        'genproto_prediction#host',
       ],
     },
   ],

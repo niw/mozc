@@ -30,9 +30,11 @@
 #include "base/util.h"
 #include "config/config_handler.h"
 #include "config/config.pb.h"
+#include "converter/conversion_request.h"
 #include "converter/segments.h"
 #include "rewriter/single_kanji_rewriter.h"
 #include "session/commands.pb.h"
+#include "session/request_test_util.h"
 #include "testing/base/public/gunit.h"
 
 DECLARE_string(test_tmpdir);
@@ -52,6 +54,9 @@ class SingleKanjiRewriterTest : public testing::Test {
 TEST_F(SingleKanjiRewriterTest, CapabilityTest) {
   SingleKanjiRewriter rewriter;
 
+  commands::Request request;
+  request.set_mixed_conversion(false);
+  commands::ScopedRequestForUnittest scoped_request(request);
   EXPECT_EQ(RewriterInterface::CONVERSION, rewriter.capability());
 }
 
@@ -71,11 +76,27 @@ TEST_F(SingleKanjiRewriterTest, SetKeyTest) {
   candidate->content_value = "strange value";
 
   EXPECT_EQ(1, segment->candidates_size());
-  rewriter.Rewrite(&segments);
+  rewriter.Rewrite(ConversionRequest(), &segments);
   EXPECT_GT(segment->candidates_size(), 1);
   for (size_t i = 1; i < segment->candidates_size(); ++i) {
     EXPECT_EQ(kKey, segment->candidate(i).key);
   }
 }
 
+TEST_F(SingleKanjiRewriterTest, MobileEnvironmentTest) {
+  commands::Request request;
+  SingleKanjiRewriter rewriter;
+
+  {
+    request.set_mixed_conversion(true);
+    commands::ScopedRequestForUnittest scoped_request(request);
+    EXPECT_EQ(RewriterInterface::ALL, rewriter.capability());
+  }
+
+  {
+    request.set_mixed_conversion(false);
+    commands::ScopedRequestForUnittest scoped_request(request);
+    EXPECT_EQ(RewriterInterface::CONVERSION, rewriter.capability());
+  }
+}
 }  // namespace mozc

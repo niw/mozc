@@ -52,11 +52,12 @@
         'base/locale_util.cc',
         'base/setup_util.cc',
         'base/singleton_window_helper.cc',
+        'base/table_util.cc',
         'base/win_util.cc',
         'base/window_title_modifier.cc',
       ],
       'dependencies': [
-        '../dictionary/dictionary.gyp:user_dictionary',
+        '../dictionary/dictionary_base.gyp:user_dictionary',
         '../ipc/ipc.gyp:ipc',
         '../ipc/ipc.gyp:window_info_protocol',
         '../session/session_base.gyp:session_protocol',
@@ -366,8 +367,11 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
+        '../client/client.gyp:client',
+        '../config/config.gyp:stats_config_util',
         '../handwriting/handwriting.gyp:handwriting_manager',
         '../handwriting/handwriting.gyp:zinnia_handwriting',
+        '../session/session_base.gyp:session_protocol',
         'gen_character_pad_files',
         'gen_character_pad_cp932_data',
         'gen_character_pad_data',
@@ -379,9 +383,8 @@
       'conditions': [
         ['enable_cloud_handwriting==1', {
           'dependencies': [
-            '../client/client.gyp:client',
             '../handwriting/handwriting.gyp:cloud_handwriting',
-            '../languages/japanese/japanese.gyp:language_dependent_spec_japanese',
+            '../session/session_base.gyp:session_protocol',
           ],
         }],
         ['use_libzinnia==1 and OS=="linux"', {
@@ -492,7 +495,6 @@
         '../config/config.gyp:config_handler',
         '../config/config.gyp:config_protocol',
         '../config/config.gyp:stats_config_util',
-        '../languages/japanese/japanese.gyp:language_dependent_spec_japanese',
         '../session/session_base.gyp:key_parser',
         '../session/session_base.gyp:keymap',
         '../session/session_base.gyp:session_protocol',
@@ -519,9 +521,9 @@
             '../sync/sync.gyp:oauth2',
           ],
         }],
-        ['enable_cloud_handwriting==1 or enable_webservice_infolist==1', {
+        ['enable_webservice_infolist==1', {
           'dependencies': [
-            '<(DEPTH)/third_party/jsoncpp/jsoncpp.gyp:jsoncpp',
+              '../net/net.gyp:jsoncpp',
           ],
         }],
       ],
@@ -635,9 +637,10 @@
         '../client/client.gyp:client',
         '../config/config.gyp:config_handler',
         '../config/config.gyp:config_protocol',
-        '../dictionary/dictionary.gyp:dictionary_protocol',
-        '../dictionary/dictionary.gyp:user_dictionary',
-        '../languages/japanese/japanese.gyp:language_dependent_spec_japanese',
+        '../data_manager/data_manager.gyp:user_dictionary_manager',
+        '../data_manager/data_manager.gyp:user_pos_manager',
+        '../dictionary/dictionary_base.gyp:dictionary_protocol',
+        '../dictionary/dictionary_base.gyp:user_dictionary',
         '../session/session_base.gyp:session_protocol',
         'gen_config_dialog_files',
         'gen_dictionary_tool_files',
@@ -690,9 +693,10 @@
       'dependencies': [
         '../base/base.gyp:base',
         '../client/client.gyp:client',
-        '../dictionary/dictionary.gyp:dictionary_protocol',
-        '../dictionary/dictionary.gyp:user_dictionary',
-        '../languages/japanese/japanese.gyp:language_dependent_spec_japanese',
+        '../data_manager/data_manager.gyp:user_dictionary_manager',
+        '../dictionary/dictionary_base.gyp:dictionary_protocol',
+        '../dictionary/dictionary_base.gyp:pos_matcher',
+        '../dictionary/dictionary_base.gyp:user_dictionary',
         '../session/session_base.gyp:session_protocol',
         'gen_word_register_dialog_files',
       ],
@@ -851,7 +855,6 @@
         '../client/client.gyp:client',
         '../config/config.gyp:config_protocol',
         '../ipc/ipc.gyp:ipc',
-        '../languages/japanese/japanese.gyp:language_dependent_spec_japanese',
         '../session/session_base.gyp:session_protocol',
         'gen_set_default_dialog_files',
       ],
@@ -944,6 +947,19 @@
       ],
     },
     {
+      'target_name': 'prelauncher_lib',
+      'type': 'static_library',
+      'sources': [
+        'tool/prelauncher_libmain.cc',
+      ],
+      'dependencies': [
+        '../base/base.gyp:base',
+        '../client/client.gyp:client',
+        '../renderer/renderer.gyp:renderer_client',
+        '../session/session_base.gyp:session_protocol',
+      ],
+    },
+    {
       'target_name': 'mozc_tool_lib',
       'sources': [
         '<(gen_out_dir)/tool/qrc_mozc_tool.cc',
@@ -975,22 +991,19 @@
           'xcode_settings': {
             'INSTALL_PATH': '@executable_path/../Frameworks',
           },
+          'dependencies+': [
+            'prelauncher_lib',
+          ],
           'conditions': [
-            ['use_qt=="YES" and branding=="GoogleJapaneseInput"', {
+            ['use_qt=="YES"', {
               'postbuilds': [
                 {
-                  'postbuild_name': 'make Resources directory',
+                  'postbuild_name': 'Change the reference to Qt frameworks.',
                   'action': [
-                    'mkdir', '-p',
-                    '${BUILT_PRODUCTS_DIR}/<(branding)Tool_lib.framework/Contents/Resources',
-                  ],
-                },
-                {
-                  'postbuild_name': 'copy qt_menu.nib to Resources directory',
-                  'action': [
-                    'cp', '-rf',
-                     '<(qt_dir)/src/gui/mac/qt_menu.nib',
-                     '${BUILT_PRODUCTS_DIR}/<(branding)Tool_lib.framework/Contents/Resources/qt_menu.nib',
+                    'python', '../build_tools/change_qt_reference_mac.py',
+                    '--qtdir', '<(qt_dir)',
+                    '--target',
+                    '${BUILT_PRODUCTS_DIR}/<(branding)Tool_lib.framework/Versions/A/<(branding)Tool_lib',
                   ],
                 },
               ],
@@ -1050,6 +1063,25 @@
               # included outside from the condition.
               'includes': [
                 '../gyp/postbuilds_mac.gypi',
+              ],
+              'postbuilds': [
+                {
+                  'postbuild_name': 'Change the reference to Qt frameworks.',
+                  'action': [
+                    'python', '../build_tools/change_qt_reference_mac.py',
+                    '--qtdir', '<(qt_dir)',
+                    '--target',
+                    '${BUILT_PRODUCTS_DIR}/<(product_name).app/Contents/MacOS/<(product_name)',
+                  ],
+                },
+                {
+                  'postbuild_name': 'Copy Qt frameworks to the frameworks directory.',
+                  'action': [
+                    'python', '../build_tools/copy_qt_frameworks_mac.py',
+                    '--qtdir', '<(qt_dir)',
+                    '--target', '${BUILT_PRODUCTS_DIR}/<(product_name).app/Contents/Frameworks/',
+                  ],
+                },
               ],
             }, {
               # So we include the same file explicitly here.
@@ -1251,6 +1283,23 @@
             '../data/images/mac/product_icon.icns',
             '../data/mac/CharacterPalette/English.lproj/InfoPlist.strings',
             '../data/mac/CharacterPalette/Japanese.lproj/InfoPlist.strings',
+          ],
+          'includes': [
+            'mac_gui.gypi',
+          ],
+        },
+        {
+          'target_name': 'prelauncher_mac',
+          'type': 'executable',
+          'mac_bundle': 1,
+          'variables': {
+            'product_name': '<(branding)Prelauncher',
+          },
+          'xcode_settings': {
+            'INFOPLIST_FILE': '<(gen_out_dir)/mozc_tool_info',
+          },
+          'mac_bundle_resources': [
+            '../data/images/mac/product_icon.icns',
           ],
           'includes': [
             'mac_gui.gypi',

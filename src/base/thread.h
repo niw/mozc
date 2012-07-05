@@ -37,6 +37,8 @@
 #include <pthread.h>
 #endif
 
+#include "base/compiler_specific.h"
+
 
 // Definition of TLS (Thread Local Storage) keyword.
 #ifndef TLS_KEYWORD
@@ -57,17 +59,16 @@
 #define HAVE_TLS 1
 #endif // OS_WINDOWS && _MSC_VER
 
-// Andorid NDK doesn't support TLS.
+// Andorid NDK and NaCl don't support TLS.
 #if defined(OS_LINUX) && !defined(OS_ANDROID) && \
-    (defined(__GNUC__) || defined(__clang__))
+    !defined(__native_client__) && (defined(__GNUC__) || defined(__clang__))
 // GCC and Clang support TLS.
 #define TLS_KEYWORD __thread
 #define HAVE_TLS 1
 #endif  // OS_LINUX && !OS_ANDROID && (__GNUC__ || __clang__)
 
 
-#if defined(OS_MACOSX) && \
-    defined(__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__ >= 405)
+#if defined(OS_MACOSX) && MOZC_GCC_VERSION_GE(4, 5)
 // GCC 4.5 and later can *emulate* TLS on Mac even though it is
 // expensive operation.
 #define TLS_KEYWORD __thread

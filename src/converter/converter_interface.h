@@ -32,6 +32,7 @@
 
 #include <string>
 #include "base/base.h"
+#include "converter/conversion_request.h"
 #include "converter/segments.h"
 
 namespace mozc {
@@ -41,22 +42,11 @@ namespace composer {
   class Composer;
 }  // namespace composer
 
-// Contains utilizable information for conversion, including composition,
-// preceding text, etc.
-struct ConversionRequest {
-  explicit ConversionRequest(const composer::Composer *c) : composer(c) {}
-
-  // Required field
-  // Input composer to generate a key for conversion.
-  const composer::Composer *composer;
-
-  // Optional field
-  // If nonempty, utilizes this preceding text for conversion.
-  string preceding_text;
-};
-
 class ConverterInterface {
  public:
+  // Allow deletion through the interface.
+  virtual ~ConverterInterface() {}
+
   // Starts conversion for given request.
   virtual bool StartConversionForRequest(const ConversionRequest &request,
                                          Segments *segments) const = 0;
@@ -65,10 +55,6 @@ class ConverterInterface {
   // key is a request writtein in Hiragana sequence
   virtual bool StartConversion(Segments *segments,
                                const string &key) const = 0;
-
-  // Start conversion with composer.
-  virtual bool StartConversionWithComposer(
-      Segments *segments, const composer::Composer *composer) const = 0;
 
   // Start reverse conversion with key.
   virtual bool StartReverseConversion(Segments *segments,
@@ -82,33 +68,29 @@ class ConverterInterface {
   virtual bool StartPrediction(Segments *segments,
                                const string &key) const = 0;
 
-  // Start prediction with composer.
-  virtual bool StartPredictionWithComposer(
-      Segments *segments, const composer::Composer *composer) const = 0;
+  // Starts suggestion for given request.
+  virtual bool StartSuggestionForRequest(const ConversionRequest &request,
+                                         Segments *segments) const = 0;
 
   // Start suggestion with key (request_type = SUGGESTION)
   virtual bool StartSuggestion(Segments *segments,
                                const string &key) const = 0;
 
-  // Start suggestion with composer.
-  virtual bool StartSuggestionWithComposer(
-      Segments *segments, const composer::Composer *composer) const = 0;
+  // Starts partial prediction for given request.
+  virtual bool StartPartialPredictionForRequest(
+      const ConversionRequest &request, Segments *segments) const = 0;
 
   // Start prediction with key (request_type = PARTIAL_PREDICTION)
   virtual bool StartPartialPrediction(Segments *segments,
                                       const string &key) const = 0;
 
-  // Start prediction with composer (request_type = PARTIAL_PREDICTION)
-  virtual bool StartPartialPredictionWithComposer(
-      Segments *segments, const composer::Composer *composer) const = 0;
+  // Starts partial suggestion for given request.
+  virtual bool StartPartialSuggestionForRequest(
+      const ConversionRequest &request, Segments *segments) const = 0;
 
   // Start suggestion with key (request_type = PARTIAL_SUGGESTION)
   virtual bool StartPartialSuggestion(Segments *segments,
                                       const string &key) const = 0;
-
-  // Start suggestion with composer (request_type = PARTIAL_SUGGESTION)
-  virtual bool StartPartialSuggestionWithComposer(
-      Segments *segments, const composer::Composer *composer) const = 0;
 
   // Finish conversion.
   // Segments are cleared. Context is not clreared
@@ -175,6 +157,7 @@ class ConverterInterface {
   // Resize segment_index-th segment by offset_length.
   // offset_lenth can be negative.
   virtual bool ResizeSegment(Segments *segments,
+                             const ConversionRequest &request,
                              size_t segment_index,
                              int offset_length) const = 0;
 
@@ -182,6 +165,7 @@ class ConverterInterface {
   // segments with the new size in new_size_array.
   // size of new_size_array is specified in 'array_size'
   virtual bool ResizeSegment(Segments *segments,
+                             const ConversionRequest &request,
                              size_t start_segment_index,
                              size_t segments_size,
                              const uint8 *new_size_array,
@@ -190,7 +174,6 @@ class ConverterInterface {
   virtual UserDataManagerInterface *GetUserDataManager() = 0;
 
  protected:
-  virtual ~ConverterInterface() {}
   ConverterInterface() {}
 
  private:

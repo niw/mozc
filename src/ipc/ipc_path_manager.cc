@@ -31,7 +31,6 @@
 
 #include <errno.h>
 #include <stdlib.h>
-#include <fstream>
 #include <map>
 
 #ifdef OS_WINDOWS
@@ -61,7 +60,6 @@
 #include "base/version.h"
 #include "ipc/ipc.h"
 #include "ipc/ipc.pb.h"
-#include "languages/global_language_spec.h"
 
 namespace mozc {
 namespace {
@@ -79,14 +77,13 @@ string GetIPCKeyFileName(const string &name) {
 #endif
 
   basename.append(name);
-#ifdef OS_LINUX
-  // TODO(nona): Support multi platform
-  const language::LanguageDependentSpecInterface *lang_spec =
-      language::GlobalLanguageSpec::GetLanguageDependentSpec();
-
-  basename.append("_");
-  basename.append(lang_spec->GetLanguageName());
-#endif
+#ifdef MOZC_LANGUAGE_SUFFIX_FOR_LINUX
+  // In order to extend language support of Mozc on Linux, we use additional
+  // suffix except for Japanese so that multiple converter processes can
+  // coexist. Note that Mozc on ChromeOS does not use IPC so this kind of
+  // special treatment is not required.
+  basename.append(MOZC_LANGUAGE_SUFFIX_FOR_LINUX);
+#endif  // MOZC_LANGUAGE_SUFFIX_FOR_LINUX
   basename.append(".ipc");   // this is the extension part.
 
   return Util::JoinPath(Util::GetUserProfileDirectory(), basename);
@@ -253,14 +250,27 @@ bool IPCPathManager::SavePathName() {
   return true;
 }
 
-bool IPCPathManager::GetPathName(string *ipc_name) {
+bool IPCPathManager::LoadPathName() {
+  // On Windows, ShouldReload() always returns false.
+  // On other platform, it returns true when timestamp of the file is different
+  // from that of previous one.
+  if (ShouldReload() || ipc_path_info_->key().empty()) {
+    if (!LoadPathNameInternal()) {
+      LOG(ERROR) << "LoadPathName failed";
+      return false;
+    }
+  }
+  return true;
+}
+
+bool IPCPathManager::GetPathName(string *ipc_name) const {
   if (ipc_name == NULL) {
     LOG(ERROR) << "ipc_name is NULL";
     return false;
   }
 
-  if ((ShouldReload() || ipc_path_info_->key().empty()) && !LoadPathName()) {
-    LOG(ERROR) << "GetPathName failed";
+  if (ipc_path_info_->key().empty()) {
+    LOG(ERROR) << "ipc_path_info_ is empty";
     return false;
   }
 
@@ -434,7 +444,7 @@ time_t IPCPathManager::GetIPCFileTimeStamp() const {
 #endif  // OS_WINDOWS
 }
 
-bool IPCPathManager::LoadPathName() {
+bool IPCPathManager::LoadPathNameInternal() {
   scoped_lock l(mutex_.get());
 
   // try the new file name first.

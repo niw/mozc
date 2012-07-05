@@ -39,6 +39,10 @@
     {
       'target_name': 'gen_rewriter_files',
       'type': 'none',
+      'dependencies': [
+        '../dictionary/dictionary_base.gyp:pos_util',
+      ],
+      'toolsets': ['host'],
       'actions': [
         {
           'action_name': 'gen_collocation_data',
@@ -59,28 +63,62 @@
             'python', '../build_tools/redirect.py',
             '<(gen_out_dir)/embedded_collocation_data.h',
             '<(mozc_build_tools_dir)/gen_collocation_data_main',
-            '<@(input_files)',
+            '--collocation_data=<@(input_files)',
           ],
         },
         {
-          'action_name': 'gen_single_kanji_rewriter_data',
+          'action_name': 'gen_collocation_suppression_data',
           'variables': {
-            'input_files': [
-              '../data/single_kanji/single_kanji.tsv',
+            'input_files%': [
+              '../data/dictionary/collocation_suppression.txt',
             ],
           },
           'inputs': [
             '<@(input_files)',
           ],
+          'conditions': [
+          ],
           'outputs': [
-            '<(gen_out_dir)/single_kanji_rewriter_data.h',
+            '<(gen_out_dir)/embedded_collocation_suppression_data.h',
           ],
           'action': [
-            '<(mozc_build_tools_dir)/gen_single_kanji_rewriter_dictionary_main',
-            '--logtostderr',
-            '--input=<(input_files)',
-            '--output=<(gen_out_dir)/single_kanji_rewriter_data.h',
+            'python', '../build_tools/redirect.py',
+            '<(gen_out_dir)/embedded_collocation_suppression_data.h',
+            '<(mozc_build_tools_dir)/gen_collocation_suppression_data_main',
+            '--suppression_data=<@(input_files)',
+          ],
+        },
+        {
+          'action_name': 'gen_single_kanji_rewriter_data',
+          'variables': {
+            'input_file': '../data/single_kanji/single_kanji.tsv',
+            'id_def': '../data/dictionary/id.def',
+            'special_pos': '../data/rules/special_pos.def',
+            'user_pos': '../data/rules/user_pos.def',
+            'cforms': '../data/rules/cforms.def',
+            'output_file': '<(gen_out_dir)/single_kanji_rewriter_data.h',
+          },
+          'inputs': [
+            'embedded_dictionary_compiler.py',
+            'gen_single_kanji_rewriter_data.py',
+            '<(input_file)',
+            '<(id_def)',
+            '<(special_pos)',
+            '<(user_pos)',
+            '<(cforms)',
+          ],
+          'outputs': [
+            '<(output_file)'
+          ],
+          'action': [
+            'python', 'gen_single_kanji_rewriter_data.py',
+            '--input=<(input_file)',
             '--min_prob=0.0',
+            '--id_file=<(id_def)',
+            '--special_pos_file=<(special_pos)',
+            '--user_pos_file=<(user_pos)',
+            '--cforms_file=<(cforms)',
+            '--output=<(output_file)',
           ],
         },
         {
@@ -108,49 +146,47 @@
         {
           'action_name': 'gen_emoticon_rewriter_data',
           'variables': {
-            'input_files': [
-              '../data/emoticon/emoticon.tsv',
-            ],
+            'input_file': '../data/emoticon/emoticon.tsv',
+            'output_file': '<(gen_out_dir)/emoticon_rewriter_data.h',
           },
           'inputs': [
-            '<@(input_files)',
+            'embedded_dictionary_compiler.py',
+            'gen_emoticon_rewriter_data.py',
+            '<(input_file)',
           ],
           'outputs': [
-            '<(gen_out_dir)/emoticon_rewriter_data.h',
+            '<(output_file)'
           ],
           'action': [
-            '<(mozc_build_tools_dir)/gen_emoticon_rewriter_dictionary_main',
-            '--input=<@(input_files)',
-            '--logtostderr',
-            '--output=<(gen_out_dir)/emoticon_rewriter_data.h',
+            'python', 'gen_emoticon_rewriter_data.py',
+            '--input=<(input_file)',
+            '--output=<(output_file)',
           ],
         },
         {
-          'action_name': 'gen_user_segment_history_rewriter_rule',
+          'action_name': 'gen_reading_correction_data',
           'variables': {
-            'input_files': [
-              '../data/dictionary/id.def',
-              '../data/rules/special_pos.def',
-              '../data/rules/user_segment_history_pos_group.def',
+            'input_files%': [
+              '../data/dictionary/reading_correction.tsv',
             ],
           },
           'inputs': [
-            '../dictionary/gen_pos_rewrite_rule.py',
             '<@(input_files)',
+          ],
+          'conditions': [
           ],
           'outputs': [
-            '<(gen_out_dir)/user_segment_history_rewriter_rule.h',
+            '<(gen_out_dir)/reading_correction_data.h',
           ],
           'action': [
-            'python', '../build_tools/redirect.py',
-            '<(gen_out_dir)/user_segment_history_rewriter_rule.h',
-            '../dictionary/gen_pos_rewrite_rule.py',
-            '<@(input_files)',
+            'python', './gen_reading_correction_data.py',
+            '--output=<(gen_out_dir)/reading_correction_data.h',
+            '--input=<@(input_files)',
           ],
         },
       ],
       'conditions': [
-        ['OS=="mac" or OS=="win" or chromeos==1', {
+        ['target_platform!="Android"', {
           'actions': [
             {
               'action_name': 'gen_usage_rewriter_data',
@@ -184,8 +220,10 @@
     {
       'target_name': 'gen_collocation_data_main',
       'type': 'executable',
+      'toolsets': ['host'],
       'sources': [
         'gen_collocation_data_main.cc',
+        'gen_existence_header.cc'
       ],
       'dependencies': [
         '../storage/storage.gyp:storage',
@@ -194,6 +232,7 @@
     {
       'target_name': 'install_gen_collocation_data_main',
       'type': 'none',
+      'toolsets': ['host'],
       'variables': {
         'bin_name': 'gen_collocation_data_main'
       },
@@ -202,22 +241,23 @@
       ]
     },
     {
-      'target_name': 'gen_single_kanji_rewriter_dictionary_main',
+      'target_name': 'gen_collocation_suppression_data_main',
       'type': 'executable',
+      'toolsets': ['host'],
       'sources': [
-        'embedded_dictionary.cc',
-        'gen_single_kanji_rewriter_dictionary_main.cc',
+        'gen_collocation_suppression_data_main.cc',
+        'gen_existence_header.cc'
       ],
-       'dependencies': [
-         '../base/base.gyp:base',
-         '../dictionary/dictionary.gyp:user_pos_data',
-       ],
+      'dependencies': [
+        '../storage/storage.gyp:storage',
+      ],
     },
     {
-      'target_name': 'install_gen_single_kanji_rewriter_dictionary_main',
+      'target_name': 'install_gen_collocation_suppression_data_main',
       'type': 'none',
+      'toolsets': ['host'],
       'variables': {
-        'bin_name': 'gen_single_kanji_rewriter_dictionary_main'
+        'bin_name': 'gen_collocation_suppression_data_main'
       },
       'includes' : [
         '../gyp/install_build_tool.gypi',
@@ -226,6 +266,7 @@
     {
       'target_name': 'gen_symbol_rewriter_dictionary_main',
       'type': 'executable',
+      'toolsets': ['host'],
       'sources': [
         'dictionary_generator.cc',
         'embedded_dictionary.cc',
@@ -233,23 +274,15 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
-        '../dictionary/dictionary.gyp:user_pos_data',
-      ],
-    },
-    {
-      'target_name': 'gen_emoticon_rewriter_dictionary_main',
-      'type': 'executable',
-      'sources': [
-        'embedded_dictionary.cc',
-        'gen_emoticon_rewriter_dictionary_main.cc',
-      ],
-      'dependencies': [
-        '../base/base.gyp:base',
+        '../data_manager/data_manager.gyp:user_pos_manager',
+        '../dictionary/dictionary_base.gyp:pos_matcher',
+        '../dictionary/dictionary_base.gyp:user_pos_data',
       ],
     },
     {
       'target_name': 'install_gen_symbol_rewriter_dictionary_main',
       'type': 'none',
+      'toolsets': ['host'],
       'variables': {
         'bin_name': 'gen_symbol_rewriter_dictionary_main'
       },
@@ -258,18 +291,9 @@
       ]
     },
     {
-      'target_name': 'install_gen_emoticon_rewriter_dictionary_main',
-      'type': 'none',
-      'variables': {
-        'bin_name': 'gen_emoticon_rewriter_dictionary_main'
-      },
-      'includes' : [
-        '../gyp/install_build_tool.gypi',
-      ]
-    },
-    {
       'target_name': 'gen_usage_rewriter_dictionary_main',
       'type': 'executable',
+      'toolsets': ['host'],
       'sources': [
         'gen_usage_rewriter_dictionary_main.cc',
       ],
@@ -280,6 +304,7 @@
     {
       'target_name': 'install_gen_usage_rewriter_dictionary_main',
       'type': 'none',
+      'toolsets': ['host'],
       'variables': {
         'bin_name': 'gen_usage_rewriter_dictionary_main'
       },

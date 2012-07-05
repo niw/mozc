@@ -27,16 +27,42 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#include <string>
+#include "rewriter/rewriter.h"
 
+#include <string>
+#include "base/singleton.h"
 #include "base/util.h"
+#include "config/config.pb.h"
+#include "config/config_handler.h"
+#include "converter/conversion_request.h"
+#include "converter/converter_mock.h"
 #include "converter/segments.h"
+#include "data_manager/user_pos_manager.h"
+#include "dictionary/pos_group.h"
+#include "dictionary/pos_matcher.h"
 #include "rewriter/rewriter_interface.h"
 #include "testing/base/public/gunit.h"
-#include "config/config_handler.h"
-#include "config/config.pb.h"
+
+#ifdef MOZC_USE_SEPARATE_CONNECTION_DATA
+#include "converter/connection_data_injected_environment.h"
+namespace {
+const ::testing::Environment *kConnectionDataInjectedEnvironment =
+    ::testing::AddGlobalTestEnvironment(
+        new ::mozc::ConnectionDataInjectedEnvironment());
+}  // namespace
+#endif  // MOZC_USE_SEPARATE_CONNECTION_DATA
+
+#ifdef MOZC_USE_SEPARATE_DICTIONARY
+#include "dictionary/dictionary_data_injected_environment.h"
+namespace {
+const ::testing::Environment *kDictionaryDataInjectedEnvironment =
+    ::testing::AddGlobalTestEnvironment(
+        new ::mozc::DictionaryDataInjectedEnvironment());
+}  // namespace
+#endif  // MOZC_USE_SEPARATE_DICTIONARY
 
 DECLARE_string(test_tmpdir);
+
 
 namespace mozc {
 namespace {
@@ -61,6 +87,11 @@ class RewriterTest : public testing::Test {
     config::Config config;
     config::ConfigHandler::GetDefaultConfig(&config);
     config::ConfigHandler::SetConfig(config);
+    converter_mock_.reset(new ConverterMock);
+    rewriter_.reset(
+        new RewriterImpl(converter_mock_.get(),
+                         UserPosManager::GetUserPosManager()->GetPOSMatcher(),
+                         UserPosManager::GetUserPosManager()->GetPosGroup()));
   }
 
   virtual void TearDown() {
@@ -70,12 +101,17 @@ class RewriterTest : public testing::Test {
   }
 
   const RewriterInterface *GetRewriter() const {
-    return RewriterFactory::GetRewriter();
+    return rewriter_.get();
   }
+
+  scoped_ptr<ConverterMock> converter_mock_;
+  scoped_ptr<RewriterImpl> rewriter_;
 };
 
+// Command rewriter should be disabled on Android build. b/5851240
 TEST_F(RewriterTest, CommandRewriterAvailability) {
   Segments segments;
+  const ConversionRequest request;
   Segment *seg = segments.push_back_segment();
 
   {
@@ -85,7 +121,7 @@ TEST_F(RewriterTest, CommandRewriterAvailability) {
     seg->set_key("\xE3\x81\x93\xE3\x81\xBE\xE3\x82\x93\xE3\x81\xA9");
     candidate->value = "\xE3\x82\xB3\xE3\x83\x9E"
                        "\xE3\x83\xB3\xE3\x83\x89";
-    EXPECT_TRUE(GetRewriter()->Rewrite(&segments));
+    EXPECT_TRUE(GetRewriter()->Rewrite(request, &segments));
     EXPECT_EQ(2, CommandCandidatesSize(*seg));
     seg->clear_candidates();
   }
@@ -98,7 +134,7 @@ TEST_F(RewriterTest, CommandRewriterAvailability) {
                  "\xE3\x81\x99\xE3\x81\xA8");
     candidate->value = "\xE3\x82\xB5\xE3\x82\xB8\xE3\x82\xA7"
                        "\xE3\x82\xB9\xE3\x83\x88";
-    EXPECT_TRUE(GetRewriter()->Rewrite(&segments));
+    EXPECT_TRUE(GetRewriter()->Rewrite(request, &segments));
     EXPECT_EQ(1, CommandCandidatesSize(*seg));
     seg->clear_candidates();
   }

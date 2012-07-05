@@ -31,6 +31,7 @@
 
 #include "composer/composer.h"
 #include "composer/table.h"
+#include "converter/conversion_request.h"
 #include "converter/converter_mock.h"
 #include "converter/segments.h"
 #include "dictionary/dictionary_interface.h"
@@ -112,17 +113,6 @@ TEST_F(ConverterMockTest, SetStartConversion) {
   EXPECT_EQ(expect.DebugString(), output.DebugString());
 }
 
-TEST_F(ConverterMockTest, SetStartConversionWithComposer) {
-  ConverterInterface *converter = ConverterFactory::GetConverter();
-
-  Segments output, expect;
-  SetSegments(&expect, "StartConversionWithComposer");
-  GetMock()->SetStartConversionWithComposer(&expect, true);
-  composer::Composer dummy_composer;
-  EXPECT_TRUE(converter->StartConversionWithComposer(&output, &dummy_composer));
-  EXPECT_EQ(expect.DebugString(), output.DebugString());
-}
-
 TEST_F(ConverterMockTest, SetStartReverseConvert) {
   ConverterInterface *converter = ConverterFactory::GetConverter();
 
@@ -143,17 +133,6 @@ TEST_F(ConverterMockTest, SetStartPrediction) {
   EXPECT_EQ(expect.DebugString(), output.DebugString());
 }
 
-TEST_F(ConverterMockTest, SetStartPredictionWithComposer) {
-  ConverterInterface *converter = ConverterFactory::GetConverter();
-
-  Segments output, expect;
-  SetSegments(&expect, "StartPredictionWithComposer");
-  GetMock()->SetStartPredictionWithComposer(&expect, true);
-  composer::Composer dummy_composer;
-  EXPECT_TRUE(converter->StartPredictionWithComposer(&output, &dummy_composer));
-  EXPECT_EQ(expect.DebugString(), output.DebugString());
-}
-
 TEST_F(ConverterMockTest, SetStartSuggestion) {
   ConverterInterface *converter = ConverterFactory::GetConverter();
 
@@ -161,17 +140,6 @@ TEST_F(ConverterMockTest, SetStartSuggestion) {
   SetSegments(&expect, "StartSuggestion");
   GetMock()->SetStartSuggestion(&expect, true);
   EXPECT_TRUE(converter->StartSuggestion(&output, "dummy"));
-  EXPECT_EQ(expect.DebugString(), output.DebugString());
-}
-
-TEST_F(ConverterMockTest, SetStartSuggestionWithComposer) {
-  ConverterInterface *converter = ConverterFactory::GetConverter();
-
-  Segments output, expect;
-  SetSegments(&expect, "StartSuggestionWithComposer");
-  GetMock()->SetStartSuggestionWithComposer(&expect, true);
-  composer::Composer dummy_composer;
-  EXPECT_TRUE(converter->StartSuggestionWithComposer(&output, &dummy_composer));
   EXPECT_EQ(expect.DebugString(), output.DebugString());
 }
 
@@ -185,18 +153,6 @@ TEST_F(ConverterMockTest, SetStartPartialPrediction) {
   EXPECT_EQ(expect.DebugString(), output.DebugString());
 }
 
-TEST_F(ConverterMockTest, SetStartPartialPredictionWithComposer) {
-  ConverterInterface *converter = ConverterFactory::GetConverter();
-
-  Segments output, expect;
-  SetSegments(&expect, "StartPartialPredictionWithComposer");
-  GetMock()->SetStartPartialPredictionWithComposer(&expect, true);
-  composer::Composer dummy_composer;
-  EXPECT_TRUE(converter->StartPartialPredictionWithComposer(&output,
-                                                            &dummy_composer));
-  EXPECT_EQ(expect.DebugString(), output.DebugString());
-}
-
 TEST_F(ConverterMockTest, SetStartPartialSuggestion) {
   ConverterInterface *converter = ConverterFactory::GetConverter();
 
@@ -204,18 +160,6 @@ TEST_F(ConverterMockTest, SetStartPartialSuggestion) {
   SetSegments(&expect, "StartPartialSuggestion");
   GetMock()->SetStartPartialSuggestion(&expect, true);
   EXPECT_TRUE(converter->StartPartialSuggestion(&output, "dummy"));
-  EXPECT_EQ(expect.DebugString(), output.DebugString());
-}
-
-TEST_F(ConverterMockTest, SetStartPartialSuggestionWithComposer) {
-  ConverterInterface *converter = ConverterFactory::GetConverter();
-
-  Segments output, expect;
-  SetSegments(&expect, "StartPartialSuggestionWithComposer");
-  GetMock()->SetStartPartialSuggestionWithComposer(&expect, true);
-  composer::Composer dummy_composer;
-  EXPECT_TRUE(converter->StartPartialSuggestionWithComposer(&output,
-                                                            &dummy_composer));
   EXPECT_EQ(expect.DebugString(), output.DebugString());
 }
 
@@ -295,7 +239,7 @@ TEST_F(ConverterMockTest, SetResizeSegment1) {
   Segments output, expect;
   SetSegments(&expect, "ResizeSegment1");
   GetMock()->SetResizeSegment1(&expect, true);
-  EXPECT_TRUE(converter->ResizeSegment(&output, 1, 5));
+  EXPECT_TRUE(converter->ResizeSegment(&output, ConversionRequest(), 1, 5));
   EXPECT_EQ(expect.DebugString(), output.DebugString());
 }
 
@@ -306,7 +250,7 @@ TEST_F(ConverterMockTest, SetResizeSegment2) {
   SetSegments(&expect, "ResizeSegment2");
   GetMock()->SetResizeSegment2(&expect, true);
   uint8 size_array[] = {1, 2, 3};
-  EXPECT_TRUE(converter->ResizeSegment(&output, 1, 5,
+  EXPECT_TRUE(converter->ResizeSegment(&output, ConversionRequest(), 1, 5,
                                        size_array, arraysize(size_array)));
   EXPECT_EQ(expect.DebugString(), output.DebugString());
 }
@@ -326,24 +270,6 @@ TEST_F(ConverterMockTest, GetStartConversion) {
 
   EXPECT_EQ(input_str, last_segment_str);
   EXPECT_EQ(input_key, last_key);
-}
-
-TEST_F(ConverterMockTest, GetStartConversionWithComposer) {
-  ConverterInterface *converter = ConverterFactory::GetConverter();
-
-  Segments input;
-  composer::Composer input_composer;
-  SetSegments(&input, "StartConversionWithComposer");
-  const string input_str = input.DebugString();
-  converter->StartConversionWithComposer(&input, &input_composer);
-
-  Segments last_segment;
-  const composer::Composer *last_composer;
-  GetMock()->GetStartConversionWithComposer(&last_segment, &last_composer);
-  const string last_segment_str = last_segment.DebugString();
-
-  EXPECT_EQ(input_str, last_segment_str);
-  EXPECT_EQ(&input_composer, last_composer);
 }
 
 TEST_F(ConverterMockTest, GetStartReverseConversion) {
@@ -382,24 +308,6 @@ TEST_F(ConverterMockTest, GetStartPrediction) {
   EXPECT_EQ(input_key, last_key);
 }
 
-TEST_F(ConverterMockTest, GetStartPredictionWithComposer) {
-  ConverterInterface *converter = ConverterFactory::GetConverter();
-
-  Segments input;
-  composer::Composer input_composer;
-  SetSegments(&input, "StartPredictionWithComposer");
-  const string input_str = input.DebugString();
-  converter->StartPredictionWithComposer(&input, &input_composer);
-
-  Segments last_segment;
-  const composer::Composer *last_composer;
-  GetMock()->GetStartPredictionWithComposer(&last_segment, &last_composer);
-  const string last_segment_str = last_segment.DebugString();
-
-  EXPECT_EQ(input_str, last_segment_str);
-  EXPECT_EQ(&input_composer, last_composer);
-}
-
 TEST_F(ConverterMockTest, GetStartSuggestion) {
   ConverterInterface *converter = ConverterFactory::GetConverter();
 
@@ -416,24 +324,6 @@ TEST_F(ConverterMockTest, GetStartSuggestion) {
 
   EXPECT_EQ(input_str, last_segment_str);
   EXPECT_EQ(input_key, last_key);
-}
-
-TEST_F(ConverterMockTest, GetStartSuggestionWithComposer) {
-  ConverterInterface *converter = ConverterFactory::GetConverter();
-
-  Segments input;
-  composer::Composer input_composer;
-  SetSegments(&input, "StartSuggestionWithComposer");
-  const string input_str = input.DebugString();
-  converter->StartSuggestionWithComposer(&input, &input_composer);
-
-  Segments last_segment;
-  const composer::Composer *last_composer;
-  GetMock()->GetStartSuggestionWithComposer(&last_segment, &last_composer);
-  const string last_segment_str = last_segment.DebugString();
-
-  EXPECT_EQ(input_str, last_segment_str);
-  EXPECT_EQ(&input_composer, last_composer);
 }
 
 TEST_F(ConverterMockTest, GetStartPartialPrediction) {
@@ -454,25 +344,6 @@ TEST_F(ConverterMockTest, GetStartPartialPrediction) {
   EXPECT_EQ(input_key, last_key);
 }
 
-TEST_F(ConverterMockTest, GetStartPartialPredictionWithComposer) {
-  ConverterInterface *converter = ConverterFactory::GetConverter();
-
-  Segments input;
-  composer::Composer input_composer;
-  SetSegments(&input, "StartPartialPredictionWithComposer");
-  const string input_str = input.DebugString();
-  converter->StartPartialPredictionWithComposer(&input, &input_composer);
-
-  Segments last_segment;
-  const composer::Composer *last_composer;
-  GetMock()->GetStartPartialPredictionWithComposer(&last_segment,
-                                                   &last_composer);
-  const string last_segment_str = last_segment.DebugString();
-
-  EXPECT_EQ(input_str, last_segment_str);
-  EXPECT_EQ(&input_composer, last_composer);
-}
-
 TEST_F(ConverterMockTest, GetStartPartialSuggestion) {
   ConverterInterface *converter = ConverterFactory::GetConverter();
 
@@ -489,25 +360,6 @@ TEST_F(ConverterMockTest, GetStartPartialSuggestion) {
 
   EXPECT_EQ(input_str, last_segment_str);
   EXPECT_EQ(input_key, last_key);
-}
-
-TEST_F(ConverterMockTest, GetStartPartialSuggestionWithComposer) {
-  ConverterInterface *converter = ConverterFactory::GetConverter();
-
-  Segments input;
-  composer::Composer input_composer;
-  SetSegments(&input, "StartPartialSuggestionWithComposer");
-  const string input_str = input.DebugString();
-  converter->StartPartialSuggestionWithComposer(&input, &input_composer);
-
-  Segments last_segment;
-  const composer::Composer *last_composer;
-  GetMock()->GetStartPartialSuggestionWithComposer(&last_segment,
-                                                   &last_composer);
-  const string last_segment_str = last_segment.DebugString();
-
-  EXPECT_EQ(input_str, last_segment_str);
-  EXPECT_EQ(&input_composer, last_composer);
 }
 
 TEST_F(ConverterMockTest, GetFinishConversion) {
@@ -641,7 +493,8 @@ TEST_F(ConverterMockTest, GetResizeSegment1) {
   int input_offset = 3;
   SetSegments(&input, "ResizeSegment1");
   const string input_str = input.DebugString();
-  converter->ResizeSegment(&input, input_idx, input_offset);
+  converter->ResizeSegment(
+      &input, ConversionRequest(), input_idx, input_offset);
 
   Segments last_segment;
   size_t last_idx;
@@ -662,7 +515,7 @@ TEST_F(ConverterMockTest, GetResizeSegment2) {
   uint8 input_array[] = {1, 2, 3};
   SetSegments(&input, "ResizeSegment2");
   const string input_str = input.DebugString();
-  converter->ResizeSegment(&input, input_idx, input_size,
+  converter->ResizeSegment(&input, ConversionRequest(), input_idx, input_size,
                            input_array, arraysize(input_array));
 
   Segments last_segment;
@@ -671,7 +524,7 @@ TEST_F(ConverterMockTest, GetResizeSegment2) {
   size_t last_array_size;
 
   GetMock()->GetResizeSegment2(&last_segment, &last_idx, &last_size,
-                         &last_array, &last_array_size);
+                               &last_array, &last_array_size);
   const string last_segment_str = last_segment.DebugString();
 
   EXPECT_EQ(input_str, last_segment_str);

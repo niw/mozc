@@ -61,10 +61,23 @@
       ],
     },
     {
-      'target_name': 'renderer',
+      'target_name': 'renderer_client',
       'type': 'static_library',
       'sources': [
         'renderer_client.cc',
+      ],
+      'dependencies': [
+        '../base/base.gyp:base',
+        '../config/config.gyp:config_protocol',
+        '../ipc/ipc.gyp:ipc',
+        '../session/session_base.gyp:session_protocol',
+        'renderer_protocol',
+      ],
+    },
+    {
+      'target_name': 'renderer_server',
+      'type': 'static_library',
+      'sources': [
         'renderer_server.cc',
       ],
       'dependencies': [
@@ -73,7 +86,7 @@
         '../config/config.gyp:config_handler',
         '../ipc/ipc.gyp:ipc',
         '../session/session_base.gyp:session_protocol',
-        '../net/net.gyp:net',
+        'renderer_protocol',
       ],
       'conditions': [
         ['enable_webservice_infolist==1', {
@@ -84,21 +97,71 @@
       ],
     },
     {
-      'target_name': 'renderer_test',
+      'target_name': 'renderer_client_test',
       'type': 'executable',
       'sources': [
         'renderer_client_test.cc',
+      ],
+      'dependencies': [
+        '../testing/testing.gyp:gtest_main',
+        'renderer_client',
+      ],
+      'variables': {
+        'test_size': 'small',
+      },
+    },
+    {
+      'target_name': 'renderer_server_test',
+      'type': 'executable',
+      'sources': [
         'renderer_server_test.cc',
-        'table_layout_test.cc',
-        'window_util_test.cc',
       ],
       'dependencies': [
         '../ipc/ipc.gyp:ipc_test_util',
-        '../languages/japanese/japanese.gyp:language_dependent_spec_japanese',
         '../testing/testing.gyp:gtest_main',
-        'renderer',
+        'renderer_client',
+        'renderer_server',
+      ],
+      'variables': {
+        'test_size': 'small',
+      },
+    },
+    {
+      'target_name': 'table_layout_test',
+      'type': 'executable',
+      'sources': [
+        'table_layout_test.cc',
+      ],
+      'dependencies': [
+        '../testing/testing.gyp:gtest_main',
         'table_layout',
+      ],
+      'variables': {
+        'test_size': 'small',
+      },
+    },
+    {
+      'target_name': 'window_util_test',
+      'type': 'executable',
+      'sources': [
+        'window_util_test.cc',
+      ],
+      'dependencies': [
+        '../testing/testing.gyp:gtest_main',
         'window_util',
+      ],
+      'variables': {
+        'test_size': 'small',
+      },
+    },
+    {
+      'target_name': 'renderer_style_handler',
+      'type': 'static_library',
+      'sources': [
+        'renderer_style_handler.cc',
+      ],
+      'dependencies': [
+        'renderer_protocol',
       ],
       'variables': {
         'test_size': 'small',
@@ -109,12 +172,11 @@
       'type': 'executable',
       'sources': [
         'renderer_style_handler_test.cc',
-        'renderer_style_handler.cc',
       ],
       'dependencies': [
         '../testing/testing.gyp:gtest_main',
-        'renderer',
         'renderer_protocol',
+        'renderer_style_handler',
       ],
       'variables': {
         'test_size': 'small',
@@ -123,7 +185,9 @@
     {
       'target_name': 'genproto_renderer',
       'type': 'none',
+      'toolsets': ['host'],
       'sources': [
+        'renderer_command.proto',
         'renderer_style.proto',
       ],
       'includes': [
@@ -135,14 +199,17 @@
       'type': 'static_library',
       'hard_dependency': 1,
       'sources': [
+        '<(proto_out_dir)/<(relative_dir)/renderer_command.pb.cc',
         '<(proto_out_dir)/<(relative_dir)/renderer_style.pb.cc',
       ],
       'dependencies': [
+        '../config/config.gyp:config_protocol',
         '../protobuf/protobuf.gyp:protobuf',
-        'genproto_renderer'
+        '../session/session_base.gyp:session_protocol',
+        'genproto_renderer#host'
       ],
       'export_dependent_settings': [
-        'genproto_renderer',
+        'genproto_renderer#host',
       ],
     },
     # Test cases meta target: this target is referred from gyp/tests.gyp
@@ -150,7 +217,11 @@
       'target_name': 'renderer_all_test',
       'type': 'none',
       'dependencies': [
-        'renderer_test',
+        'renderer_client_test',
+        'renderer_server_test',
+        'renderer_style_handler_test',
+        'table_layout_test',
+        'window_util_test',
       ],
       'conditions': [
         ['enable_webservice_infolist==1', {
@@ -160,12 +231,13 @@
         }],
         ['OS=="win"', {
           'dependencies': [
+            'win32_font_util_test',
             'win32_renderer_util_test',
           ],
         }],
-        ['OS=="mac"', {
+        ['enable_gtk_renderer==1', {
           'dependencies': [
-            'renderer_style_handler_test',
+            'gtk_renderer_test',
           ],
         }],
       ],
@@ -183,11 +255,12 @@
           'dependencies': [
             '../base/base.gyp:base',
             '../config/config.gyp:config_handler',
-            '../config/config.gyp:genproto_config',
+            '../config/config.gyp:genproto_config#host',
             '../libxml/libxml.gyp:libxml',
             '../net/net.gyp:jsonpath',
+            '../net/net.gyp:http_client',
             '../session/session_base.gyp:session_protocol',
-            '<(DEPTH)/third_party/jsoncpp/jsoncpp.gyp:jsoncpp',
+            'renderer_protocol',
           ],
           'include_dirs' : [
             '../libxml/libxml2-2.7.7/include',
@@ -200,7 +273,6 @@
             'webservice_infolist_handler_test.cc',
           ],
           'dependencies': [
-            '../languages/japanese/japanese.gyp:language_dependent_spec_japanese',
             '../net/net.gyp:http_client_mock',
             '../testing/testing.gyp:gtest_main',
             'renderer',
@@ -216,6 +288,7 @@
       'targets': [
         {
           'target_name': 'gen_mozc_renderer_resource_header',
+          'toolsets': ['host'],
           'variables': {
             'gen_resource_proj_name': 'mozc_renderer',
             'gen_main_resource_path': 'renderer/mozc_renderer.rc',
@@ -227,6 +300,33 @@
           ],
         },
         {
+          'target_name': 'win32_font_util',
+          'type': 'static_library',
+          'sources': [
+            'win32/win32_font_util.cc',
+          ],
+          'dependencies': [
+            '../base/base.gyp:base',
+            '../config/config.gyp:config_protocol',
+            '../session/session_base.gyp:session_protocol',
+            'renderer_protocol',
+          ],
+        },
+        {
+          'target_name': 'win32_font_util_test',
+          'type': 'executable',
+          'sources': [
+            'win32/win32_font_util_test.cc',
+          ],
+          'dependencies': [
+            '../testing/testing.gyp:gtest_main',
+            'win32_font_util',
+          ],
+          'variables': {
+            'test_size': 'small',
+          },
+        },
+        {
           'target_name': 'win32_renderer_util',
           'type': 'static_library',
           'sources': [
@@ -234,9 +334,11 @@
           ],
           'dependencies': [
             '../base/base.gyp:base',
-            '../session/session_base.gyp:session_protocol',
             '../config/config.gyp:config_protocol',
+            '../session/session_base.gyp:session_protocol',
             '../win32/base/win32_base.gyp:ime_base',
+            'renderer_protocol',
+            'win32_font_util',
           ],
         },
         {
@@ -260,7 +362,6 @@
           'sources': [
             'mozc_renderer_main.cc',
             'mozc_renderer.exe.manifest',
-            'renderer_style_handler.cc',
             'win32/win32_server.cc',
             'win32/window_manager.cc',
             'win32/candidate_window.cc',
@@ -276,9 +377,10 @@
             '../config/config.gyp:stats_config_util',
             '../ipc/ipc.gyp:ipc',
             '../session/session_base.gyp:session_protocol',
-            'gen_mozc_renderer_resource_header',
-            'renderer',
+            'gen_mozc_renderer_resource_header#host',
             'renderer_protocol',
+            'renderer_server',
+            'renderer_style_handler',
             'table_layout',
             'win32_renderer_util',
             'window_util',
@@ -307,7 +409,6 @@
             'mac/InfolistView.mm',
             'mac/RendererBaseWindow.mm',
             'mac/mac_view_util.mm',
-            'renderer_style_handler.cc',
           ],
           'mac_bundle_resources': [
             '../data/images/mac/candidate_window_logo.png',
@@ -320,9 +421,10 @@
             '../config/config.gyp:stats_config_util',
             '../ipc/ipc.gyp:ipc',
             '../session/session_base.gyp:session_protocol',
-            'gen_renderer_files',
-            'renderer',
+            'gen_renderer_files#host',
             'renderer_protocol',
+            'renderer_server',
+            'renderer_style_handler',
             'table_layout',
             'window_util',
           ],
@@ -346,6 +448,7 @@
         {
           'target_name': 'gen_renderer_files',
           'type': 'none',
+          'toolsets': ['host'],
           'actions': [
             {
               'action_name': 'generate_infoplist',
@@ -363,6 +466,102 @@
                 '--branding', '<(branding)',
               ],
             },
+          ],
+        },
+      ],
+    }],
+    ['enable_gtk_renderer==1', {
+      'targets': [
+        {
+          # Meta target to set up build environment for gtk+-2.0.
+          # Required 'cflags' and 'link_settings' will be automatically
+          # injected into any target which directly or indirectly depends
+          # on this target.
+          'target_name': 'gtk2_build_environment',
+          'type': 'none',
+          'variables': {
+            'target_pkgs' : [
+              'glib-2.0',
+              'gobject-2.0',
+              'gthread-2.0',
+              'gtk+-2.0',
+              'gdk-2.0',
+            ],
+          },
+          'all_dependent_settings': {
+            'cflags': [
+              '<!@(<(pkg_config_command) --cflags <@(target_pkgs))',
+            ],
+            'link_settings': {
+              'libraries': [
+                '<!@(<(pkg_config_command) --libs-only-l <@(target_pkgs))',
+              ],
+              'ldflags': [
+                '<!@(<(pkg_config_command) --libs-only-L <@(target_pkgs))',
+              ],
+            },
+          },
+        },
+        {
+          'target_name': 'mozc_renderer_lib',
+          'type': 'static_library',
+          'sources': [
+            'unix/cairo_factory.cc',
+            'unix/cairo_wrapper.cc',
+            'unix/candidate_window.cc',
+            'unix/draw_tool.cc',
+            'unix/font_spec.cc',
+            'unix/gtk_window_base.cc',
+            'unix/gtk_wrapper.cc',
+            'unix/infolist_window.cc',
+            'unix/pango_wrapper.cc',
+            'unix/text_renderer.cc',
+            'unix/unix_renderer.cc',
+            'unix/unix_server.cc',
+            'unix/window_manager.cc',
+          ],
+          'dependencies': [
+            '../base/base.gyp:base',
+            '../client/client.gyp:client',
+            '../config/config.gyp:genproto_config#host',
+            '../config/config.gyp:stats_config_util',
+            '../ipc/ipc.gyp:ipc',
+            '../session/session_base.gyp:genproto_session#host',
+            'renderer_protocol',
+            'gtk2_build_environment',
+            'renderer_server',
+            'renderer_style_handler',
+            'table_layout',
+            'window_util',
+          ],
+        },
+        {
+          'target_name': 'mozc_renderer',
+          'type': 'executable',
+          'sources': [
+            'mozc_renderer_main.cc',
+          ],
+          'dependencies': [
+            'mozc_renderer_lib',
+          ],
+        },
+        {
+          'target_name': 'gtk_renderer_test',
+          'type': 'executable',
+          'sources': [
+            'unix/candidate_window_test.cc',
+            'unix/draw_tool_test.cc',
+            'unix/font_spec_test.cc',
+            'unix/gtk_window_base_test.cc',
+            'unix/infolist_window_test.cc',
+            'unix/text_renderer_test.cc',
+            'unix/unix_renderer_test.cc',
+            'unix/unix_server_test.cc',
+            'unix/window_manager_test.cc',
+          ],
+          'dependencies': [
+            '../testing/testing.gyp:gtest_main',
+            'mozc_renderer_lib',
           ],
         },
       ],

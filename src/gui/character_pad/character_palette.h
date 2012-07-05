@@ -30,6 +30,7 @@
 #ifndef MOZC_GUI_CHARACTER_PAD_CHARACTER_PALETTE_H_
 #define MOZC_GUI_CHARACTER_PAD_CHARACTER_PALETTE_H_
 
+#include <QtCore/QMap>
 #include <QtGui/QMainWindow>
 #include "base/base.h"
 #include "gui/character_pad/ui_character_palette.h"
@@ -38,6 +39,10 @@ class QTextCodec;
 class QClipboard;
 
 namespace mozc {
+namespace client {
+class ClientInterface;
+}  // namespace client
+
 namespace gui {
 
 class CharacterPalette :  public QMainWindow,
@@ -45,10 +50,14 @@ class CharacterPalette :  public QMainWindow,
   Q_OBJECT;
 
  public:
+  struct UnicodeRange {
+    char32 first;
+    char32 last;
+  };
+
   struct UnicodeBlock {
     const char *name;
-    uint32 start;
-    uint32 end;
+    UnicodeRange range;
   };
 
   struct LocalCharacterMap {
@@ -62,25 +71,29 @@ class CharacterPalette :  public QMainWindow,
   };
 
   CharacterPalette(QWidget *parent = NULL);
+  virtual ~CharacterPalette();
 
  public slots:
   void resizeEvent(QResizeEvent *event);
   void updateFontSize(int index);
   void updateFont(const QFont &font);
   void categorySelected(QTreeWidgetItem *item, int column);
+  void itemSelected(const QTableWidgetItem *item);
 
  protected:
 #ifdef OS_WINDOWS
   bool winEvent(MSG *message, long *result);
 #endif  // OS_WINDOWS
 
+  scoped_ptr<client::ClientInterface> client_;
+  bool usage_stats_enabled_;
+
  private:
   void updateTableSize();
 
   // Unicode operation
-  void showUnicodeTable(int start, int end);
-  void showUnicodeAllTable();
-  void showUnicodeBlockTable(const QString &name);
+  void showUnicodeTableByRange(const UnicodeRange &range);
+  void showUnicodeTableByBlockName(const QString &block_name);
 
   // non-Unicode operation
   void showLocalTable(const LocalCharacterMap *local_map,
@@ -88,6 +101,8 @@ class CharacterPalette :  public QMainWindow,
 
   // show Shift-JIS subcategories
   void showSJISBlockTable(const QString &name);
+
+  QMap<QString, UnicodeRange> unicode_block_map_;
 };
 }  // namespace gui
 }  // namespace mozc

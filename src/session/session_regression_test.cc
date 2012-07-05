@@ -85,7 +85,6 @@ class SessionRegressionTest : public testing::Test {
 
     orig_use_history_rewriter_ = FLAGS_use_history_rewriter;
     FLAGS_use_history_rewriter = true;
-    RewriterFactory::SetRewriter(NULL);
 
     config::Config config;
     config::ConfigHandler::GetDefaultConfig(&config);
@@ -94,7 +93,7 @@ class SessionRegressionTest : public testing::Test {
     config.set_use_realtime_conversion(false);
     config::ConfigHandler::SetConfig(config);
     handler_.reset(new SessionHandler());
-    session_.reset(dynamic_cast<session::Session *>(handler_->NewSession()));
+    ResetSession();
     CHECK(session_.get());
   }
 
@@ -119,7 +118,7 @@ class SessionRegressionTest : public testing::Test {
   void InsertCharacterChars(const string &chars,
                             commands::Command *command) {
     const uint32 kNoModifiers = 0;
-    for (int i = 0; i < chars.size(); ++i) {
+    for (size_t i = 0; i < chars.size(); ++i) {
       command->clear_input();
       command->clear_output();
       commands::KeyEvent *key_event = command->mutable_input()->mutable_key();
@@ -129,9 +128,17 @@ class SessionRegressionTest : public testing::Test {
     }
   }
 
+  void ResetSession() {
+    session_.reset(dynamic_cast<session::Session *>(handler_->NewSession()));
+    table_.reset(new composer::Table());
+    table_.get()->Initialize();
+    session_.get()->SetTable(table_.get());
+  }
+
   bool orig_use_history_rewriter_;
   scoped_ptr<SessionHandler> handler_;
   scoped_ptr<session::Session> session_;
+  scoped_ptr<composer::Table> table_;
   session::JapaneseSessionFactory session_factory_;
 };
 
@@ -439,6 +446,79 @@ TEST_F(SessionRegressionTest, ConsistencyBetweenPredictionAndSuggesion) {
   EXPECT_EQ(suggestion_first_candidate, suggestion_commit_result);
   EXPECT_EQ(suggestion_first_candidate, prediction_first_candidate);
   EXPECT_EQ(suggestion_first_candidate, prediction_commit_result);
+}
+
+TEST_F(SessionRegressionTest, Transliteration_Issue2330463) {
+  {
+    ResetSession();
+    commands::Command command;
+
+    InsertCharacterChars("[],.", &command);
+    command.Clear();
+    SendKey("F8", &command);
+    // "｢｣､｡"
+    EXPECT_EQ("\357\275\242\357\275\243\357\275\244\357\275\241",
+              command.output().preedit().segment(0).value());
+  }
+
+  {
+    ResetSession();
+    commands::Command command;
+
+    InsertCharacterChars("[g],.", &command);
+    command.Clear();
+    SendKey("F8", &command);
+    // "｢g｣､｡"
+    EXPECT_EQ("\357\275\242\147\357\275\243\357\275\244\357\275\241",
+              command.output().preedit().segment(0).value());
+  }
+
+  {
+    ResetSession();
+    commands::Command command;
+
+    InsertCharacterChars("[a],.", &command);
+    command.Clear();
+    SendKey("F8", &command);
+    // "｢ｱ｣､｡"
+    EXPECT_EQ("\357\275\242\357\275\261\357\275\243\357\275\244\357\275\241",
+              command.output().preedit().segment(0).value());
+  }
+}
+
+TEST_F(SessionRegressionTest, Transliteration_Issue6209563) {
+  {  // Romaji mode
+    ResetSession();
+    commands::Command command;
+
+    InsertCharacterChars("tt", &command);
+    command.Clear();
+    SendKey("F10", &command);
+    EXPECT_EQ("tt", command.output().preedit().segment(0).value());
+  }
+
+  {  // Kana mode
+    ResetSession();
+    commands::Command command;
+
+    InitSessionToPrecomposition(session_.get());
+    config::Config config;
+    config::ConfigHandler::GetConfig(&config);
+    config.set_preedit_method(config::Config::KANA);
+
+    // Inserts "ち" 5 times
+    for (int i = 0; i < 5; ++i) {
+      command.Clear();
+      commands::KeyEvent *key_event = command.mutable_input()->mutable_key();
+      key_event->set_key_code('a');
+      key_event->set_key_string("\xE3\x81\xA1");  // "ち"
+      session_->InsertCharacter(&command);
+    }
+
+    command.Clear();
+    SendKey("F10", &command);
+    EXPECT_EQ("aaaaa", command.output().preedit().segment(0).value());
+  }
 }
 
 }  // namespace mozc

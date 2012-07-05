@@ -39,6 +39,7 @@
 #include "base/util.h"
 #include "base/version.h"
 #include "composer/composer.h"
+#include "composer/table.h"
 #include "config/config_handler.h"
 #include "config/config.pb.h"
 // TODO(komatsu): Delete the next line by refactoring of the initializer.
@@ -217,7 +218,7 @@ void Session::PopUndoContext() {
   if (!prev_context_.get()) {
     return;
   }
-  ImeContext::CopyContext(*prev_context_, context_.get());
+  context_.swap(prev_context_);
   prev_context_.reset(NULL);
 }
 
@@ -387,29 +388,24 @@ bool Session::TestSendKey(commands::Command *command) {
     // the inconsistency between TestSendKey and SendKey.
     switch (key_command) {
       case keymap::PrecompositionState::INSERT_SPACE:
-        ClearUndoContext();
         if (!IsFullWidthInsertSpace(command->input()) &&
             IsPureSpaceKey(command->input().key())) {
-          return EchoBack(command);
+          return EchoBackAndClearUndoContext(command);
         }
         return DoNothing(command);
       case keymap::PrecompositionState::INSERT_ALTERNATE_SPACE:
-        ClearUndoContext();
         if (IsFullWidthInsertSpace(command->input()) &&
             IsPureSpaceKey(command->input().key())) {
-          return EchoBack(command);
+          return EchoBackAndClearUndoContext(command);
         }
         return DoNothing(command);
       case keymap::PrecompositionState::INSERT_HALF_SPACE:
-        ClearUndoContext();
         if (IsPureSpaceKey(command->input().key())) {
-          return EchoBack(command);
+          return EchoBackAndClearUndoContext(command);
         }
         return DoNothing(command);
       case keymap::PrecompositionState::INSERT_FULL_SPACE:
-        ClearUndoContext();
         return DoNothing(command);
-        break;
       default:
         // Do nothing.
         break;
@@ -1022,6 +1018,11 @@ bool Session::ResetContext(commands::Command *command) {
   return true;
 }
 
+void Session::SetTable(const composer::Table *table) {
+  ClearUndoContext();
+  context_.get()->mutable_composer()->SetTable(table);
+}
+
 void Session::ReloadConfig() {
   UpdateConfig(config::ConfigHandler::GetConfig(), context_.get());
 }
@@ -1317,8 +1318,8 @@ bool Session::MaybeSelectCandidate(commands::Command *command) {
   // enabled. This is why we need to normalize the key event here.
   // See b/5655743.
   commands::KeyEvent normalized_keyevent;
-  KeyEventUtil::NormalizeKeyEvent(command->input().key(),
-                                  &normalized_keyevent);
+  KeyEventUtil::NormalizeModifiers(command->input().key(),
+                                   &normalized_keyevent);
 
   // Check if the input character is in the shortcut.
   // TODO(komatsu): Support non ASCII characters such as Unicode and
@@ -1399,6 +1400,13 @@ bool Session::InsertCharacter(commands::Command *command) {
   context_->composer().GetQueryForConversion(&composition);
   bool should_commit = (context_->state() == ImeContext::CONVERSION);
 
+  if (GET_REQUEST(space_on_alphanumeric) ==
+      commands::Request::SPACE_OR_CONVERT_COMMITING_COMPOSITION &&
+      context_->state() == ImeContext::COMPOSITION &&
+      // TODO(komatsu): Support FullWidthSpace
+      Util::EndsWith(composition, " ")) {
+    should_commit = true;
+  }
 
   if (should_commit) {
     Commit(command);
@@ -1477,15 +1485,7 @@ bool Session::IsFullWidthInsertSpace(const commands::Input &input) const {
     target_composer = temporary_composer.get();
   }
 
-  // PRECOMPOSITION and current mode is HALF_ASCII: situation is same
-  // as DIRECT.
-  if (context_->state() == ImeContext::PRECOMPOSITION &&
-      transliteration::T13n::IsInHalfAsciiTypes(
-          target_composer->GetInputMode())) {
-    return false;
-  }
-
-  // Otherwise, check the current config and the current input status.
+  // Check the current config and the current input status.
   bool is_full_width = false;
   switch (GET_CONFIG(space_character_form)) {
     case config::Config::FUNDAMENTAL_INPUT_MODE: {
@@ -1701,6 +1701,12 @@ bool Session::Commit(commands::Command *command) {
 
   SetSessionState(ImeContext::PRECOMPOSITION);
 
+  // Get suggestion if zero_query_suggestion is set.
+  // zero_query_suggestion is usually set where the client is a mobile.
+  // TODO(komatsu): Perform the refactoring.
+  if (GET_REQUEST(zero_query_suggestion)) {
+    context_->mutable_converter()->Suggest(context_->composer());
+  }
 
   Output(command);
   // Copy the previous output for Undo.
@@ -1745,6 +1751,12 @@ bool Session::CommitFirstSuggestion(commands::Command *command) {
 
   SetSessionState(ImeContext::PRECOMPOSITION);
 
+  // Get suggestion if zero_query_suggestion is set.
+  // zero_query_suggestion is usually set where the client is a mobile.
+  // TODO(komatsu): Perform the refactoring.
+  if (GET_REQUEST(zero_query_suggestion)) {
+    context_->mutable_converter()->Suggest(context_->composer());
+  }
 
   Output(command);
   // Copy the previous output for Undo.
@@ -1767,6 +1779,12 @@ bool Session::CommitSegment(commands::Command *command) {
     // the state should be switched to precomposition.
     SetSessionState(ImeContext::PRECOMPOSITION);
 
+    // Get suggestion if zero_query_suggestion is set.
+    // zero_query_suggestion is usually set where the client is a mobile.
+    // TODO(komatsu): Perform the refactoring.
+    if (GET_REQUEST(zero_query_suggestion)) {
+      context_->mutable_converter()->Suggest(context_->composer());
+    }
   }
   Output(command);
   // Copy the previous output for Undo.
@@ -2107,8 +2125,7 @@ bool Session::Convert(commands::Command *command) {
       command->input().key().special_key() == commands::KeyEvent::SPACE) {
     // TODO(komatsu): Consider FullWidth Space too.
     if (!Util::EndsWith(composition, " ")) {
-      bool should_commit = false;
-      if (should_commit) {
+      if (GET_REQUEST(space_on_alphanumeric) == commands::Request::COMMIT) {
         // Space is committed with the composition
         context_->mutable_composer()->InsertCharacterPreedit(" ");
         return Commit(command);
@@ -2324,7 +2341,7 @@ bool Session::SegmentWidthExpand(commands::Command *command) {
     return DoNothing(command);
   }
   command->mutable_output()->set_consumed(true);
-  context_->mutable_converter()->SegmentWidthExpand();
+  context_->mutable_converter()->SegmentWidthExpand(context_->composer());
   Output(command);
   return true;
 }
@@ -2334,7 +2351,7 @@ bool Session::SegmentWidthShrink(commands::Command *command) {
     return DoNothing(command);
   }
   command->mutable_output()->set_consumed(true);
-  context_->mutable_converter()->SegmentWidthShrink();
+  context_->mutable_converter()->SegmentWidthShrink(context_->composer());
   Output(command);
   return true;
 }
@@ -2452,7 +2469,8 @@ void Session::OutputWindowLocation(commands::Command *command) const {
   candidates->mutable_composition_rectangle()->CopyFrom(
       composition_rectangle_);
 
-  if (command->output().candidates().category() == commands::SUGGESTION) {
+  if (command->output().candidates().category() == commands::SUGGESTION ||
+      command->output().candidates().category() == commands::PREDICTION) {
     candidates->set_window_location(commands::Candidates::COMPOSITION);
   } else {
     candidates->set_window_location(commands::Candidates::CARET);

@@ -47,6 +47,7 @@
     {
       'target_name': 'genproto_config',
       'type': 'none',
+      'toolsets': ['host'],
       'sources': [
         'config.proto',
       ],
@@ -63,10 +64,10 @@
       ],
       'dependencies': [
         '../protobuf/protobuf.gyp:protobuf',
-        'genproto_config',
+        'genproto_config#host',
       ],
       'export_dependent_settings': [
-        'genproto_config',
+        'genproto_config#host',
       ],
     },
     {
@@ -77,6 +78,14 @@
       ],
       'dependencies': [
         'config_handler',
+      ],
+      'conditions': [
+        ['target_platform=="Android"', {
+          'dependencies': [
+            'config_handler',
+            'config_protocol',
+          ],
+        }],
       ],
     },
   ],

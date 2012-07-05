@@ -28,23 +28,26 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "net/http_client.h"
-#include "net/http_client_common.h"
 
-#ifdef OS_WINDOWS
+
+#ifdef MOZC_ENABLE_HTTP_CLIENT
+#if defined(OS_WINDOWS)
 #include <windows.h>
 #include <wininet.h>
-#else
-#include "curl/curl.h"
-#include "net/proxy_manager.h"
-#endif  // OS_WINDOWS
-#ifdef OS_MACOSX
-#include "net/http_client_mac.h"
-#endif  // OS_MACOSX
+#elif defined(HAVE_CURL)
+#include <curl/curl.h>
+#endif
+#endif  // MOZC_ENABLE_HTTP_CLIENT
 
 #include "base/base.h"
 #include "base/singleton.h"
+#include "base/stopwatch.h"
 #include "base/util.h"
-
+#include "net/http_client_common.h"
+#ifdef MOZC_ENABLE_HTTP_CLIENT
+#include "net/http_client_mac.h"
+#include "net/proxy_manager.h"
+#endif  // MOZC_ENABLE_HTTP_CLIENT
 
 namespace mozc {
 // We use a dummy user agent.
@@ -52,6 +55,7 @@ const char *kUserAgent = "Mozilla/5.0";
 const int kOKResponseCode = 200;
 
 namespace {
+#if defined(MOZC_ENABLE_HTTP_CLIENT)
 class HTTPStream {
  public:
   HTTPStream(string *output_string, ostream *output_stream,
@@ -133,22 +137,39 @@ void CALLBACK StatusCallback(HINTERNET internet,
   }
 }
 
-bool CheckTimeout(HANDLE event, DWORD target_time) {
+bool CheckTimeout(HANDLE event, int64 elapsed_msec, int32 timeout_msec) {
   const DWORD error = ::GetLastError();
-  if (error == ERROR_IO_PENDING) {
-    const DWORD time_left = target_time - ::timeGetTime();
-    if (time_left > 0 &&
-        WAIT_OBJECT_0 == ::WaitForSingleObject(event, time_left)) {
-      ::ResetEvent(event);
-      return true;
-    } else {
-      LOG(WARNING) << "Timeout: " << time_left;
-      return false;
-    }
+  if (error != ERROR_IO_PENDING) {
+    LOG(ERROR) << "Unexpected error state: " << error;
+    return false;
   }
-
-  LOG(ERROR) << error;
-  return false;
+  const int64 time_left = timeout_msec - elapsed_msec;
+  if (time_left < 0) {
+    LOG(WARNING) << "Already timed-out: " << time_left;
+    return false;
+  }
+  DCHECK_GE(elapsed_msec, 0);
+  DCHECK_LE(time_left, static_cast<int64>(MAXDWORD))
+      << "This should always be true because |timeout_msec| <= MAXDWORD";
+  const DWORD positive_time_left = static_cast<DWORD>(time_left);
+  const DWORD wait_result = ::WaitForSingleObject(event, positive_time_left);
+  if (wait_result == WAIT_FAILED) {
+    const DWORD wait_error = ::GetLastError();
+    LOG(ERROR) << "WaitForSingleObject failed. error: " << wait_error;
+    return false;
+  }
+  if (wait_result == WAIT_TIMEOUT) {
+    LOG(WARNING) << "WaitForSingleObject timed out after "
+                 << positive_time_left << " msec.";
+    return false;
+  }
+  if (wait_result != WAIT_OBJECT_0) {
+    LOG(ERROR) << "WaitForSingleObject returned unexpected result: "
+               << wait_result;
+    return false;
+  }
+  ::ResetEvent(event);
+  return true;
 }
 
 bool RequestInternal(HTTPMethodType type,
@@ -163,7 +184,7 @@ bool RequestInternal(HTTPMethodType type,
     return false;
   }
 
-  const DWORD target_time = ::timeGetTime() + option.timeout;
+  Stopwatch stopwatch = stopwatch.StartNew();
 
   HANDLE event = ::CreateEvent(NULL, FALSE, FALSE, NULL);
   if (NULL == event) {
@@ -286,7 +307,8 @@ bool RequestInternal(HTTPMethodType type,
                          NULL, 0,
                          (type == HTTP_POST) ? (LPVOID)post_data : NULL,
                          (type == HTTP_POST) ? post_size : 0)) {
-    if (!CheckTimeout(event, target_time)) {
+    if (!CheckTimeout(event, stopwatch.GetElapsedMilliseconds(),
+                      option.timeout)) {
       LOG(ERROR) << "HttpSendRequest() failed: "
                  << ::GetLastError() << " " << url;
       return false;
@@ -366,7 +388,8 @@ bool RequestInternal(HTTPMethodType type,
                                 &ibuf,
                                 WININET_API_FLAG_ASYNC,
                                 reinterpret_cast<DWORD_PTR>(event)) ||
-          CheckTimeout(event, target_time)) {
+          CheckTimeout(event, stopwatch.GetElapsedMilliseconds(),
+                       option.timeout)) {
         const DWORD size = ibuf.dwBufferLength;
         if (size == 0) {
           break;
@@ -398,7 +421,7 @@ bool RequestInternal(HTTPMethodType type,
                                         output_string, output_stream);
 }
 
-#else   // !defined(OS_WINDOWS) && !defined(OS_MACOSX)
+#elif defined(HAVE_CURL)
 
 class CurlInitializer {
  public:
@@ -543,7 +566,26 @@ bool RequestInternal(HTTPMethodType type,
 
   return result;
 }
+#else
+// None of OS_WINDOWS/OS_MACOSX/HAVE_CURL is defined.
+#error "HttpClient does not support your platform."
 #endif
+#else
+// MOZC_ENABLE_HTTP_CLIENT is not defined
+MOZC_COMPILE_MESSAGE("HTTPClient is disabled.");
+bool RequestInternal(HTTPMethodType type,
+                     const string &url,
+                     const char *post_data,
+                     size_t post_size,
+                     const HTTPClient::Option &option,
+                     string *output_string,
+                     ostream *output_stream) {
+  // Null implementation.
+  LOG(ERROR) << "HttpClient is not enabled.";
+  return false;
+}
+#endif  // MOZC_ENABLE_HTTP_CLIENT
+
 }  // namespace
 
 class HTTPClientImpl: public HTTPClientInterface {

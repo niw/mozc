@@ -27,12 +27,14 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include "rewriter/usage_rewriter.h"
+
 #include "base/util.h"
-#include "config/config_handler.h"
 #include "config/config.pb.h"
+#include "config/config_handler.h"
+#include "converter/conversion_request.h"
 #include "converter/segments.h"
 #include "dictionary/pos_matcher.h"
-#include "rewriter/usage_rewriter.h"
 
 namespace mozc {
 namespace {
@@ -43,7 +45,8 @@ struct ConjugationSuffix {
 #include "rewriter/usage_rewriter_data.h"
 }
 
-UsageRewriter::UsageRewriter() {
+UsageRewriter::UsageRewriter(const POSMatcher *pos_matcher)
+    : pos_matcher_(pos_matcher) {
   const UsageDictItem *item = kUsageData_value;
   // TODO(taku): To reduce memory footprint, better to replace it with
   // binary search over the kConjugationSuffixDataIndex diretly.
@@ -69,19 +72,14 @@ UsageRewriter::~UsageRewriter() {
 // static
 // "合いました" => "合い"
 string UsageRewriter::GetKanjiPrefixAndOneHiragana(const string &word) {
-  const char *begin = word.data();
-  const char *end = word.data() + word.size();
-
+  // TODO(hidehiko): Refactor more based on ConstChar32Iterator.
   string result;
   int pos = 0;
   bool has_kanji = false;
   bool has_hiragana = false;
-  while (begin < end) {
-    size_t mblen = 0;
-    const char32 w = Util::UTF8ToUCS4(begin, end, &mblen);
-    DCHECK_GT(mblen, 0);
+  for (ConstChar32Iterator iter(word); !iter.Done(); iter.Next()) {
+    const char32 w = iter.Get();
     const Util::ScriptType s = Util::GetScriptType(w);
-    begin += mblen;
     if (pos == 0 && s != Util::KANJI) {
       return "";
     } else if (pos >= 0 && pos <= 1 && s == Util::KANJI) {
@@ -110,8 +108,8 @@ const UsageDictItem* UsageRewriter::LookupUnmatchedUsageHeuristically(
     const Segment::Candidate &candidate) const {
   // We check Unknwon POS ("名詞,サ変接続") as well, since
   // target verbs/adjectives may be in web dictionary.
-  if (!POSMatcher::IsContentWordWithConjugation(candidate.lid) &&
-      !POSMatcher::IsUnknown(candidate.lid)) {
+  if (!pos_matcher_->IsContentWordWithConjugation(candidate.lid) &&
+      !pos_matcher_->IsUnknown(candidate.lid)) {
     return NULL;
   }
 
@@ -147,7 +145,8 @@ const UsageDictItem* UsageRewriter::LookupUsage(
   return LookupUnmatchedUsageHeuristically(candidate);
 }
 
-bool UsageRewriter::Rewrite(Segments *segments) const {
+bool UsageRewriter::Rewrite(const ConversionRequest &request,
+                            Segments *segments) const {
   DLOG(INFO) << segments->DebugString();
 
   const config::Config &config = config::ConfigHandler::GetConfig();

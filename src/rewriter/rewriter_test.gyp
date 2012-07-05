@@ -40,9 +40,10 @@
       'sources': [
         'calculator_rewriter_test.cc',
         'collocation_util_test.cc',
+        'correction_rewriter_test.cc',
+        'command_rewriter_test.cc',
         'date_rewriter_test.cc',
         'dice_rewriter_test.cc',
-        'command_rewriter_test.cc',
         'dictionary_generator_test.cc',
         'emoticon_rewriter_test.cc',
         'english_variants_rewriter_test.cc',
@@ -60,11 +61,13 @@
         'user_dictionary_rewriter_test.cc',
         'user_segment_history_rewriter_test.cc',
         'variants_rewriter_test.cc',
-        'version_rewriter_test.cc'
+        'version_rewriter_test.cc',
+        'zipcode_rewriter_test.cc',
       ],
       'dependencies': [
         '../base/base.gyp:base',
         '../converter/converter.gyp:converter',
+        '../data_manager/data_manager.gyp:user_pos_manager',
         '../session/session_base.gyp:request_test_util',
         '../testing/testing.gyp:gtest_main',
         'calculator/calculator.gyp:calculator_mock',
@@ -78,6 +81,16 @@
         ['OS=="mac" or OS=="win"', {
           'sources': [
             'usage_rewriter_test.cc',
+          ],
+        }],
+        ['use_separate_connection_data==1', {
+          'dependencies': [
+            '../converter/converter.gyp:connection_data_injected_environment',
+          ],
+        }],
+        ['use_separate_dictionary==1', {
+          'dependencies': [
+            '../dictionary/dictionary.gyp:dictionary_data_injected_environment',
           ],
         }],
       ],

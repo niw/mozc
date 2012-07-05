@@ -46,6 +46,7 @@ class Config;
 
 namespace commands {
 class Capability;
+class CloudSyncStatus;
 class KeyEvent;
 class Output;
 class SessionCommand;
@@ -85,6 +86,9 @@ class ServerLauncherInterface {
 
   // launch with restricted mode
   virtual void set_restricted(bool restricted) = 0;
+
+  // Sets the flag of error dialog suppression.
+  virtual void set_suppress_error_dialog(bool suppress) = 0;
 
   ServerLauncherInterface() {}
   virtual ~ServerLauncherInterface() {}
@@ -172,6 +176,15 @@ class ClientInterface {
   // call this method.
   virtual bool NoOperation() = 0;
 
+  // TODO(team): Add method descriptions.
+  virtual bool StartCloudSync() = 0;
+  virtual bool ClearCloudSync() = 0;
+  virtual bool GetCloudSyncStatus(
+      commands::CloudSyncStatus *cloud_sync_status) = 0;
+  virtual bool AddAuthCode(
+      const commands::Input::AuthorizationInfo &auth_info) {
+    return false;
+  }
 
   // Enables or disables using cascading window.
   virtual void EnableCascadingWindow(bool enable) = 0;
@@ -186,6 +199,9 @@ class ClientInterface {
   // Sets server program path.
   // mainly for unittesting.
   virtual void set_server_program(const string &program_path) = 0;
+
+  // Sets the flag of error dialog suppression.
+  virtual void set_suppress_error_dialog(bool suppress) = 0;
 
   // Sets client capability.
   virtual void set_client_capability(const commands::Capability &capability)

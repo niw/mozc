@@ -34,6 +34,7 @@
 
 #include "base/base.h"
 #include "base/stl_util.h"
+#include "converter/conversion_request.h"
 #include "converter/segments.h"
 #include "rewriter/rewriter_interface.h"
 
@@ -75,12 +76,12 @@ class MergerRewriter : public RewriterInterface {
     rewriters_.push_back(rewriter);
   }
 
-  // Rewrites request and/or result.
-  virtual bool Rewrite(Segments *segments) const {
+  virtual bool Rewrite(const ConversionRequest &request,
+                       Segments *segments) const {
     bool result = false;
     for (size_t i = 0; i < rewriters_.size(); ++i) {
       if (CheckCapablity(segments, rewriters_[i])) {
-        result |= rewriters_[i]->Rewrite(segments);
+        result |= rewriters_[i]->Rewrite(request, segments);
       }
     }
     return result;
@@ -141,6 +142,6 @@ class MergerRewriter : public RewriterInterface {
   DISALLOW_COPY_AND_ASSIGN(MergerRewriter);
 };
 
-}  // mozc
+}  // namespace mozc
 
 #endif  // MOZC_REWRITER_MERGER_REWRITER_H_

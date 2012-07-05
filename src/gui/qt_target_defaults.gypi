@@ -34,10 +34,15 @@
   'variables': {
     'includes': ['qt_vars.gypi'],
     'conditions': [
-      ['use_dynamically_linked_qt=="YES"', {
+      ['use_dynamically_linked_qt==1', {
         'libfile_postfix_for_win': '4',
+        'win32_dlls_for_qt': [],
       }, {  # else
         'libfile_postfix_for_win': '',
+        'win32_dlls_for_qt': [
+          'winmm.lib',
+          'ws2_32.lib',
+        ],
       }],
     ],
   },
@@ -48,7 +53,7 @@
         'msvs_settings': {
           'VCLinkerTool': {
             'AdditionalDependencies': [
-              'Ws2_32.lib',
+              '<@(win32_dlls_for_qt)',
             ],
             'conditions': [
               ['qt_dir', {

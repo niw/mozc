@@ -36,8 +36,10 @@
 #include "base/base.h"
 #include "base/version.h"
 #include "base/singleton.h"
+#include "converter/conversion_request.h"
 #include "converter/segments.h"
 #include "session/commands.pb.h"
+#include "session/request_handler.h"
 
 namespace mozc {
 namespace {
@@ -112,10 +114,14 @@ VersionRewriter::VersionRewriter() {}
 VersionRewriter::~VersionRewriter() {}
 
 int VersionRewriter::capability() const {
+  if (GET_REQUEST(mixed_conversion)) {
+    return RewriterInterface::ALL;
+  }
   return RewriterInterface::CONVERSION;
 }
 
-bool VersionRewriter::Rewrite(Segments *segments) const {
+bool VersionRewriter::Rewrite(const ConversionRequest &request,
+                              Segments *segments) const {
   bool result = false;
   for (size_t i = segments->history_segments_size();
        i < segments->segments_size(); ++i) {

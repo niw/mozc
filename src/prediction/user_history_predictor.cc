@@ -43,18 +43,24 @@
 #include "composer/composer.h"
 #include "config/config.pb.h"
 #include "config/config_handler.h"
+#include "converter/conversion_request.h"
+#include "converter/node_allocator.h"
 #include "converter/segments.h"
+#include "dictionary/dictionary_interface.h"
+#include "dictionary/pos_matcher.h"
 #include "dictionary/suppression_dictionary.h"
 #include "prediction/predictor_interface.h"
 #include "prediction/user_history_predictor.pb.h"
 #include "rewriter/variants_rewriter.h"
 #include "session/commands.pb.h"
+#include "session/request_handler.h"
 #include "storage/encrypted_string_storage.h"
 #include "storage/lru_cache.h"
 #include "usage_stats/usage_stats.h"
 
 
 // This flag is set by predictor.cc
+// We can remove this after the ambiguity expansion feature get stable.
 DEFINE_bool(enable_expansion_for_user_history_predictor,
             false,
             "enable ambiguity expansion for user_history_predictor.");
@@ -131,9 +137,11 @@ string GetDescription(const Segment::Candidate &candidate) {
   return candidate.description;
 }
 
+}  // namespace
+
 // Returns true if the input first candidate seems to be a privacy sensitive
 // such like password.
-bool IsPrivacySensitive(const Segments *segments) {
+bool UserHistoryPredictor::IsPrivacySensitive(const Segments *segments) const {
   const bool kNonSensitive = false;
   const bool kSensitive = true;
 
@@ -176,12 +184,29 @@ bool IsPrivacySensitive(const Segments *segments) {
     return kSensitive;
   }
 
-  // If the key contains any alphabetical character, treat it as privacy
-  // sensitive. But for common English words, this rule is too strict and
-  // should be relaxed. See b/5995529.
-  // TODO(team): Relax this rule.
-  // There also remains some cases to be considered. Compare following two
-  // cases.
+  // If the key contains any alphabetical character but it is in our dictionary,
+  // it can be treated as privacy nonsensitive word; cf. b/5995529. Besides,
+  // short words would be considered as privacy nonsensitive word as well.
+  if (segment_key.size() <= 3) {
+    return kNonSensitive;
+  }
+  // TODO(noriyukit): The following code performs case-sensitive match. We may
+  // relax the match to case-insensitive one.
+  // TODO(noriyukit): It'd be better if DictionaryInterface has LookupExact()
+  // method.
+  NodeAllocator allocator;
+  Node *node = dictionary_->LookupPredictive(segment_key.c_str(),
+                                             segment_key.size(),
+                                             &allocator);
+  for (; node != NULL; node = node->bnext) {
+    if (node->key == segment_key) {
+      return kNonSensitive;
+    }
+  }
+
+  // If the key contains any alphabetical character and is not in our
+  // dictionary, treat it as privacy sensitive. There also remains some cases to
+  // be considered. Compare following two cases.
   //   Case A:
   //     1. Type "ywwz1sxm" in Roman-input style then get "yっwz1sxm".
   //     2. Hit F10 key to convert it to "ywwz1sxm" by
@@ -206,8 +231,7 @@ bool IsPrivacySensitive(const Segments *segments) {
   return kNonSensitive;
 }
 
-}  // namespace
-
+#ifndef __native_client__
 UserHistoryStorage::UserHistoryStorage(const string &filename)
     : storage_(new storage::EncryptedStringStorage(filename)) {
 }
@@ -251,6 +275,7 @@ bool UserHistoryStorage::Save() const {
 
   return true;
 }
+#endif  // __native_client__
 
 UserHistoryPredictor::EntryPriorityQueue::EntryPriorityQueue()
     : pool_(kEntryPoolSize) {}
@@ -285,6 +310,7 @@ UserHistoryPredictor::EntryPriorityQueue::NewEntry() {
   return pool_.Alloc();
 }
 
+#ifndef __native_client__
 class UserHistoryPredictorSyncer : public Thread {
  public:
   enum RequestType {
@@ -320,9 +346,18 @@ class UserHistoryPredictorSyncer : public Thread {
   UserHistoryPredictor *predictor_;
   RequestType type_;
 };
+#endif  // __native_client__
 
-UserHistoryPredictor::UserHistoryPredictor()
-    : updated_(false), dic_(new DicCache(UserHistoryPredictor::cache_size())) {
+UserHistoryPredictor::UserHistoryPredictor(
+    const DictionaryInterface *dictionary,
+    const POSMatcher *pos_matcher,
+    const SuppressionDictionary *suppression_dictionary)
+    : dictionary_(dictionary),
+      pos_matcher_(pos_matcher),
+      suppression_dictionary_(suppression_dictionary),
+      predictor_name_("UserHistoryPredictor"),
+      updated_(false),
+      dic_(new DicCache(UserHistoryPredictor::cache_size())) {
   AsyncLoad();  // non-blocking
   // Load()  blocking version can be used if any
 }
@@ -343,6 +378,7 @@ uint16 UserHistoryPredictor::revert_id() {
   return kRevertId;
 }
 
+#ifndef __native_client__
 void UserHistoryPredictor::WaitForSyncer() {
   if (syncer_.get() != NULL) {
     syncer_->Join();
@@ -519,6 +555,48 @@ bool UserHistoryPredictor::ClearUnusedHistory() {
 
   return true;
 }
+#else  // __native_client__
+// TODO(horo): implement UserHistoryStorage for NaCl.
+void UserHistoryPredictor::WaitForSyncer() {
+}
+
+bool UserHistoryPredictor::CheckSyncerAndDelete() const {
+  return true;
+}
+
+bool UserHistoryPredictor::Sync() {
+  return true;
+}
+
+bool UserHistoryPredictor::Reload() {
+  return true;
+}
+
+bool UserHistoryPredictor::AsyncLoad() {
+  return true;
+}
+
+bool UserHistoryPredictor::AsyncSave() {
+  return true;
+}
+
+bool UserHistoryPredictor::Load() {
+  return true;
+}
+
+bool UserHistoryPredictor::Save() {
+  return true;
+}
+
+bool UserHistoryPredictor::ClearAllHistory() {
+  return true;
+}
+
+bool UserHistoryPredictor::ClearUnusedHistory() {
+  return true;
+}
+#endif  // __native_client__
+
 
 // return true if prev_entry has a next_fp link to entry
 // static
@@ -555,23 +633,21 @@ string UserHistoryPredictor::GetRomanMisspelledKey(
 
 // static
 bool UserHistoryPredictor::MaybeRomanMisspelledKey(const string &key) {
-  const char *begin = key.data();
-  const char *end = key.data() + key.size();
   int num_alpha = 0;
   int num_hiragana = 0;
   int num_unknown = 0;
-  while (begin < end) {
-    size_t mblen = 0;
-    const char32 w = Util::UTF8ToUCS4(begin, end, &mblen);
-    begin += mblen;
+  for (ConstChar32Iterator iter(key); !iter.Done(); iter.Next()) {
+    const char32 w = iter.Get();
     const Util::ScriptType type = Util::GetScriptType(w);
     if (type == Util::HIRAGANA || w == 0x30FC) {  // "ー".
       ++num_hiragana;
       continue;
-    } else if (type == Util::UNKNOWN_SCRIPT && num_unknown <= 0) {
+    }
+    if (type == Util::UNKNOWN_SCRIPT && num_unknown <= 0) {
       ++num_unknown;
       continue;
-    } else if (type == Util::ALPHABET && num_alpha <= 0) {
+    }
+    if (type == Util::ALPHABET && num_alpha <= 0) {
       ++num_alpha;
       continue;
     }
@@ -889,6 +965,12 @@ bool UserHistoryPredictor::LookupEntry(
 }
 
 bool UserHistoryPredictor::Predict(Segments *segments) const {
+  ConversionRequest default_request;
+  return PredictForRequest(default_request, segments);
+}
+
+bool UserHistoryPredictor::PredictForRequest(const ConversionRequest &request,
+                                             Segments *segments) const {
   if (!CheckSyncerAndDelete()) {
     LOG(WARNING) << "Syncer is running";
     return false;
@@ -920,7 +1002,7 @@ bool UserHistoryPredictor::Predict(Segments *segments) const {
     return false;
   }
 
-  bool zero_query_suggestion = false;
+  const bool zero_query_suggestion = GET_REQUEST(zero_query_suggestion);
   const string &input_key = segments->conversion_segment(0).key();
   if (segments->request_type() == Segments::SUGGESTION &&
       !zero_query_suggestion &&
@@ -942,7 +1024,7 @@ bool UserHistoryPredictor::Predict(Segments *segments) const {
   }
 
   EntryPriorityQueue results;
-  GetResultsFromHistoryDictionary(*segments, prev_entry, &results);
+  GetResultsFromHistoryDictionary(request, *segments, prev_entry, &results);
   if (results.size() == 0) {
     VLOG(2) << "no prefix match candiate is found.";
     return false;
@@ -997,6 +1079,7 @@ const UserHistoryPredictor::Entry *UserHistoryPredictor::LookupPrevEntry(
 }
 
 void UserHistoryPredictor::GetResultsFromHistoryDictionary(
+    const ConversionRequest &request,
     const Segments &segments, const Entry *prev_entry,
     EntryPriorityQueue *results) const {
   DCHECK(results);
@@ -1028,7 +1111,7 @@ void UserHistoryPredictor::GetResultsFromHistoryDictionary(
   string input_key;
   string base_key;
   scoped_ptr<Trie<string> > expanded(NULL);
-  GetInputKeyFromSegments(segments, &input_key, &base_key, &expanded);
+  GetInputKeyFromSegments(request, segments, &input_key, &base_key, &expanded);
 
   int trial = 0;
   for (const DicElement *elm = dic_->Head(); elm != NULL; elm = elm->next) {
@@ -1060,22 +1143,23 @@ void UserHistoryPredictor::GetResultsFromHistoryDictionary(
 
 // static
 void UserHistoryPredictor::GetInputKeyFromSegments(
-    const Segments &segments, string *input_key, string *base,
+    const ConversionRequest &request, const Segments &segments,
+    string *input_key, string *base,
     scoped_ptr<Trie<string> > *expanded) {
   DCHECK(input_key);
   DCHECK(base);
   DCHECK_GE(segments.conversion_segments_size(), 0);
 
-  if (segments.composer() == NULL ||
+  if (!request.has_composer() ||
       !FLAGS_enable_expansion_for_user_history_predictor) {
     *input_key = segments.conversion_segment(0).key();
     *base = segments.conversion_segment(0).key();
     return;
   }
 
-  segments.composer()->GetStringForPreedit(input_key);
+  request.composer().GetStringForPreedit(input_key);
   set<string> expanded_set;
-  segments.composer()->GetQueriesForPrediction(base, &expanded_set);
+  request.composer().GetQueriesForPrediction(base, &expanded_set);
   if (expanded_set.size() > 0) {
     expanded->reset(new Trie<string>);
     for (set<string>::const_iterator itr = expanded_set.begin();
@@ -1151,7 +1235,7 @@ bool UserHistoryPredictor::InsertCandidates(bool zero_query_suggestion,
       candidate->description = description;
       candidate->attributes |= Segment::Candidate::NO_EXTRA_DESCRIPTION;
     } else {
-      VariantsRewriter::SetDescriptionForPrediction(candidate);
+      VariantsRewriter::SetDescriptionForPrediction(*pos_matcher_, candidate);
     }
   }
 
@@ -1204,12 +1288,10 @@ void UserHistoryPredictor::InsertNextEntry(
   target_next_entry->CopyFrom(next_entry);
 }
 
-// static
-bool UserHistoryPredictor::IsValidEntry(const Entry &entry) {
+bool UserHistoryPredictor::IsValidEntry(const Entry &entry) const {
   return !entry.removed() &&
       entry.entry_type() == Entry::DEFAULT_ENTRY &&
-      !SuppressionDictionary::GetSuppressionDictionary()->SuppressEntry(
-          entry.key(), entry.value());
+      !suppression_dictionary_->SuppressEntry(entry.key(), entry.value());
 }
 
 void UserHistoryPredictor::InsertEvent(EntryType type) {
@@ -1625,6 +1707,9 @@ bool UserHistoryPredictor::IsValidSuggestion(
   if (entry.bigram_boost()) {
     return true;
   }
+  // when zero_query_suggestion is true, that means that
+  // predictor is running on mobile device. In this case,
+  // make the behavior more aggressive.
   if (is_zero_query_suggestion) {
     return true;
   }
@@ -1662,4 +1747,5 @@ uint32 UserHistoryPredictor::cache_size() {
 uint32 UserHistoryPredictor::max_next_entries_size() {
   return kMaxNextEntriesSize;
 }
+
 }  // namespace mozc

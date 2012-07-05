@@ -37,10 +37,12 @@
 #include "base/util.h"
 #include "config/config_handler.h"
 #include "config/config.pb.h"
+#include "converter/conversion_request.h"
 #include "converter/segments.h"
 #include "rewriter/rewriter_interface.h"
 #include "rewriter/embedded_dictionary.h"
 #include "session/commands.pb.h"
+#include "session/request_handler.h"
 
 namespace mozc {
 
@@ -157,10 +159,14 @@ SingleKanjiRewriter::SingleKanjiRewriter() {}
 SingleKanjiRewriter::~SingleKanjiRewriter() {}
 
 int SingleKanjiRewriter::capability() const {
+  if (GET_REQUEST(mixed_conversion)) {
+    return RewriterInterface::ALL;
+  }
   return RewriterInterface::CONVERSION;
 }
 
-bool SingleKanjiRewriter::Rewrite(Segments *segments) const {
+bool SingleKanjiRewriter::Rewrite(const ConversionRequest &request,
+                                  Segments *segments) const {
   if (!GET_CONFIG(use_single_kanji_conversion)) {
     VLOG(2) << "no use_single_kanji_conversion";
     return false;

@@ -45,8 +45,10 @@
 #include "base/util.h"
 #include "config/config_handler.h"
 #include "config/config.pb.h"
+#include "converter/conversion_request.h"
 #include "converter/segments.h"
 #include "session/commands.pb.h"
+#include "session/request_handler.h"
 
 namespace mozc {
 
@@ -1247,10 +1249,14 @@ DateRewriter::DateRewriter() {}
 DateRewriter::~DateRewriter() {}
 
 int DateRewriter::capability() const {
+  if (GET_REQUEST(mixed_conversion)) {
+    return RewriterInterface::ALL;
+  }
   return RewriterInterface::CONVERSION;
 }
 
-bool DateRewriter::Rewrite(Segments *segments) const {
+bool DateRewriter::Rewrite(const ConversionRequest &request,
+                           Segments *segments) const {
   if (!GET_CONFIG(use_date_conversion)) {
     VLOG(2) << "no use_date_conversion";
     return false;

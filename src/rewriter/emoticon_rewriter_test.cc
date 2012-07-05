@@ -32,10 +32,12 @@
 #include "base/util.h"
 #include "config/config_handler.h"
 #include "config/config.pb.h"
+#include "converter/conversion_request.h"
 #include "converter/segments.h"
 #include "rewriter/emoticon_rewriter.h"
 #include "testing/base/public/gunit.h"
 #include "session/commands.pb.h"
+#include "session/request_handler.h"
 
 DECLARE_string(test_tmpdir);
 
@@ -82,6 +84,7 @@ class EmoticonRewriterTest : public testing::Test {
 
 TEST_F(EmoticonRewriterTest, BasicTest) {
   EmoticonRewriter emoticon_rewriter;
+  const ConversionRequest request;
 
   {
     config::Config input;
@@ -91,30 +94,30 @@ TEST_F(EmoticonRewriterTest, BasicTest) {
 
     Segments segments;
     AddSegment("test", "test", &segments);
-    emoticon_rewriter.Rewrite(&segments);
+    emoticon_rewriter.Rewrite(request, &segments);
     EXPECT_FALSE(HasEmoticon(segments));
 
     // "かお"
     AddSegment("\xE3\x81\x8B\xE3\x81\x8A", "test", &segments);
-    emoticon_rewriter.Rewrite(&segments);
+    emoticon_rewriter.Rewrite(request, &segments);
     EXPECT_TRUE(HasEmoticon(segments));
 
     // "かおもじ"
     AddSegment("\xE3\x81\x8B\xE3\x81\x8A\xE3\x82\x82\xE3\x81\x98",
                "test", &segments);
-    emoticon_rewriter.Rewrite(&segments);
+    emoticon_rewriter.Rewrite(request, &segments);
     EXPECT_TRUE(HasEmoticon(segments));
 
     // "にこにこ"
     AddSegment("\xE3\x81\xAB\xE3\x81\x93\xE3\x81\xAB\xE3\x81\x93",
                "test", &segments);
-    emoticon_rewriter.Rewrite(&segments);
+    emoticon_rewriter.Rewrite(request, &segments);
     EXPECT_TRUE(HasEmoticon(segments));
 
     // "ふくわらい"
     AddSegment("\xE3\x81\xB5\xE3\x81\x8F\xE3\x82\x8F\xE3\x82\x89\xE3\x81\x84",
                "test", &segments);
-    emoticon_rewriter.Rewrite(&segments);
+    emoticon_rewriter.Rewrite(request, &segments);
     EXPECT_TRUE(HasEmoticon(segments));
   }
 
@@ -126,33 +129,45 @@ TEST_F(EmoticonRewriterTest, BasicTest) {
 
     Segments segments;
     AddSegment("test", "test", &segments);
-    emoticon_rewriter.Rewrite(&segments);
+    emoticon_rewriter.Rewrite(request, &segments);
     EXPECT_FALSE(HasEmoticon(segments));
 
     // "かお"
     AddSegment("\xE3\x81\x8B\xE3\x81\x8A", "test", &segments);
-    emoticon_rewriter.Rewrite(&segments);
+    emoticon_rewriter.Rewrite(request, &segments);
     EXPECT_FALSE(HasEmoticon(segments));
 
     // "かおもじ"
     AddSegment("\xE3\x81\x8B\xE3\x81\x8A\xE3\x82\x82\xE3\x81\x98",
                "test", &segments);
-    emoticon_rewriter.Rewrite(&segments);
+    emoticon_rewriter.Rewrite(request, &segments);
     EXPECT_FALSE(HasEmoticon(segments));
 
     // "にこにこ"
     AddSegment("\xE3\x81\xAB\xE3\x81\x93\xE3\x81\xAB\xE3\x81\x93",
                "test", &segments);
-    emoticon_rewriter.Rewrite(&segments);
+    emoticon_rewriter.Rewrite(request, &segments);
     EXPECT_FALSE(HasEmoticon(segments));
 
     // "ふくわらい"
     AddSegment("\xE3\x81\xB5\xE3\x81\x8F\xE3\x82\x8F\xE3\x82\x89\xE3\x81\x84",
                "test", &segments);
-    emoticon_rewriter.Rewrite(&segments);
+    emoticon_rewriter.Rewrite(request, &segments);
     EXPECT_FALSE(HasEmoticon(segments));
   }
 }
 
+TEST_F(EmoticonRewriterTest, MobileEnvironmentTest) {
+  commands::Request input;
+  EmoticonRewriter rewriter;
+
+  input.set_mixed_conversion(true);
+  commands::RequestHandler::SetRequest(input);
+  EXPECT_EQ(RewriterInterface::ALL, rewriter.capability());
+
+  input.set_mixed_conversion(false);
+  commands::RequestHandler::SetRequest(input);
+  EXPECT_EQ(RewriterInterface::CONVERSION, rewriter.capability());
+}
 
 }  // namespace mozc

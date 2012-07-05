@@ -164,6 +164,8 @@ TEST(KeyMap, GetCommandKeyStub) {
 TEST(KeyMap, GetKeyMapFileName) {
   EXPECT_STREQ("system://atok.tsv",
                KeyMapManager::GetKeyMapFileName(config::Config::ATOK));
+  EXPECT_STREQ("system://mobile.tsv",
+               KeyMapManager::GetKeyMapFileName(config::Config::MOBILE));
   EXPECT_STREQ("system://ms-ime.tsv",
                KeyMapManager::GetKeyMapFileName(config::Config::MSIME));
   EXPECT_STREQ("system://kotoeri.tsv",
@@ -228,6 +230,10 @@ TEST(KeyMap, LoadStreamWithErrors) {
   EXPECT_TRUE(manager.LoadStreamWithErrors(is.get(), &errors));
   EXPECT_TRUE(errors.empty());
 
+  errors.clear();
+  is.reset(ConfigFileStream::LegacyOpen("system://mobile.tsv"));
+  EXPECT_TRUE(manager.LoadStreamWithErrors(is.get(), &errors));
+  EXPECT_TRUE(errors.empty());
 }
 
 TEST(KeyMap, GetName) {
@@ -298,253 +304,6 @@ TEST(KeyMap, DirectModeDoesNotSupportInsertSpace) {
   EXPECT_TRUE(names.end() == names.find("InsertAlternateSpace"));
   EXPECT_TRUE(names.end() == names.find("InsertHalfSpace"));
   EXPECT_TRUE(names.end() == names.find("InsertFullSpace"));
-}
-
-TEST(KeyMap, AdditionalKeymapsForChromeOS) {
-  // Additional MSIME key maps for Chrome OS
-  KeyMapManager *manager =
-      KeyMapFactory::GetKeyMapManager(config::Config::MSIME);
-
-  // Precomposition state
-  PrecompositionState::Commands fund_command;
-  commands::KeyEvent key_event;
-  KeyParser::ParseKey("Ctrl Eisu", &key_event);
-  EXPECT_TRUE(manager->GetCommandPrecomposition(key_event, &fund_command));
-  EXPECT_EQ(PrecompositionState::TOGGLE_ALPHANUMERIC_MODE, fund_command);
-
-  // Composition state
-  CompositionState::Commands composition_command;
-  KeyParser::ParseKey("Ctrl 0", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::CONVERT_TO_HALF_ALPHANUMERIC,
-            composition_command);
-
-  KeyParser::ParseKey("Ctrl 2", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::CONVERT_WITHOUT_HISTORY, composition_command);
-
-  KeyParser::ParseKey("Ctrl 6", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::CONVERT_TO_HIRAGANA, composition_command);
-
-  KeyParser::ParseKey("Ctrl 7", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::CONVERT_TO_FULL_KATAKANA, composition_command);
-
-  KeyParser::ParseKey("Ctrl 8", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::CONVERT_TO_HALF_WIDTH, composition_command);
-
-  KeyParser::ParseKey("Ctrl 9", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::CONVERT_TO_FULL_ALPHANUMERIC,
-            composition_command);
-
-  KeyParser::ParseKey("Ctrl Eisu", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::TOGGLE_ALPHANUMERIC_MODE, composition_command);
-
-  // Conversion state
-  ConversionState::Commands conv_command;
-  KeyParser::ParseKey("Ctrl 0", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::CONVERT_TO_HALF_ALPHANUMERIC, conv_command);
-
-  KeyParser::ParseKey("Ctrl 6", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::CONVERT_TO_HIRAGANA, conv_command);
-
-  KeyParser::ParseKey("Ctrl 7", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::CONVERT_TO_FULL_KATAKANA, conv_command);
-
-  KeyParser::ParseKey("Ctrl 8", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::CONVERT_TO_HALF_WIDTH, conv_command);
-
-  KeyParser::ParseKey("Ctrl 9", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::CONVERT_TO_FULL_ALPHANUMERIC, conv_command);
-
-  KeyParser::ParseKey("Ctrl Eisu", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::TOGGLE_ALPHANUMERIC_MODE, conv_command);
-
-
-  // Additional Kotoeri key maps for Chrome OS
-  manager = KeyMapFactory::GetKeyMapManager(config::Config::KOTOERI);
-
-  // Precomposition state
-  KeyParser::ParseKey("Ctrl Eisu", &key_event);
-  EXPECT_TRUE(manager->GetCommandPrecomposition(key_event, &fund_command));
-  EXPECT_EQ(PrecompositionState::TOGGLE_ALPHANUMERIC_MODE, fund_command);
-
-  // Composition state
-  KeyParser::ParseKey("Ctrl 0", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::TRANSLATE_HALF_ASCII, composition_command);
-
-  KeyParser::ParseKey("Ctrl 2", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::CONVERT_WITHOUT_HISTORY, composition_command);
-
-  KeyParser::ParseKey("Ctrl 6", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::DISPLAY_AS_HIRAGANA, composition_command);
-
-  KeyParser::ParseKey("Ctrl 7", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::DISPLAY_AS_FULL_KATAKANA, composition_command);
-
-  KeyParser::ParseKey("Ctrl 8", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::TRANSLATE_HALF_WIDTH, composition_command);
-
-  KeyParser::ParseKey("Ctrl 9", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::TRANSLATE_FULL_ASCII, composition_command);
-
-  KeyParser::ParseKey("Ctrl Eisu", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::TOGGLE_ALPHANUMERIC_MODE, composition_command);
-
-  KeyParser::ParseKey("Ctrl Option 1", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::DISPLAY_AS_HIRAGANA, composition_command);
-
-  KeyParser::ParseKey("Ctrl Option 2", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::DISPLAY_AS_FULL_KATAKANA, composition_command);
-
-  KeyParser::ParseKey("Ctrl Option 3", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::TRANSLATE_FULL_ASCII, composition_command);
-
-  KeyParser::ParseKey("Ctrl Option 4", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::TRANSLATE_HALF_WIDTH, composition_command);
-
-  KeyParser::ParseKey("Ctrl Option 5", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::TRANSLATE_HALF_ASCII, composition_command);
-
-  // Conversion state
-  KeyParser::ParseKey("Ctrl 0", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::TRANSLATE_HALF_ASCII, conv_command);
-
-  KeyParser::ParseKey("Ctrl 6", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::DISPLAY_AS_HIRAGANA, conv_command);
-
-  KeyParser::ParseKey("Ctrl 7", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::DISPLAY_AS_FULL_KATAKANA, conv_command);
-
-  KeyParser::ParseKey("Ctrl 8", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::TRANSLATE_HALF_WIDTH, conv_command);
-
-  KeyParser::ParseKey("Ctrl 9", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::TRANSLATE_FULL_ASCII, conv_command);
-
-  KeyParser::ParseKey("Ctrl Option 1", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::DISPLAY_AS_HIRAGANA, conv_command);
-
-  KeyParser::ParseKey("Ctrl Option 2", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::DISPLAY_AS_FULL_KATAKANA, conv_command);
-
-  KeyParser::ParseKey("Ctrl Option 3", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::TRANSLATE_FULL_ASCII, conv_command);
-
-  KeyParser::ParseKey("Ctrl Option 4", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::TRANSLATE_HALF_WIDTH, conv_command);
-
-  KeyParser::ParseKey("Ctrl Option 5", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::TRANSLATE_HALF_ASCII, conv_command);
-
-
-  // Additional ATOK key maps for Chrome OS
-  manager = KeyMapFactory::GetKeyMapManager(config::Config::ATOK);
-
-  // Precomposition state
-  KeyParser::ParseKey("Ctrl 0", &key_event);
-  EXPECT_TRUE(manager->GetCommandPrecomposition(key_event, &fund_command));
-  EXPECT_EQ(PrecompositionState::TOGGLE_ALPHANUMERIC_MODE, fund_command);
-
-  KeyParser::ParseKey("Ctrl Eisu", &key_event);
-  EXPECT_TRUE(manager->GetCommandPrecomposition(key_event, &fund_command));
-  EXPECT_EQ(PrecompositionState::TOGGLE_ALPHANUMERIC_MODE, fund_command);
-
-  // Composition state
-  KeyParser::ParseKey("Ctrl 0", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::CONVERT_TO_HALF_ALPHANUMERIC,
-            composition_command);
-
-  KeyParser::ParseKey("Ctrl 2", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::CONVERT_WITHOUT_HISTORY, composition_command);
-
-  KeyParser::ParseKey("Ctrl 6", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::CONVERT_TO_HIRAGANA, composition_command);
-
-  KeyParser::ParseKey("Ctrl 7", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::CONVERT_TO_FULL_KATAKANA, composition_command);
-
-  KeyParser::ParseKey("Ctrl 8", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::CONVERT_TO_HALF_WIDTH, composition_command);
-
-  KeyParser::ParseKey("Ctrl 9", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::CONVERT_TO_FULL_ALPHANUMERIC,
-            composition_command);
-
-  KeyParser::ParseKey("Ctrl Eisu", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::TOGGLE_ALPHANUMERIC_MODE, composition_command);
-
-  // Conversion state
-  KeyParser::ParseKey("Ctrl 0", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::CONVERT_TO_HALF_ALPHANUMERIC, conv_command);
-
-  KeyParser::ParseKey("Ctrl 6", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::CONVERT_TO_HIRAGANA, conv_command);
-
-  KeyParser::ParseKey("Ctrl 7", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::CONVERT_TO_FULL_KATAKANA, conv_command);
-
-  KeyParser::ParseKey("Ctrl 8", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::CONVERT_TO_HALF_WIDTH, conv_command);
-
-  KeyParser::ParseKey("Ctrl 9", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::CONVERT_TO_FULL_ALPHANUMERIC, conv_command);
-
-  KeyParser::ParseKey("Ctrl Eisu", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::TOGGLE_ALPHANUMERIC_MODE, conv_command);
-
-  KeyParser::ParseKey("Shift Down", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::CONVERT_NEXT_PAGE, conv_command);
-
-  KeyParser::ParseKey("Shift Up", &key_event);
-  EXPECT_TRUE(manager->GetCommandConversion(key_event, &conv_command));
-  EXPECT_EQ(ConversionState::CONVERT_PREV_PAGE, conv_command);
 }
 
 TEST(KeyMap, ShiftTabToConvertPrev) {
@@ -783,12 +542,6 @@ TEST(KeyMap, ShortcutKeysWithCapsLock_Issue5627459) {
   // "Ctrl CAPS h" means that Ctrl, Shift and H key are pressed.
   KeyParser::ParseKey("Ctrl CAPS h", &key_event);
   EXPECT_FALSE(manager->GetCommandComposition(key_event, &composition_command));
-
-  // "Ctrl CAPS 0" should be treated "Ctrl 0" as well.
-  KeyParser::ParseKey("Ctrl CAPS 0", &key_event);
-  EXPECT_TRUE(manager->GetCommandComposition(key_event, &composition_command));
-  EXPECT_EQ(CompositionState::CONVERT_TO_HALF_ALPHANUMERIC,
-            composition_command);
 }
 
 }  // namespace keymap

@@ -42,6 +42,7 @@
 
 #include "base/base.h"
 #include "base/const.h"
+#include "base/scoped_handle.h"
 #include "base/scoped_ptr.h"
 #include "base/util.h"
 #include "win32/base/imm_registrar.h"
@@ -52,8 +53,11 @@ namespace mozc {
 namespace win32 {
 namespace {
 // The registry key for the CUAS setting.
+// Note: We have the same values in base/win_util.cc
+// TODO(yukawa): Define these constants at the same place.
 const wchar_t kCUASKey[] = L"Software\\Microsoft\\CTF\\SystemShared";
 const wchar_t kCUASValueName[] = L"CUAS";
+
 
 bool GetDefaultLayout(LAYOUTORTIPPROFILE *profile) {
   vector<LAYOUTORTIPPROFILE> profiles;
@@ -82,29 +86,6 @@ bool GetDefaultLayout(LAYOUTORTIPPROFILE *profile) {
   }
 
   return false;
-}
-
-// Reads CUAS value in the registry keys and returns true if the value is set
-// to 1.
-// The CUAS value is read from 64 bit registry keys if KEY_WOW64_64KEY is
-// specified as |additional_regsam| and read from 32 bit registry keys if
-// KEY_WOW64_32KEY is specified.
-bool IsCuasEnabledInternal(REGSAM additional_regsam) {
-  REGSAM sam_desired = KEY_QUERY_VALUE | additional_regsam;
-  CRegKey key;
-  LONG result = key.Open(HKEY_LOCAL_MACHINE, kCUASKey, sam_desired);
-  if (ERROR_SUCCESS != result) {
-    LOG(ERROR) << "Cannot open HKEY_LOCAL_MACHINE\\Software\\Microsoft\\CTF\\"
-                  "SystemShared: "
-               << result;
-    return false;
-  }
-  DWORD cuas;
-  result = key.QueryDWORDValue(kCUASValueName, cuas);
-  if (ERROR_SUCCESS != result) {
-    LOG(ERROR) << "Failed to query CUAS value:" << result;
-  }
-  return (cuas == 1);
 }
 
 // The CUAS value is set to 64 bit registry keys if KEY_WOW64_64KEY is specified
@@ -228,21 +209,6 @@ bool ImeUtil::SetDefault() {
   return true;
 }
 
-bool ImeUtil::IsCuasEnabled() {
-  if (mozc::Util::IsVistaOrLater()) {
-    // CUAS is always enabled on Vista or later.
-    return true;
-  }
-
-  if (mozc::Util::IsWindowsX64()) {
-    // see both 64 bit and 32 bit registry keys
-    return IsCuasEnabledInternal(KEY_WOW64_64KEY) &&
-           IsCuasEnabledInternal(KEY_WOW64_32KEY);
-  } else {
-    return IsCuasEnabledInternal(0);
-  }
-}
-
 bool ImeUtil::SetCuasEnabled(bool enable) {
   if (mozc::Util::IsVistaOrLater()) {
     // No need to enable CUAS since it is always enabled on Vista or later.
@@ -305,6 +271,13 @@ bool ImeUtil::ActivateForCurrentSession() {
   }
   const HKL mozc_hkl = ::LoadKeyboardLayout(
       mozc_hkld.ToString().c_str(), KLF_ACTIVATE);
+
+
+  // Broadcasting WM_INPUTLANGCHANGEREQUEST so that existing process in the
+  // current session will change their input method to |hkl|. This mechanism
+  // also works against a HKL which is substituted by a TIP on Windows XP.
+  // Note: we have virtually the same code in uninstall_helper.cc too.
+  // TODO(yukawa): Make a common function around WM_INPUTLANGCHANGEREQUEST.
   DWORD recipients = BSM_APPLICATIONS;
   return (0 < ::BroadcastSystemMessage(
       BSF_POSTMESSAGE,
@@ -313,5 +286,7 @@ bool ImeUtil::ActivateForCurrentSession() {
       INPUTLANGCHANGE_SYSCHARSET,
       reinterpret_cast<LPARAM>(mozc_hkl)));
 }
+
+
 }  // namespace win32
 }  // namespace mozc

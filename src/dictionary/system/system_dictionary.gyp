@@ -32,6 +32,7 @@
     {
       'target_name': 'system_dictionary_codec',
       'type': 'static_library',
+      'toolsets': ['target', 'host'],
       'sources': [
         'codec.cc',
       ],
@@ -47,6 +48,9 @@
       ],
       'dependencies': [
         '../../base/base.gyp:base_core',
+        '../dictionary_base.gyp:pos_matcher',
+        '../../session/session_base.gyp:request_handler',
+        '../../session/session_base.gyp:session_protocol',
         '../file/dictionary_file.gyp:dictionary_file',
         '../rx/rx_storage.gyp:rbx_array',
         '../rx/rx_storage.gyp:rx_trie',
@@ -61,7 +65,7 @@
       ],
       'dependencies': [
         '../../base/base.gyp:base_core',
-        '../dictionary_base.gyp:gen_pos_matcher',
+        '../dictionary_base.gyp:gen_pos_matcher#host',
         '../file/dictionary_file.gyp:dictionary_file',
         '../rx/rx_storage.gyp:rx_trie',
         'system_dictionary_codec',
@@ -70,11 +74,14 @@
     {
       'target_name': 'system_dictionary_builder',
       'type': 'static_library',
+      'toolsets': ['target', 'host'],  # "target" is needed for test.
       'sources': [
         'system_dictionary_builder.cc',
       ],
       'dependencies': [
         '../../base/base.gyp:base_core',
+        '../../data_manager/data_manager.gyp:user_pos_manager',
+        '../dictionary_base.gyp:pos_matcher',
         '../dictionary_base.gyp:text_dictionary_loader',
         '../file/dictionary_file.gyp:codec',
         '../rx/rx_storage.gyp:rbx_array_builder',
@@ -105,6 +112,7 @@
       'dependencies': [
         '../../base/base.gyp:base_core',
         '../../dictionary/dictionary_base.gyp:install_dictionary_test_data',
+        '../../session/session_base.gyp:request_test_util',
         '../../testing/testing.gyp:gtest_main',
         'system_dictionary',
         'system_dictionary_builder',
@@ -121,6 +129,7 @@
       ],
       'dependencies': [
         '../../base/base.gyp:base_core',
+        '../../data_manager/data_manager.gyp:user_pos_manager',
         '../../testing/testing.gyp:gtest_main',
         'system_dictionary_builder',
         'value_dictionary',
@@ -138,6 +147,7 @@
       'dependencies': [
         'system_dictionary_builder',
         '../../base/base.gyp:base_core',
+        '../../data_manager/data_manager.gyp:user_pos_manager',
         '../../testing/testing.gyp:gtest_main',
       ],
       'variables': {

@@ -49,17 +49,31 @@
       'dependencies': [
         '../base/base.gyp:base',
         '../config/config.gyp:config_handler',
+        '../data_manager/data_manager.gyp:user_dictionary_manager',
         '../testing/testing.gyp:gtest_main',
         '../usage_stats/usage_stats.gyp:usage_stats',
         '../usage_stats/usage_stats.gyp:usage_stats_protocol',
         'dictionary.gyp:dictionary',
         'dictionary.gyp:dictionary_mock',
-        'dictionary.gyp:suppression_dictionary',
-        'dictionary.gyp:user_dictionary',
+        'dictionary_base.gyp:suppression_dictionary',
+        'dictionary_base.gyp:user_dictionary',
+        'dictionary_base.gyp:pos_matcher',
       ],
       'variables': {
         'test_size': 'small',
       },
+      'conditions': [
+        ['use_separate_connection_data==1', {
+          'dependencies': [
+            '../converter/converter.gyp:connection_data_injected_environment',
+          ],
+        }],
+        ['use_separate_dictionary==1', {
+          'dependencies': [
+            'dictionary.gyp:dictionary_data_injected_environment',
+          ],
+        }],
+      ],
     },
     {
       'target_name': 'text_dictionary_loader_test',
@@ -69,6 +83,7 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
+        '../data_manager/data_manager.gyp:user_pos_manager',
         '../testing/testing.gyp:gtest_main',
         'dictionary_base.gyp:text_dictionary_loader',
       ],

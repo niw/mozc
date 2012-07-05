@@ -38,19 +38,22 @@
 
 namespace mozc {
 
+class ConversionRequest;
+class ConverterInterface;
 class Segment;
 class Segments;
 
-class SymbolRewriter: public RewriterInterface  {
+class SymbolRewriter : public RewriterInterface  {
  public:
-  SymbolRewriter();
+  explicit SymbolRewriter(const ConverterInterface *parent_converter);
   virtual ~SymbolRewriter();
 
   virtual int capability() const;
 
-  virtual bool Rewrite(Segments *segments) const;
+  virtual bool Rewrite(const ConversionRequest &request,
+                       Segments *segments) const;
 
-private:
+ private:
   FRIEND_TEST(SymbolRewriterTest, TriggerRewriteEntireTest);
   FRIEND_TEST(SymbolRewriterTest, TriggerRewriteEachTest);
   FRIEND_TEST(SymbolRewriterTest, TriggerRewriteDescriptionTest);
@@ -87,11 +90,15 @@ private:
       size_t size, Segment *segment);
 
   // Insert symbols using connected all segments.
-  static bool RewriteEntireCandidate(Segments *segments);
+  bool RewriteEntireCandidate(const ConversionRequest &request,
+                              Segments *segments) const;
 
   // Insert symbols using single segment.
   static bool RewriteEachCandidate(Segments *segments);
+
+  const ConverterInterface *parent_converter_;
 };
+
 }  // namespace mozc
 
 #endif  // MOZC_REWRITER_SYMBOL_REWRITER_H_

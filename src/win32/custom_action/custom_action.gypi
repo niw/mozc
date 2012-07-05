@@ -37,9 +37,7 @@
     '../../base/base.gyp:base',
     '../../client/client.gyp:client',
     '../../config/config.gyp:stats_config_util',
-    '../../languages/japanese/japanese.gyp:language_dependent_spec_japanese',
-    '../../languages/languages.gyp:global_language_spec',
-    '../../renderer/renderer.gyp:renderer',
+    '../../renderer/renderer.gyp:renderer_client',
     '../../server/server.gyp:cache_service_manager',
     '../base/win32_base.gyp:ime_base',
     'gen_custom_action_resource_header',
@@ -47,6 +45,10 @@
   'msvs_settings': {
     'VCLinkerTool': {
       'ModuleDefinitionFile': '<(gen_out_dir)/custom_actions.def',
+      'AdditionalDependencies': [
+        'crypt32.lib',  # used in 'custom_action.cc'
+        'msi.lib',      # used in 'custom_action.cc'
+      ],
     },
   },
   'actions': [

@@ -36,6 +36,7 @@
     {
       'target_name': 'base',
       'type': 'static_library',
+      'toolsets': ['host', 'target'],
       'sources': [
         'clock_mock.cc',
         'cpu_stats.cc',
@@ -63,6 +64,11 @@
             'mac_process.mm',
             'mac_util.mm',
           ],
+          'link_settings': {
+            'libraries': [
+              '/usr/lib/libiconv.dylib',  # used in iconv.cc
+            ],
+          },
           'conditions': [
             ['branding=="GoogleJapaneseInput"', {
               'sources': [
@@ -76,6 +82,16 @@
             'win_sandbox.cc',
             'win_util.cc',
           ],
+          'link_settings': {
+            'msvs_settings': {
+              'VCLinkerTool': {
+                'AdditionalDependencies': [
+                  'aux_ulib.lib',  # used in 'win_util.cc'
+                  'propsys.lib',   # used in 'win_util.cc'
+                ],
+              },
+            },
+          },
           'conditions': [
             ['branding=="GoogleJapaneseInput"', {
               'dependencies': [
@@ -84,11 +100,41 @@
             }],
           ],
         }],
+        # When the target platform is 'Android', build settings are currently
+        # shared among *host* binaries and *target* binaries. This means that
+        # you should implement *host* binaries by using limited libraries
+        # which are also available on NDK.
+        ['OS=="linux" and target_platform!="Android" and '
+         'not (target_platform=="NaCl" and _toolset=="target")', {
+          'defines': [
+            'HAVE_LIBRT=1',
+          ],
+          'link_settings': {
+            'libraries': [
+              '-lrt',  # used in util.cc for Util::GetTicks()/GetFrequency()
+            ],
+          },
+        }],
+        ['target_platform=="Android"', {
+          'sources!': [
+            'iconv.cc',
+            'process.cc',
+          ],
+        }],
+        ['target_platform=="NaCl" and _toolset=="target"', {
+          'sources!': [
+            'crash_report_handler.cc',
+            'crash_report_util.cc',
+            'process.cc',
+            'process_mutex.cc',
+          ],
+        }],
       ],
     },
     {
       'target_name': 'base_core',
       'type': 'static_library',
+      'toolsets': ['host', 'target'],
       'sources': [
         '<(gen_out_dir)/character_set.h',
         '<(gen_out_dir)/version_def.h',
@@ -104,13 +150,27 @@
         'version.cc',
       ],
       'dependencies': [
-        'gen_character_set',
-        'gen_version_def',
+        'gen_character_set#host',
+        'gen_version_def#host',
+      ],
+      'conditions': [
+        ['OS=="win"', {
+          'link_settings': {
+            'msvs_settings': {
+              'VCLinkerTool': {
+                'AdditionalDependencies': [
+                  'version.lib',  # used in 'util.cc'
+                ],
+              },
+            },
+          },
+        }],
       ],
     },
     {
       'target_name': 'gen_character_set',
       'type': 'none',
+      'toolsets': ['host'],
       'actions': [
         {
           'action_name': 'gen_character_set',
@@ -152,10 +212,60 @@
       'dependencies': [
         'base',
       ],
+      'conditions': [
+        ['OS=="win"', {
+          'link_settings': {
+            'msvs_settings': {
+              'VCLinkerTool': {
+                'AdditionalDependencies': [
+                  'crypt32.lib',  # used in 'encryptor.cc'
+                ],
+              },
+            },
+          },
+        }],
+        ['OS=="mac"', {
+          'defines': [
+            'HAVE_OPENSSL=1',
+          ],
+          'link_settings': {
+            'libraries': [
+              '/usr/lib/libcrypto.dylib',  # used in 'encryptor.cc'
+              '/usr/lib/libssl.dylib',     # used in 'encryptor.cc'
+            ],
+          }
+        }],
+        ['OS=="linux" and target_platform!="Android"', {
+          'cflags': [
+            '<!@(<(pkg_config_command) --cflags-only-other openssl)',
+          ],
+          'defines': [
+            'HAVE_OPENSSL=1',
+          ],
+          'include_dirs': [
+            '<!@(<(pkg_config_command) --cflags-only-I openssl)',
+          ],
+          'link_settings': {
+            'ldflags': [
+              '<!@(<(pkg_config_command) --libs-only-L openssl)',
+            ],
+            'libraries': [
+              '<!@(<(pkg_config_command) --libs-only-l openssl)',
+            ],
+          },
+        }],
+        ['target_platform=="NaCl" and _toolset=="target"', {
+          'sources!': [
+            'encryptor.cc',
+            'password_manager.cc',
+          ],
+        }],
+      ],
     },
     {
       'target_name': 'gen_version_def',
       'type': 'none',
+      'toolsets': ['host'],
       'actions': [
         {
           'action_name': 'gen_version_def',
@@ -172,7 +282,6 @@
             '--version_file', '../mozc_version.txt',
             '--input', 'version_def_template.h',
             '--output', '<(gen_out_dir)/version_def.h',
-            '--target_platform', '<(target_platform)',
           ],
         },
       ],
@@ -185,71 +294,49 @@
         'config_file_stream.cc',
       ],
       'dependencies': [
-        'gen_config_file_stream_data',
+        'gen_config_file_stream_data#host',
       ],
     },
     {
       'target_name': 'gen_config_file_stream_data',
       'type': 'none',
+      'toolsets': ['host'],
       'actions': [
         {
           'action_name': 'gen_config_file_stream_data',
-          'variables': {
-            'input_files': [
-              '../data/keymap/atok.tsv',
-              '../data/keymap/kotoeri.tsv',
-              '../data/keymap/mobile.tsv',
-              '../data/keymap/ms-ime.tsv',
-              '../data/preedit/kana.tsv',
-              '../data/preedit/hiragana-romanji.tsv',
-              '../data/preedit/romanji-hiragana.tsv',
-              '../data/preedit/12keys-hiragana.tsv',
-              '../data/preedit/12keys-halfwidthascii.tsv',
-              '../data/preedit/12keys-number.tsv',
-              '../data/preedit/flick-halfwidthascii.tsv',
-              '../data/preedit/flick-hiragana.tsv',
-              '../data/preedit/flick-number.tsv',
-              '../data/preedit/toggle_flick-hiragana.tsv',
-              '../data/preedit/toggle_flick-halfwidthascii.tsv',
-              '../data/preedit/toggle_flick-number.tsv',
-              '../data/preedit/qwerty_mobile-hiragana.tsv',
-              '../data/preedit/qwerty_mobile-hiragana-number.tsv',
-              '../data/preedit/qwerty_mobile-halfwidthascii.tsv',
-            ],
-          },
           'inputs': [
-            '<@(input_files)',
+            '../data/keymap/atok.tsv',
+            '../data/keymap/kotoeri.tsv',
+            '../data/keymap/mobile.tsv',
+            '../data/keymap/ms-ime.tsv',
+            '../data/preedit/12keys-halfwidthascii.tsv',
+            '../data/preedit/12keys-hiragana.tsv',
+            '../data/preedit/12keys-number.tsv',
+            '../data/preedit/flick-halfwidthascii.tsv',
+            '../data/preedit/flick-hiragana.tsv',
+            '../data/preedit/flick-number.tsv',
+            '../data/preedit/hiragana-romanji.tsv',
+            '../data/preedit/kana.tsv',
+            '../data/preedit/qwerty_mobile-halfwidthascii.tsv',
+            '../data/preedit/qwerty_mobile-hiragana-number.tsv',
+            '../data/preedit/qwerty_mobile-hiragana.tsv',
+            '../data/preedit/romanji-hiragana.tsv',
+            '../data/preedit/toggle_flick-halfwidthascii.tsv',
+            '../data/preedit/toggle_flick-hiragana.tsv',
+            '../data/preedit/toggle_flick-number.tsv',
           ],
           'outputs': [
             '<(gen_out_dir)/config_file_stream_data.h',
           ],
           'action': [
-            'python', '../build_tools/redirect.py',
-            '<(gen_out_dir)/config_file_stream_data.h',
-            '<(mozc_build_tools_dir)/gen_config_file_stream_data_main',
-            '<@(input_files)'
+            'python', 'gen_config_file_stream_data.py',
+            '--output', '<@(_outputs)',
+            '<@(_inputs)',
+          ],
+          'dependencies': [
+            'gen_config_file_stream_data.py',
           ],
         },
-      ],
-    },
-    {
-      'target_name': 'gen_config_file_stream_data_main',
-      'type': 'executable',
-      'sources': [
-        'gen_config_file_stream_data_main.cc',
-      ],
-      'dependencies': [
-        'base',
-      ],
-    },
-    {
-      'target_name': 'install_gen_config_file_stream_data_main',
-      'type': 'none',
-      'variables': {
-        'bin_name': 'gen_config_file_stream_data_main'
-      },
-      'includes' : [
-        '../gyp/install_build_tool.gypi',
       ],
     },
   ],
