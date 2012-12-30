@@ -927,7 +927,6 @@ def BuildOnMac(options, targets, original_directory_name):
               '-parallelizeTargets',
               '-sdk', 'macosx',
               'GCC_SYMBOLS_PRIVATE_EXTERN=1',
-              'GCC_VERSION=com.apple.compilers.llvmgcc42',
               'BUILD_WITH_GYP=1'])
 
 
