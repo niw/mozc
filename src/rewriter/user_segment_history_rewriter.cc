@@ -70,10 +70,6 @@ const char kFileName[] = "user://segment.db";
 
 LRUStorage *g_lru_storage = NULL;
 
-// Temporarily disable unused private field warning against
-// FeatureValue::reserved_ from Clang.
-MOZC_CLANG_PUSH_WARNING();
-MOZC_CLANG_DISABLE_WARNING(unused-private-field);
 class FeatureValue {
  public:
   FeatureValue() : feature_type_(1), reserved_(0) {}
@@ -85,7 +81,6 @@ class FeatureValue {
   uint32 feature_type_ : 1;   // always 1
   uint32 reserved_     : 31;  // this area is reserved for future
 };
-MOZC_CLANG_POP_WARNING();
 
 bool IsPunctuationInternal(const string &str) {
   // return (str == "。" || str == "｡" ||
@@ -98,10 +93,6 @@ bool IsPunctuationInternal(const string &str) {
           str == "\xEF\xBC\x8E"  || str == ".");
 }
 
-// Temporarily disable unused private field warning against
-// KeyTriggerValue::reserved_ from Clang.
-MOZC_CLANG_PUSH_WARNING();
-MOZC_CLANG_DISABLE_WARNING(unused-private-field);
 class KeyTriggerValue {
  public:
   KeyTriggerValue()
@@ -125,7 +116,6 @@ class KeyTriggerValue {
   // want to encode POS, freq etc.
   uint32 candidates_size_ : 8;   // candidate size
 };
-MOZC_CLANG_POP_WARNING();
 
 class ScoreTypeCompare {
  public:
