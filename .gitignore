@@ -6,3 +6,4 @@
 /src/protobuf/files
 /src/third_party/*
 /src/out_*
+/.vagrant
