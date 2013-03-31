@@ -15,7 +15,7 @@ def Var(name):
 def checkout(dir, url, force=False):
   if force:
     shutil.rmtree(dir, True)
-  os.system("svn checkout --trust-server-cert %s %s" % (url, dir))
+  os.system("svn checkout --trust-server-cert --non-interactive %s %s" % (url, dir))
 
 def parse_args():
   parser = optparse.OptionParser(usage="%prog [options] {" + ", ".join(deps_os.keys()) + "}")
