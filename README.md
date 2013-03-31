@@ -2,7 +2,7 @@ Mozc
 ====
 
 [Mozc](http://code.google.com/p/mozc/) is an open source Japanese input method for Chromium OS, Mac and Linux developed by Google, Inc.
-Their [Google日本語入力](http://www.google.com/intl/ja/ime/index-mac.html) is an original product of Mozc which suports Windows as well.
+Their [Google日本語入力](http://www.google.co.jp/ime/) is an original product of Mozc which suports Windows as well.
 
 Mozc is an open source under [New BSD License](http://www.opensource.org/licenses/bsd-license.php) but unfortunately, [they can't commit any patches written by non-Google employee, so far](https://twitter.com/taku910/status/95089697172357120), which is not like the relationship between Chrome and Chromium.
 
