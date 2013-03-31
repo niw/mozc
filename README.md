@@ -2,14 +2,14 @@ Mozc
 ====
 
 [Mozc](http://code.google.com/p/mozc/) is an open source Japanese input method for Chromium OS, Mac and Linux developed by Google, Inc.
-Their [Google日本語入力](http://www.google.co.jp/ime/) is an original product of Mozc which suports Windows as well.
+Their [Google日本語入力](http://www.google.co.jp/ime/) is the original product of Mozc which supports Windows as well.
 
-Mozc is an open source under [New BSD License](http://www.opensource.org/licenses/bsd-license.php) but unfortunately, [they can't commit any patches written by non-Google employee, so far](https://twitter.com/taku910/status/95089697172357120), which is not like the relationship between Chrome and Chromium.
+Mozc is open sourced under [New BSD License](http://www.opensource.org/licenses/bsd-license.php) but unfortunately, [they can't commit any patches written by non-Google employee, so far](https://twitter.com/taku910/status/95089697172357120), which is not like the relationship between Chrome and Chromium.
 
 Since this limitation of Mozc project, I've checked out the code from the original SVN repository then mirror it to this Git repository to commit my patches.
-I'll keep sync this repo to original SVN repository but this synchronization is done by hand so you may prefer to use the original reposiroty then fetch my patches from here.
+I'll keep sync this repo to original SVN repository but this synchronization is done by hand so you may prefer to use the original repository then fetch my patches from here.
 
-Also, I've filed these paches to [the original issue tracking list](http://code.google.com/p/mozc/issues/list) so that they can, in future, merge them into the orignal repository.
+Also, I've filed these patches to [the original issue tracking list](http://code.google.com/p/mozc/issues/list) so that they can, in future, merge them into the original repository.
 
 Build Instructions for Android on Mac
 -------------------------------------
@@ -62,8 +62,8 @@ Build Instructions for Mac
 --------------------------
 
  1. Checkout source code from this repository using `git` command.
- 1. Run `checkout_externals.py` instead of runing gclient command described in [the original instructions](http://code.google.com/p/mozc/wiki/MacBuildInstructions).
- 1. Follow instructions. My build instraction is:
+ 1. Run `checkout_externals.py` instead of running `gclient` command described in [the original instructions](http://code.google.com/p/mozc/wiki/MacBuildInstructions).
+ 1. Follow instructions. My build instruction is:
 
         # Checkout dependencies.
         % python checkout_externals.py mac
