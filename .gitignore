@@ -6,4 +6,16 @@
 /src/protobuf/files
 /src/third_party/*
 /src/out_*
+/src/Makefile
+/src/**/*.mk
+/src/android/**/local.properties
+/src/android/**/AndroidManifest.xml
+/src/android/**/proguard-project.txt
+/src/android/**/bin
+/src/android/**/gen
+/src/android/**/gen_for_adt
+/src/android/assets
+/src/android/libs
+/src/android/obj
+/src/android/resources_oss/res/raw
 /.vagrant
