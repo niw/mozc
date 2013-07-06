@@ -8,7 +8,5 @@ Vagrant.configure("2") do |config|
     vb.customize ["modifyvm", :id, "--usb", "on", "--usbehci", "on"]
   end
 
-  config.vm.provision :puppet do |puppet|
-    puppet.manifests_path = "manifests"
-  end
+  config.vm.provision :puppet
 end
