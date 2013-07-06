@@ -53,6 +53,6 @@ key.store.password=android
 key.alias.password=android
 EOF
 fi
-android update project -s -p android
+android update project -s -p android --target android-17
 
 python build_mozc.py build android/android.gyp:apk -c "${ANDROID_BUILD_MODE}_Android"
