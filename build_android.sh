@@ -39,7 +39,7 @@ if [ ! -z $FORCE ]; then
   python build_mozc.py clean --target_platform=Android
 fi
 
-python build_mozc.py gyp --target_platform=Android
+python build_mozc.py gyp --target_platform=Android --noqt
 python build_mozc.py build_tools -c Release
 python build_mozc.py build android/android.gyp:android_manifest
 
