@@ -432,6 +432,7 @@ public class ViewManager {
   private final int keycodeCapslock;
   private final int keycodeAlt;
   private final int keycodeMenuDialog;
+  private final Context storedContext;
 
   public ViewManager(Context context, final ViewEventListener listener,
                      SymbolHistoryStorage symbolHistoryStorage,
