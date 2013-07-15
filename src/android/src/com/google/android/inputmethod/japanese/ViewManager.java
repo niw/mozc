@@ -54,17 +54,21 @@ import org.mozc.android.inputmethod.japanese.ui.MenuDialog.MenuDialogListener;
 import org.mozc.android.inputmethod.japanese.view.SkinType;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Rect;
 import android.inputmethodservice.InputMethodService;
 import android.os.Looper;
+import android.preference.PreferenceManager;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.Window;
 import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodInfo;
+import android.view.inputmethod.InputMethodManager;
 
 import java.util.Collections;
 import java.util.List;
@@ -74,6 +78,7 @@ import java.util.List;
  *
  */
 public class ViewManager {
+  private static final String PREF_TWEAK_QUICK_SWITCH_TO_LATIN = "pref_tweak_quick_switch_to_latin";
 
   /**
    * An small wrapper to inject keyboard view resizing when a user selects a candidate.
@@ -90,6 +95,11 @@ public class ViewManager {
         mozcView.resetKeyboardFrameVisibility();
       }
       super.onConversionCandidateSelected(candidateId);
+    }
+
+    @Override
+    public void onSwitchInputMethodQuickly(String id) {
+      super.onSwitchInputMethodQuickly(id);
     }
   }
 
@@ -249,6 +259,22 @@ public class ViewManager {
     return null;
   }
 
+  private boolean isQuickSwitchToLatinKeyboardEnabled() {
+    SharedPreferences sharedPreferences = PreferenceManager.getDefaultSharedPreferences(storedContext);
+    return sharedPreferences.getBoolean(PREF_TWEAK_QUICK_SWITCH_TO_LATIN, false);
+  }
+
+  private void quickSwitchToLatinKeyboard() {
+    InputMethodManager manager = (InputMethodManager)storedContext.getSystemService(Context.INPUT_METHOD_SERVICE);
+    List<InputMethodInfo> inputMethodList = manager.getEnabledInputMethodList();
+    for(InputMethodInfo imi : inputMethodList){
+      if (imi.getPackageName().equals("com.google.android.inputmethod.latin")) {
+        eventListener.onSwitchInputMethodQuickly(imi.getId());
+        break;
+      }
+    }
+  }
+
   /**
    * Converts S/W Keyboard's keycode to KeyEvent instance.
    * Exposed as protected for testing purpose.
@@ -270,6 +296,10 @@ public class ViewManager {
         primaryCode == keycodeChartypeToAbc ||
         primaryCode == keycodeChartypeToKana123 ||
         primaryCode == keycodeChartypeToAbc123) {
+      if (isQuickSwitchToLatinKeyboardEnabled()) {
+        quickSwitchToLatinKeyboard();
+        return;
+      }
       if (primaryCode == keycodeChartypeToKana) {
         japaneseSoftwareKeyboardModel.setKeyboardMode(KeyboardMode.KANA);
       } else if (primaryCode == keycodeChartypeToAbc) {
@@ -432,6 +462,7 @@ public class ViewManager {
   private final int keycodeCapslock;
   private final int keycodeAlt;
   private final int keycodeMenuDialog;
+  private final Context storedContext;
 
   public ViewManager(Context context, final ViewEventListener listener,
                      SymbolHistoryStorage symbolHistoryStorage,
@@ -447,6 +478,8 @@ public class ViewManager {
     if (context == null) {
       throw new NullPointerException("context must be non-null.");
     }
+    this.storedContext = context;
+
     if (listener == null) {
       throw new NullPointerException("listener must be non-null.");
     }

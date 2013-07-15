@@ -56,6 +56,8 @@ public interface ViewEventListener {
                          KeyboardSpecification keyboardSpecification,
                          List<? extends TouchEvent> touchEventList);
 
+  public void onSwitchInputMethodQuickly(String id);
+
   /**
    * Called when Undo is fired (by soft keyboard).
    * @param touchEventList {@code TouchEvent} instances related to this undo for logging
