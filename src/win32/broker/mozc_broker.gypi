@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -58,7 +58,7 @@
       'msvs_settings': {
         'VCManifestTool': {
           'AdditionalManifestFiles': 'mozc_broker.exe.manifest',
-          'EmbedManifest': 'false',
+          'EmbedManifest': 'true',
         },
       },
     }],

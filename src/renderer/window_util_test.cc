@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -31,7 +31,6 @@
 
 #include "renderer/window_util.h"
 
-#include "base/base.h"
 #include "base/coordinates.h"
 #include "testing/base/public/gunit.h"
 
@@ -253,5 +252,6 @@ TEST_F(WindowUtilTest, MonitorErrors) {
   EXPECT_EQ(70, result.Left());
   EXPECT_EQ(32, result.Top());
 }
-}  // namespace mozc::renderer
+
+}  // namespace renderer
 }  // namespace mozc

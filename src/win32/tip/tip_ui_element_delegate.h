@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -71,6 +71,9 @@ class TipUiElementDelegate {
   virtual HRESULT Finalize() = 0;
   virtual HRESULT Abort() = 0;
 
+  // The ITfToolTipUIElement interface methods
+  virtual HRESULT GetString(BSTR *text) = 0;
+
  private:
   DISALLOW_COPY_AND_ASSIGN(TipUiElementDelegate);
 };
@@ -81,7 +84,9 @@ class TipUiElementDelegateFactory {
     kConventionalUnobservableSuggestWindow,
     kConventionalObservableSuggestWindow,
     kConventionalCandidateWindow,
+    kConventionalIndicatorWindow,
     kImmersiveCandidateWindow,
+    kImmersiveIndicatorWindow,
   };
 
   static TipUiElementDelegate *Create(

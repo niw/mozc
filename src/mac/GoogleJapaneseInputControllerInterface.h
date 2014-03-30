@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -86,6 +86,11 @@
 
 // Launch the word register tool with the current selection range.
 - (void)launchWordRegisterTool:(id)client;
+
+// Fills the surrounding context (preceding_text and following_text).
+// Returns false if fails to get the surrounding context from the client.
+- (BOOL)fillSurroundingContext:(mozc::commands::Context *)context
+                        client:(id<IMKTextInput>)client;
 
 // They are externally accessible to achieve tests.
 @property(readwrite, assign, nonatomic)

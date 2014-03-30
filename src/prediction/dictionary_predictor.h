@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -52,7 +52,7 @@ class SegmenterInterface;
 class Segments;
 class SuggestionFilter;
 
-// Dictioanry-based predictor
+// Dictionary-based predictor
 class DictionaryPredictor : public PredictorInterface {
  public:
   // Initializes a predictor with given references to submodules. Note that

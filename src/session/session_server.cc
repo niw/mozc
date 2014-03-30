@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -33,9 +33,10 @@
 
 #include <string>
 
-#include "base/base.h"
 #include "base/logging.h"
+#include "base/port.h"
 #include "base/scheduler.h"
+#include "engine/engine_factory.h"
 #include "ipc/ipc.h"
 #include "ipc/named_event.h"
 #include "session/commands.pb.h"
@@ -43,13 +44,12 @@
 #include "session/session_usage_observer.h"
 #include "usage_stats/usage_stats_uploader.h"
 
-#ifdef ENABLE_CLOUD_SYNC
-#include "sync/sync_handler.h"
-#endif  // ENABLE_CLOUD_SYNC
-
 namespace {
 
 #ifdef OS_WIN
+// On Windows, multiple processes can create named pipe objects whose names are
+// the same. To reduce the potential risk of DOS, we limit the maximum number
+// of pipe instances to 1 here.
 const int kNumConnections   = 1;
 #else
 const int kNumConnections   = 10;
@@ -65,8 +65,9 @@ namespace mozc {
 
 SessionServer::SessionServer()
     : IPCServer(kSessionName, kNumConnections, kTimeOut),
+      engine_(EngineFactory::Create()),
       usage_observer_(new session::SessionUsageObserver()),
-      session_handler_(new SessionHandler()) {
+      session_handler_(new SessionHandler(engine_.get())) {
   using usage_stats::UsageStatsUploader;
   // start session watch dog timer
   session_handler_->StartWatchDog();
@@ -83,12 +84,6 @@ SessionServer::SessionServer()
       UsageStatsUploader::kDefaultSchedulerRandomDelay,
       &UsageStatsUploader::Send,
       NULL));
-
-#ifdef ENABLE_CLOUD_SYNC
-  sync_handler_.reset(new sync::SyncHandler);
-  session_handler_->SetSyncHandler(sync_handler_.get());
-  Scheduler::AddJob(sync_handler_->GetSchedulerJobSetting());
-#endif  // ENABLE_CLOUD_SYNC
 
   // Send a notification event to the UI.
   NamedEventNotifier notifier(kEventName);

@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,7 @@ void RequestForUnitTest::FillMobileRequest(Request *request) {
   request->set_special_romanji_table(Request::TWELVE_KEYS_TO_HIRAGANA);
   request->set_kana_modifier_insensitive_conversion(true);
   request->set_auto_partial_suggestion(true);
+  request->set_language_aware_input(Request::NO_LANGUAGE_AWARE_INPUT);
 }
 }  // namespace commands
 }  // namespace mozc

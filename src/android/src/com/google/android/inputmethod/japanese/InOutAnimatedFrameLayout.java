@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -28,6 +28,8 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package org.mozc.android.inputmethod.japanese;
+
+import com.google.common.annotations.VisibleForTesting;
 
 import android.content.Context;
 import android.util.AttributeSet;
@@ -87,10 +89,10 @@ public abstract class InOutAnimatedFrameLayout extends FrameLayout {
   }
 
   /** Animation used when this view is shown. */
-  private Animation inAnimation;
+  @VisibleForTesting Animation inAnimation;
 
   /** Animation used when this view is hidden. */
-  private Animation outAnimation;
+  @VisibleForTesting Animation outAnimation;
 
   /** AnimationListener for in-animation. */
   private AnimationListener inAnimationListener;
@@ -98,7 +100,7 @@ public abstract class InOutAnimatedFrameLayout extends FrameLayout {
   /** AnimationListener for out-animation. */
   private AnimationListener outAnimationListener;
 
-  private VisibilityChangeListener onVisibilityChangeListener = null;
+  @VisibleForTesting VisibilityChangeListener onVisibilityChangeListener = null;
 
 
   public InOutAnimatedFrameLayout(Context context) {

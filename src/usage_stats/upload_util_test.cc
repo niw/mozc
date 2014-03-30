@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -125,6 +125,35 @@ TEST(UploadUtilTest, UploadTest) {
     uploader.AddIntegerValue("I", 1);
     uploader.AddBooleanValue("B", true);
     EXPECT_TRUE(uploader.Upload());
+  }
+}
+
+TEST(UploadUtilTest, UploadSecureTest) {
+  HTTPClientMock client;
+  HTTPClient::SetHTTPClientHandler(&client);
+  const string base_url = "https://clients4.google.com/tbproxy/usagestats";
+  {
+    HTTPClientMock::Result result;
+    result.expected_url = base_url + "?sourceid=ime&hl=ja&v=test";
+    result.expected_request = "Test&100&Count:c=100";
+    client.set_result(result);
+
+    UploadUtil uploader;
+    vector<pair<string, string> > params;
+    params.push_back(make_pair("hl", "ja"));
+    params.push_back(make_pair("v", "test"));
+    uploader.SetHeader("Test", 100, params);
+    uploader.AddCountValue("Count", 100);
+    uploader.SetUseHttps(true);
+    EXPECT_TRUE(uploader.Upload());
+
+    uploader.RemoveAllValues();
+    result.expected_request = "Test&100";
+    client.set_result(result);
+    EXPECT_TRUE(uploader.Upload());
+
+    uploader.AddCountValue("Count", 1000);
+    EXPECT_FALSE(uploader.Upload());
   }
 }
 }  // namespace usage_stats

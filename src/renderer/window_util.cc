@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,6 @@
 
 #include "renderer/window_util.h"
 
-#include "base/base.h"
 #include "base/coordinates.h"
 
 namespace mozc {
@@ -236,5 +235,5 @@ Rect WindowUtil::GetWindowRectForInfolistWindow(
   }
   return Rect(infolist_pos, window_size);
 }
-}  // namespace mozc::renderer
+}  // namespace renderer
 }  // namespace mozc

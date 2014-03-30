@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -86,7 +86,6 @@ Client::Client()
     : id_(0),
       server_launcher_(new ServerLauncher),
       result_(new char[kResultBufferSize]),
-      preferences_(NULL),
       timeout_(kDefaultTimeout),
       server_status_(SERVER_UNKNOWN),
       server_protocol_version_(0),
@@ -255,11 +254,13 @@ void Client::PushHistory(const commands::Input &input,
 // Clear the history and push IMEOn command for initialize session.
 void Client::ResetHistory() {
   history_inputs_.clear();
-#if defined(OS_WIN) || defined(OS_MACOSX)
-  // On Windows/Mac, we should send ON key at the first of each input session
+#if defined(OS_MACOSX)
+  // On Mac, we should send ON key at the first of each input session
   // excepting the very first session, because when the session is restored,
   // its state is direct. On the first session, users should send ON key
   // by themselves.
+  // On Windows, this is not required because now we can send IME On/Off
+  // state with the key event. See b/8601275
   // Note that we are assuming that ResetHistory is called only when the
   // client is ON.
   // TODO(toshiyuki): Make sure that this assuming is reasonable or not.
@@ -585,48 +586,6 @@ bool Client::PingServer() const {
   if (!client->Call(request.data(), request.size(),
                     result_.get(), &size, timeout_)) {
     LOG(ERROR) << "IPCClient::Call failed: " << client->GetLastIPCError();
-    return false;
-  }
-
-  return true;
-}
-
-bool Client::StartCloudSync() {
-  return CallCommand(commands::Input::START_CLOUD_SYNC);
-}
-
-bool Client::ClearCloudSync() {
-  return CallCommand(commands::Input::CLEAR_CLOUD_SYNC);
-}
-
-bool Client::GetCloudSyncStatus(commands::CloudSyncStatus *cloud_sync_status) {
-  DCHECK(cloud_sync_status);
-  commands::Input input;
-  InitInput(&input);
-  input.set_type(commands::Input::GET_CLOUD_SYNC_STATUS);
-  commands::Output output;
-  if (!Call(input, &output)) {
-    LOG(ERROR) << "Call failed.  Server is not started.";
-    return false;
-  }
-
-  if (!output.has_cloud_sync_status()) {
-    LOG(ERROR) << "No CloudSyncStatus.  Server may be stale.";
-    return false;
-  }
-
-  cloud_sync_status->CopyFrom(output.cloud_sync_status());
-  return true;
-}
-
-bool Client::AddAuthCode(const commands::Input::AuthorizationInfo &auth_info) {
-  commands::Input input;
-  InitInput(&input);
-  input.set_type(commands::Input::ADD_AUTH_CODE);
-  input.mutable_auth_code()->CopyFrom(auth_info);
-  commands::Output output;
-  if (!Call(input, &output)) {
-    LOG(ERROR) << "Call failed.  Server is not started.";
     return false;
   }
 

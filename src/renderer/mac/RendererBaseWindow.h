@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -30,6 +30,8 @@
 #ifndef MOZC_RENDERER_MAC_RENDERER_BASE_WINDOW_H_
 #define MOZC_RENDERER_MAC_RENDERER_BASE_WINDOW_H_
 
+#include <Cocoa/Cocoa.h>
+
 #include "base/scoped_nsobject.h"
 
 namespace mozc {
@@ -40,20 +42,22 @@ class RendererBaseWindow {
   Size GetWindowSize() const;
   virtual void Hide();
   virtual void Show();
-  virtual void MoveWindow(const Point &point);
+  virtual void MoveWindow(const NSPoint &point);
+  virtual void ResizeWindow(int32 width, int32 height);
   virtual bool IsVisible();
+  virtual void SetWindowLevel(NSInteger window_level);
 
  protected:
   RendererBaseWindow();
   virtual ~RendererBaseWindow();
 
+  scoped_nsobject<NSPanel> window_;
   scoped_nsobject<NSView> view_;
-  WindowRef window_;
   virtual void InitWindow();
 
  private:
   virtual void ResetView();
-  Point pos_;
+  NSInteger window_level_;
   DISALLOW_COPY_AND_ASSIGN(RendererBaseWindow);
 };
 

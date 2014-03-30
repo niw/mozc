@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,16 +32,15 @@
 #include <msctf.h>
 
 #include <string>
+#include <memory>
 
 #include "base/logging.h"
-#include "base/scoped_ptr.h"
 #include "base/system_util.h"
 #include "base/version.h"
 #include "client/client_interface.h"
 #include "config/config_handler.h"
 #include "ipc/ipc_mock.h"
 #include "session/commands.pb.h"
-#include "session/ime_switch_util.h"
 #include "testing/base/public/googletest.h"
 #include "testing/base/public/gunit.h"
 #include "win32/base/input_state.h"
@@ -51,6 +50,10 @@
 namespace mozc {
 namespace win32 {
 namespace {
+
+using commands::Context;
+using commands::Output;
+using std::unique_ptr;
 
 class TestableKeyEventHandler : public KeyEventHandler {
  public:
@@ -153,7 +156,7 @@ class TestServerLauncher : public client::ServerLauncherInterface {
     return server_protocol_version_;
   }
 
-  void set_mock_after_start_server(const commands::Output &mock_output) {
+  void set_mock_after_start_server(const Output &mock_output) {
     mock_output.SerializeToString(&response_);
   }
 
@@ -214,7 +217,7 @@ class MockState {
   MockState()
       : client_(nullptr),
         launcher_(nullptr) {}
-  explicit MockState(const commands::Output &mock_response)
+  explicit MockState(const Output &mock_response)
       : client_(client::ClientFactory::NewClient()),
         launcher_(nullptr) {
     client_factory_.SetConnection(true);
@@ -243,7 +246,7 @@ class MockState {
 
  private:
   IPCClientFactoryMock client_factory_;
-  scoped_ptr<client::ClientInterface> client_;
+  unique_ptr<client::ClientInterface> client_;
   TestServerLauncher *launcher_;
   DISALLOW_COPY_AND_ASSIGN(MockState);
 };
@@ -264,37 +267,36 @@ class KeyEventHandlerTest : public testing::Test {
     mozc::config::ConfigHandler::SetConfig(default_config_);
   }
 
-  void UpdateConfigToUseKanaAsPreeditMethod() {
-    config::Config config;
-    CHECK(config::ConfigHandler::GetConfig(&config));
-    config.set_preedit_method(config::Config::KANA);
-    CHECK(config::ConfigHandler::SetConfig(config));
+  vector<KeyInformation> GetDefaultDirectModeKeys() const {
+    return KeyInfoUtil::ExtractSortedDirectModeKeys(default_config_);
   }
 
-  void UpdateConfigToUseCtrlJToEnableIME() {
+  vector<KeyInformation> GetDirectModeKeysCtrlJToEnableIME() const {
     config::Config config;
-    CHECK(config::ConfigHandler::GetConfig(&config));
+    config.CopyFrom(default_config_);
 
-    const string custom_keymap_table =
+    const char custom_keymap_table[] =
         "status\tkey\tcommand\n"
         "DirectInput\tCtrl j\tIMEOn\n";
 
     config.set_session_keymap(mozc::config::Config::CUSTOM);
     config.set_custom_keymap_table(custom_keymap_table);
-    CHECK(mozc::config::ConfigHandler::SetConfig(config));
+
+    return KeyInfoUtil::ExtractSortedDirectModeKeys(config);
   }
 
-  void UpdateConfigToUseCtrlBackslashToEnableIME() {
+  vector<KeyInformation> GetDirectModeKeysCtrlBackslashToEnableIME() const {
     config::Config config;
-    CHECK(config::ConfigHandler::GetConfig(&config));
+    config.CopyFrom(default_config_);
 
-    const string custom_keymap_table =
+    const char custom_keymap_table[] =
         "status\tkey\tcommand\n"
         "DirectInput\tCtrl \\\tIMEOn\n";
 
     config.set_session_keymap(mozc::config::Config::CUSTOM);
     config.set_custom_keymap_table(custom_keymap_table);
-    CHECK(mozc::config::ConfigHandler::SetConfig(config));
+
+    return KeyInfoUtil::ExtractSortedDirectModeKeys(config);
   }
 
   mozc::config::Config default_config_;
@@ -304,29 +306,28 @@ class KeyEventHandlerTest : public testing::Test {
 };
 
 TEST_F(KeyEventHandlerTest, HankakuZenkakuTest) {
-  // Change Kana-lock preference.
-  UpdateConfigToUseKanaAsPreeditMethod();
-
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
   KeyboardMock keyboard(kKanaLocked);
 
   InputState next_state;
-  commands::Output output;
+  Output output;
   KeyEventHandlerResult result;
 
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // "Hankaku/Zenkaku"
   {
@@ -339,13 +340,15 @@ TEST_F(KeyEventHandlerTest, HankakuZenkakuTest) {
     const bool is_key_down = true;
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
     initial_state.open = false;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
 
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard,
+        initial_state, context, mock.mutable_client(), &keyboard,
         &next_state, &output);
 
     EXPECT_TRUE(result.succeeded);
@@ -354,7 +357,7 @@ TEST_F(KeyEventHandlerTest, HankakuZenkakuTest) {
     EXPECT_TRUE(next_state.open);
     EXPECT_TRUE(mock.start_server_called());
     EXPECT_EQ(IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN,
-              next_state.conversion_status);
+              next_state.logical_conversion_mode);
   }
   {
     commands::Input actual_input;
@@ -364,7 +367,8 @@ TEST_F(KeyEventHandlerTest, HankakuZenkakuTest) {
     EXPECT_FALSE(actual_input.key().has_input_style());
     EXPECT_FALSE(actual_input.key().has_key_code());
     EXPECT_FALSE(actual_input.key().has_key_string());
-    EXPECT_TRUE(actual_input.key().has_mode());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_FALSE(actual_input.key().activated());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
     EXPECT_EQ(0, actual_input.key().modifier_keys_size());
@@ -378,17 +382,13 @@ TEST_F(KeyEventHandlerTest, ClearKanaLockInAlphanumericMode) {
   // because there might be no chance to unlock an unexpected Kana-Lock except
   // for the key event handler in some tricky cases.
 
-  // Change Kana-lock preference.
-  UpdateConfigToUseKanaAsPreeditMethod();
-
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = true;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -397,12 +397,15 @@ TEST_F(KeyEventHandlerTest, ClearKanaLockInAlphanumericMode) {
   EXPECT_TRUE(keyboard.kana_locked());
 
   InputState next_state;
-  commands::Output output;
+  Output output;
   KeyEventHandlerResult result;
 
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // "Escape"
   {
@@ -420,15 +423,15 @@ TEST_F(KeyEventHandlerTest, ClearKanaLockInAlphanumericMode) {
     EXPECT_EQ(0x00010001, lparam.lparam());
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
     initial_state.open = false;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeProcessKey(
         virtual_key, lparam.GetScanCode(), lparam.IsKeyDownInImeProcessKey(),
-        keyboard_status, behavior, initial_state, mock.mutable_client(),
-        &keyboard, &next_state, &output);
+        keyboard_status, behavior, initial_state, context,
+        mock.mutable_client(), &keyboard, &next_state, &output);
 
     EXPECT_TRUE(result.succeeded);
     EXPECT_FALSE(result.should_be_eaten);
@@ -444,17 +447,13 @@ TEST_F(KeyEventHandlerTest, ClearKanaLockEvenWhenIMEIsDisabled) {
   // kana-lock in some cases.  This helps users to input their password as
   // expected except that they used half-width katakana for their password.
 
-  // Change Kana-lock preference.
-  UpdateConfigToUseKanaAsPreeditMethod();
-
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = true;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -462,12 +461,15 @@ TEST_F(KeyEventHandlerTest, ClearKanaLockEvenWhenIMEIsDisabled) {
   EXPECT_TRUE(keyboard.kana_locked());
 
   InputState next_state;
-  commands::Output output;
+  Output output;
   KeyEventHandlerResult result;
 
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = true;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // "A"
   {
@@ -485,15 +487,15 @@ TEST_F(KeyEventHandlerTest, ClearKanaLockEvenWhenIMEIsDisabled) {
     EXPECT_EQ(0x1e0001, lparam.lparam());
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
     initial_state.open = false;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeProcessKey(
         virtual_key, lparam.GetScanCode(), lparam.IsKeyDownInImeProcessKey(),
-        keyboard_status, behavior, initial_state, mock.mutable_client(),
-        &keyboard, &next_state, &output);
+        keyboard_status, behavior, initial_state, context,
+        mock.mutable_client(), &keyboard, &next_state, &output);
 
     EXPECT_TRUE(result.succeeded);
     EXPECT_FALSE(result.should_be_eaten);
@@ -508,17 +510,13 @@ TEST_F(KeyEventHandlerTest, CustomActivationKeyTest) {
   // We might want to allow users to use their preferred key combinations
   // to open/close IME.
 
-  // Add new short-cut
-  UpdateConfigToUseCtrlJToEnableIME();
-
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -530,6 +528,10 @@ TEST_F(KeyEventHandlerTest, CustomActivationKeyTest) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  // Use Ctrl+J to turn on IME.
+  behavior.direct_mode_keys = GetDirectModeKeysCtrlJToEnableIME();
+
+  Context context;
 
   // Ctrl+J
   {
@@ -541,14 +543,16 @@ TEST_F(KeyEventHandlerTest, CustomActivationKeyTest) {
     keyboard_status.SetState(VK_CONTROL, kPressed);
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = false;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard, &next_state,
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
         &output);
 
     EXPECT_TRUE(result.succeeded);
@@ -557,7 +561,7 @@ TEST_F(KeyEventHandlerTest, CustomActivationKeyTest) {
     EXPECT_TRUE(next_state.open);
     EXPECT_TRUE(mock.start_server_called());
     EXPECT_EQ(IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN,
-              next_state.conversion_status);
+              next_state.logical_conversion_mode);
   }
   {
     commands::Input actual_input;
@@ -568,6 +572,8 @@ TEST_F(KeyEventHandlerTest, CustomActivationKeyTest) {
     EXPECT_TRUE(actual_input.key().has_key_code());
     EXPECT_EQ('j', actual_input.key().key_code());
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_FALSE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -582,17 +588,13 @@ TEST_F(KeyEventHandlerTest, Issue3033135_VK_OEM_102) {
   // We might want to allow users to use their preferred key combinations
   // to open/close IME.
 
-  // Add new short-cut
-  UpdateConfigToUseCtrlBackslashToEnableIME();
-
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -604,6 +606,9 @@ TEST_F(KeyEventHandlerTest, Issue3033135_VK_OEM_102) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDirectModeKeysCtrlBackslashToEnableIME();
+
+  Context context;
 
   // Ctrl+\ (VK_OEM_102; Backslash in 106/109 Japanese Keyboard)
   {
@@ -616,14 +621,16 @@ TEST_F(KeyEventHandlerTest, Issue3033135_VK_OEM_102) {
     keyboard_status.SetState(VK_CONTROL, kPressed);
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = false;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard, &next_state,
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
         &output);
 
     EXPECT_TRUE(result.succeeded);
@@ -632,7 +639,7 @@ TEST_F(KeyEventHandlerTest, Issue3033135_VK_OEM_102) {
     EXPECT_TRUE(next_state.open);
     EXPECT_TRUE(mock.start_server_called());
     EXPECT_EQ(IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN,
-              next_state.conversion_status);
+              next_state.logical_conversion_mode);
   }
   {
     commands::Input actual_input;
@@ -643,6 +650,8 @@ TEST_F(KeyEventHandlerTest, Issue3033135_VK_OEM_102) {
     EXPECT_TRUE(actual_input.key().has_key_code());
     EXPECT_EQ('\\', actual_input.key().key_code());
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_FALSE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -657,17 +666,13 @@ TEST_F(KeyEventHandlerTest, Issue3033135_VK_OEM_5) {
   // We might want to allow users to use their preferred key combinations
   // to open/close IME.
 
-  // Add new short-cut
-  UpdateConfigToUseCtrlBackslashToEnableIME();
-
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -679,6 +684,9 @@ TEST_F(KeyEventHandlerTest, Issue3033135_VK_OEM_5) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDirectModeKeysCtrlBackslashToEnableIME();
+
+  Context context;
 
   // Ctrl+\ (VK_OEM_5; Yen in 106/109 Japanese Keyboard)
   {
@@ -691,14 +699,16 @@ TEST_F(KeyEventHandlerTest, Issue3033135_VK_OEM_5) {
     keyboard_status.SetState(VK_CONTROL, kPressed);
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = false;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard, &next_state,
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
         &output);
 
     EXPECT_TRUE(result.succeeded);
@@ -707,7 +717,7 @@ TEST_F(KeyEventHandlerTest, Issue3033135_VK_OEM_5) {
     EXPECT_TRUE(next_state.open);
     EXPECT_TRUE(mock.start_server_called());
     EXPECT_EQ(IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN,
-              next_state.conversion_status);
+              next_state.logical_conversion_mode);
   }
   {
     commands::Input actual_input;
@@ -718,6 +728,8 @@ TEST_F(KeyEventHandlerTest, Issue3033135_VK_OEM_5) {
     EXPECT_TRUE(actual_input.key().has_key_code());
     EXPECT_EQ('\\', actual_input.key().key_code());
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_FALSE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -734,14 +746,13 @@ TEST_F(KeyEventHandlerTest, HandleCtrlH) {
   // and one internally-used by the session server, we should decompose a
   // control code into a tuple of an ASCII alphabet and a modifier key.
 
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -753,6 +764,9 @@ TEST_F(KeyEventHandlerTest, HandleCtrlH) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // Ctrl+H should be sent to the server as 'h' + |KeyEvent::CTRL|.
   {
@@ -764,14 +778,16 @@ TEST_F(KeyEventHandlerTest, HandleCtrlH) {
     keyboard_status.SetState(VK_CONTROL, kPressed);
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard, &next_state,
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
         &output);
 
     EXPECT_TRUE(result.succeeded);
@@ -780,7 +796,7 @@ TEST_F(KeyEventHandlerTest, HandleCtrlH) {
     EXPECT_TRUE(next_state.open);
     EXPECT_TRUE(mock.start_server_called());
     EXPECT_EQ(IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN,
-              next_state.conversion_status);
+              next_state.logical_conversion_mode);
   }
   {
     commands::Input actual_input;
@@ -791,6 +807,8 @@ TEST_F(KeyEventHandlerTest, HandleCtrlH) {
     EXPECT_TRUE(actual_input.key().has_key_code());
     EXPECT_EQ('h', actual_input.key().key_code());  // must be non-capitalized.
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -803,18 +821,17 @@ TEST_F(KeyEventHandlerTest, HandleCtrlH) {
 TEST_F(KeyEventHandlerTest, HandleCtrlShiftH) {
   // This is an exception of a key handling rule of the Windows client where
   // VK_SHIFT and VK_CONTROL are pressed.  The Windows client expects the server
-  // never eats a key when Controll and Shift is pressed except that the key is
+  // never eats a key when Control and Shift is pressed except that the key is
   // VK_A, ..., or, VK_Z, or other special keys defined in Mozc protocol such as
   // backspace or space.
 
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -826,6 +843,9 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShiftH) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // Ctrl+Shift+H should be sent to the server as
   // 'h' + |KeyEvent::CTRL| + |KeyEvent::Shift|.
@@ -839,14 +859,16 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShiftH) {
     keyboard_status.SetState(VK_CONTROL, kPressed);
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard, &next_state,
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
         &output);
 
     EXPECT_TRUE(result.succeeded);
@@ -855,7 +877,7 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShiftH) {
     EXPECT_TRUE(next_state.open);
     EXPECT_TRUE(mock.start_server_called());
     EXPECT_EQ(IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN,
-              next_state.conversion_status);
+              next_state.logical_conversion_mode);
   }
   {
     commands::Input actual_input;
@@ -866,6 +888,8 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShiftH) {
     EXPECT_TRUE(actual_input.key().has_key_code());
     EXPECT_EQ('h', actual_input.key().key_code());  // must be non-capitalized.
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -877,14 +901,13 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShiftH) {
 }
 
 TEST_F(KeyEventHandlerTest, HandleCapsH) {
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -896,6 +919,9 @@ TEST_F(KeyEventHandlerTest, HandleCapsH) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // [CapsLock] h should be sent to the server as 'H' + |KeyEvent::Caps|.
   {
@@ -907,14 +933,16 @@ TEST_F(KeyEventHandlerTest, HandleCapsH) {
     keyboard_status.SetState(VK_CAPITAL, kToggled);
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard, &next_state,
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
         &output);
 
     EXPECT_TRUE(result.succeeded);
@@ -923,7 +951,7 @@ TEST_F(KeyEventHandlerTest, HandleCapsH) {
     EXPECT_TRUE(next_state.open);
     EXPECT_TRUE(mock.start_server_called());
     EXPECT_EQ(IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN,
-              next_state.conversion_status);
+              next_state.logical_conversion_mode);
   }
   {
     commands::Input actual_input;
@@ -934,6 +962,8 @@ TEST_F(KeyEventHandlerTest, HandleCapsH) {
     EXPECT_TRUE(actual_input.key().has_key_code());
     EXPECT_EQ('H', actual_input.key().key_code());  // must be capitalized.
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -944,14 +974,13 @@ TEST_F(KeyEventHandlerTest, HandleCapsH) {
 }
 
 TEST_F(KeyEventHandlerTest, HandleCapsShiftH) {
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -963,6 +992,9 @@ TEST_F(KeyEventHandlerTest, HandleCapsShiftH) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // [CapsLock] Shift+H should be sent to the server as
   // 'h' + |KeyEvent::Caps|.
@@ -976,14 +1008,16 @@ TEST_F(KeyEventHandlerTest, HandleCapsShiftH) {
     keyboard_status.SetState(VK_CAPITAL, kToggled);
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard, &next_state,
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
         &output);
 
     EXPECT_TRUE(result.succeeded);
@@ -992,7 +1026,7 @@ TEST_F(KeyEventHandlerTest, HandleCapsShiftH) {
     EXPECT_TRUE(next_state.open);
     EXPECT_TRUE(mock.start_server_called());
     EXPECT_EQ(IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN,
-              next_state.conversion_status);
+              next_state.logical_conversion_mode);
   }
   {
     commands::Input actual_input;
@@ -1003,6 +1037,8 @@ TEST_F(KeyEventHandlerTest, HandleCapsShiftH) {
     EXPECT_TRUE(actual_input.key().has_key_code());
     EXPECT_EQ('h', actual_input.key().key_code());  // must be non-capitalized.
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -1013,14 +1049,13 @@ TEST_F(KeyEventHandlerTest, HandleCapsShiftH) {
 }
 
 TEST_F(KeyEventHandlerTest, HandleCapsCtrlH) {
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -1032,6 +1067,9 @@ TEST_F(KeyEventHandlerTest, HandleCapsCtrlH) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // [CapsLock] Ctrl+H should be sent to the server as
   // 'H' + |KeyEvent::CTRL| + |KeyEvent::Caps|.
@@ -1045,14 +1083,16 @@ TEST_F(KeyEventHandlerTest, HandleCapsCtrlH) {
     keyboard_status.SetState(VK_CAPITAL, kToggled);
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard, &next_state,
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
         &output);
 
     EXPECT_TRUE(result.succeeded);
@@ -1061,7 +1101,7 @@ TEST_F(KeyEventHandlerTest, HandleCapsCtrlH) {
     EXPECT_TRUE(next_state.open);
     EXPECT_TRUE(mock.start_server_called());
     EXPECT_EQ(IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN,
-              next_state.conversion_status);
+              next_state.logical_conversion_mode);
   }
   {
     commands::Input actual_input;
@@ -1072,6 +1112,8 @@ TEST_F(KeyEventHandlerTest, HandleCapsCtrlH) {
     EXPECT_TRUE(actual_input.key().has_key_code());
     EXPECT_EQ('H', actual_input.key().key_code());  // must be capitalized.
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -1083,14 +1125,13 @@ TEST_F(KeyEventHandlerTest, HandleCapsCtrlH) {
 }
 
 TEST_F(KeyEventHandlerTest, HandleCapsShiftCtrlH) {
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -1102,6 +1143,9 @@ TEST_F(KeyEventHandlerTest, HandleCapsShiftCtrlH) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // [CapsLock] Ctrl+Shift+H should be sent to the server as
   // 'h' + |KeyEvent::CTRL| + |KeyEvent::Shift| + |KeyEvent::Caps|.
@@ -1116,14 +1160,16 @@ TEST_F(KeyEventHandlerTest, HandleCapsShiftCtrlH) {
     keyboard_status.SetState(VK_CAPITAL, kToggled);
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+      initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard, &next_state,
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
         &output);
 
     EXPECT_TRUE(result.succeeded);
@@ -1132,7 +1178,7 @@ TEST_F(KeyEventHandlerTest, HandleCapsShiftCtrlH) {
     EXPECT_TRUE(next_state.open);
     EXPECT_TRUE(mock.start_server_called());
     EXPECT_EQ(IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN,
-              next_state.conversion_status);
+              next_state.logical_conversion_mode);
   }
   {
     commands::Input actual_input;
@@ -1143,6 +1189,8 @@ TEST_F(KeyEventHandlerTest, HandleCapsShiftCtrlH) {
     EXPECT_TRUE(actual_input.key().has_key_code());
     EXPECT_EQ('h', actual_input.key().key_code());  // must be non-capitalized.
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -1162,19 +1210,18 @@ TEST_F(KeyEventHandlerTest, HandleCtrlHat) {
   // as VK_OEM_7 + VK_CONTROL.  On 101/104 English keyboard, however,
   // should we interpret VK_6 + VK_SHIFT + VK_CONTROL as Ctrl+^ ?
   // As a temporal solution to be consistent with the GUI tool, the Windows
-  // client expects the server never eats a key when Controll and Shift is
+  // client expects the server never eats a key when Control and Shift is
   // pressed except that the key is VK_A, ..., or, VK_Z, or other special keys
   // defined in Mozc protocol such as backspace or space.
   // TODO(komatsu): Clarify the expected algorithm for the client.
 
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -1186,6 +1233,9 @@ TEST_F(KeyEventHandlerTest, HandleCtrlHat) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // Ctrl+^ should be sent to the server as '^' + |KeyEvent::CTRL|.
   {
@@ -1199,14 +1249,16 @@ TEST_F(KeyEventHandlerTest, HandleCtrlHat) {
     keyboard_status.SetState(VK_CONTROL, kPressed);
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard, &next_state,
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
         &output);
 
     EXPECT_TRUE(result.succeeded);
@@ -1215,7 +1267,7 @@ TEST_F(KeyEventHandlerTest, HandleCtrlHat) {
     EXPECT_TRUE(next_state.open);
     EXPECT_TRUE(mock.start_server_called());
     EXPECT_EQ(IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN,
-              next_state.conversion_status);
+              next_state.logical_conversion_mode);
   }
   {
     commands::Input actual_input;
@@ -1226,6 +1278,8 @@ TEST_F(KeyEventHandlerTest, HandleCtrlHat) {
     EXPECT_TRUE(actual_input.key().has_key_code());
     EXPECT_EQ('^', actual_input.key().key_code());
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -1237,7 +1291,7 @@ TEST_F(KeyEventHandlerTest, HandleCtrlHat) {
 
 TEST_F(KeyEventHandlerTest, HandleCtrlShift7) {
   // As commented in KeyEventHandlerTest::HandleCtrlHat, the Windows
-  // client expects the server never eats a key when Controll and Shift is
+  // client expects the server never eats a key when Control and Shift is
   // pressed except that the key is VK_A, ..., or, VK_Z, or other special keys
   // defined in Mozc protocol such as backspace or space, which means that
   // VK_7 + VK_SHIFT + VK_CONTROL on 106/109 Japanese keyboard will not be
@@ -1245,14 +1299,13 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShift7) {
   // Ctrl+'\'' is available on 101/104 English keyboard.
   // TODO(komatsu): Clarify the expected algorithm for the client.
 
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
   mock_output.set_consumed(false);
 
   MockState mock(mock_output);
@@ -1264,6 +1317,9 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShift7) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // VK_7 + VK_SHIFT + VK_CONTROL must not be sent to the server as
   // '\'' + |KeyEvent::CTRL| nor '7' + |KeyEvent::CTRL| + |KeyEvent::SHIFT|.
@@ -1277,14 +1333,16 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShift7) {
     keyboard_status.SetState(VK_CONTROL, kPressed);
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard, &next_state,
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
         &output);
 
     EXPECT_TRUE(result.succeeded);
@@ -1293,23 +1351,22 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShift7) {
     EXPECT_TRUE(next_state.open);
     EXPECT_FALSE(mock.start_server_called());
     EXPECT_EQ(IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN,
-              next_state.conversion_status);
+              next_state.logical_conversion_mode);
   }
 }
 
 TEST_F(KeyEventHandlerTest, HandleCtrlShiftSpace) {
   // This is an exception of a key handling rule of the Windows client where
   // VK_SHIFT and VK_CONTROL are pressed.  The Windows client expects the
-  // server may eat a special key when Controll and Shift is pressed.
+  // server may eat a special key when Control and Shift is pressed.
 
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -1321,6 +1378,9 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShiftSpace) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // VK_SPACE + VK_SHIFT + VK_CONTROL must be sent to the server as
   // |KeyEvent::SPACE| + |KeyEvent::CTRL| + |KeyEvent::SHIFT|
@@ -1334,14 +1394,16 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShiftSpace) {
     keyboard_status.SetState(VK_CONTROL, kPressed);
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard, &next_state,
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
         &output);
 
     EXPECT_TRUE(result.succeeded);
@@ -1350,7 +1412,7 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShiftSpace) {
     EXPECT_TRUE(next_state.open);
     EXPECT_TRUE(mock.start_server_called());
     EXPECT_EQ(IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN,
-              next_state.conversion_status);
+              next_state.logical_conversion_mode);
   }
   {
     commands::Input actual_input;
@@ -1360,6 +1422,8 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShiftSpace) {
     EXPECT_FALSE(actual_input.key().has_input_style());
     EXPECT_FALSE(actual_input.key().has_key_code());
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -1374,16 +1438,15 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShiftSpace) {
 TEST_F(KeyEventHandlerTest, HandleCtrlShiftBackspace) {
   // This is an exception of a key handling rule of the Windows client where
   // VK_SHIFT and VK_CONTROL are pressed.  The Windows client expects the
-  // server may eat a special key when Controll and Shift is pressed.
+  // server may eat a special key when Control and Shift is pressed.
 
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -1395,6 +1458,9 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShiftBackspace) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // VK_BACK + VK_SHIFT + VK_CONTROL must be sent to the server as
   // |KeyEvent::BACKSPACE| + |KeyEvent::CTRL| + |KeyEvent::SHIFT|
@@ -1408,14 +1474,16 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShiftBackspace) {
     keyboard_status.SetState(VK_CONTROL, kPressed);
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard, &next_state,
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
         &output);
 
     EXPECT_TRUE(result.succeeded);
@@ -1424,7 +1492,7 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShiftBackspace) {
     EXPECT_TRUE(next_state.open);
     EXPECT_TRUE(mock.start_server_called());
     EXPECT_EQ(IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN,
-              next_state.conversion_status);
+              next_state.logical_conversion_mode);
   }
   {
     commands::Input actual_input;
@@ -1434,6 +1502,8 @@ TEST_F(KeyEventHandlerTest, HandleCtrlShiftBackspace) {
     EXPECT_FALSE(actual_input.key().has_input_style());
     EXPECT_FALSE(actual_input.key().has_key_code());
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -1449,11 +1519,9 @@ TEST_F(KeyEventHandlerTest, Issue2903247_KeyUpShouldNotBeEaten) {
   // In general, key up event should not be eaten by the IME.
   // See b/2903247 for details.
 
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -1465,6 +1533,9 @@ TEST_F(KeyEventHandlerTest, Issue2903247_KeyUpShouldNotBeEaten) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // Release 'F6'
   {
@@ -1484,16 +1555,18 @@ TEST_F(KeyEventHandlerTest, Issue2903247_KeyUpShouldNotBeEaten) {
     EXPECT_EQ(0xc0400001, lparam.lparam());
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
     initial_state.last_down_key = last_keydown_virtual_key;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeProcessKey(
         virtual_key, lparam.GetScanCode(), lparam.IsKeyDownInImeProcessKey(),
-        keyboard_status, behavior, initial_state, mock.mutable_client(),
-        &keyboard, &next_state, &output);
+        keyboard_status, behavior, initial_state, context,
+        mock.mutable_client(), &keyboard, &next_state, &output);
 
     EXPECT_TRUE(result.succeeded);
     EXPECT_FALSE(result.should_be_eaten);
@@ -1510,11 +1583,9 @@ TEST_F(KeyEventHandlerTest, ProtocolAnomaly_ModiferKeyMayBeSentOnKeyUp) {
   // TODO(yukawa): File this issue as a protocol bug so that we can improve
   // the Mozc protocol later.
 
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -1526,6 +1597,9 @@ TEST_F(KeyEventHandlerTest, ProtocolAnomaly_ModiferKeyMayBeSentOnKeyUp) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // Press Shift
   {
@@ -1543,15 +1617,17 @@ TEST_F(KeyEventHandlerTest, ProtocolAnomaly_ModiferKeyMayBeSentOnKeyUp) {
     EXPECT_EQ(0x002a0001, lparam.lparam());
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeProcessKey(
         virtual_key, lparam.GetScanCode(), lparam.IsKeyDownInImeProcessKey(),
-        keyboard_status, behavior, initial_state, mock.mutable_client(),
-        &keyboard, &next_state, &output);
+        keyboard_status, behavior, initial_state, context,
+        mock.mutable_client(), &keyboard, &next_state, &output);
 
     EXPECT_TRUE(result.succeeded);
     EXPECT_FALSE(result.should_be_eaten);
@@ -1577,16 +1653,18 @@ TEST_F(KeyEventHandlerTest, ProtocolAnomaly_ModiferKeyMayBeSentOnKeyUp) {
     EXPECT_EQ(0x802a0001, lparam.lparam());
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
     initial_state.last_down_key = previous_virtual_key;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeProcessKey(
         virtual_key, lparam.GetScanCode(), lparam.IsKeyDownInImeProcessKey(),
-        keyboard_status, behavior, initial_state, mock.mutable_client(),
-        &keyboard, &next_state, &output);
+        keyboard_status, behavior, initial_state, context,
+        mock.mutable_client(), &keyboard, &next_state, &output);
 
     EXPECT_TRUE(result.succeeded);
     EXPECT_TRUE(result.should_be_eaten);
@@ -1600,6 +1678,8 @@ TEST_F(KeyEventHandlerTest, ProtocolAnomaly_ModiferKeyMayBeSentOnKeyUp) {
     EXPECT_TRUE(actual_input.has_key());
     EXPECT_FALSE(actual_input.key().has_key_code());
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -1618,11 +1698,9 @@ TEST_F(KeyEventHandlerTest,
   // TODO(yukawa): File this issue as a protocol bug so that we can improve
   // the Mozc protocol later.
 
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -1634,12 +1712,17 @@ TEST_F(KeyEventHandlerTest,
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // Press 'Shift+A'
   {
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
     KeyboardStatus keyboard_status;
@@ -1656,11 +1739,11 @@ TEST_F(KeyEventHandlerTest,
         false));  // is_in_transition_state
     EXPECT_EQ(0x1e0001, lparam.lparam());
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeProcessKey(
         virtual_key, lparam.GetScanCode(), lparam.IsKeyDownInImeProcessKey(),
-        keyboard_status, behavior, initial_state, mock.mutable_client(),
-        &keyboard, &next_state, &output);
+        keyboard_status, behavior, initial_state, context,
+        mock.mutable_client(), &keyboard, &next_state, &output);
 
     EXPECT_TRUE(result.succeeded);
     EXPECT_TRUE(result.should_be_eaten);
@@ -1675,6 +1758,8 @@ TEST_F(KeyEventHandlerTest,
     EXPECT_TRUE(actual_input.key().has_key_code());
     EXPECT_EQ('A', actual_input.key().key_code());
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -1689,15 +1774,14 @@ TEST_F(KeyEventHandlerTest,
   // Currently, the Mozc server expects the client remove all modifiers as for
   // some special keys such as VK_DBE_KATAKANA.
 
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_consumed(true);
   mock_output.set_mode(commands::FULL_KATAKANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::FULL_KATAKANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::FULL_KATAKANA);
 
 
   MockState mock(mock_output);
@@ -1709,12 +1793,17 @@ TEST_F(KeyEventHandlerTest,
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // Press 'Shift+Katakana'
   {
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
     KeyboardStatus keyboard_status;
@@ -1731,11 +1820,11 @@ TEST_F(KeyEventHandlerTest,
         false));  // is_in_transition_state
     EXPECT_EQ(0x40700001, lparam.lparam());
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeProcessKey(
         virtual_key, lparam.GetScanCode(), lparam.IsKeyDownInImeProcessKey(),
-        keyboard_status, behavior, initial_state, mock.mutable_client(),
-        &keyboard, &next_state, &output);
+        keyboard_status, behavior, initial_state, context,
+        mock.mutable_client(), &keyboard, &next_state, &output);
 
     EXPECT_TRUE(result.succeeded);
     EXPECT_TRUE(result.should_be_eaten);
@@ -1745,7 +1834,7 @@ TEST_F(KeyEventHandlerTest,
 
     // Should be Full-Katakana
     EXPECT_EQ(IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN |
-              IME_CMODE_KATAKANA, next_state.conversion_status);
+              IME_CMODE_KATAKANA, next_state.logical_conversion_mode);
   }
 
   {
@@ -1756,6 +1845,8 @@ TEST_F(KeyEventHandlerTest,
     EXPECT_FALSE(actual_input.key().has_input_style());
     EXPECT_FALSE(actual_input.key().has_key_code());
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -1773,11 +1864,9 @@ TEST_F(KeyEventHandlerTest,
   // TODO(yukawa): File this issue as a protocol bug so that we can improve
   // the Mozc protocol later.
 
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = true;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -1789,15 +1878,21 @@ TEST_F(KeyEventHandlerTest,
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // Press 'A' with Kana-lock
   {
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
     KeyboardStatus keyboard_status;
+    keyboard_status.SetState('A', kPressed);
 
     const VirtualKey virtual_key = VirtualKey::FromVirtualKey('A');
     const LParamKeyInfo lparam(CreateLParam(
@@ -1809,11 +1904,11 @@ TEST_F(KeyEventHandlerTest,
         false));  // is_in_transition_state
     EXPECT_EQ(0x1e0001, lparam.lparam());
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeProcessKey(
         virtual_key, lparam.GetScanCode(), lparam.IsKeyDownInImeProcessKey(),
-        keyboard_status, behavior, initial_state, mock.mutable_client(),
-        &keyboard, &next_state, &output);
+        keyboard_status, behavior, initial_state, context,
+        mock.mutable_client(), &keyboard, &next_state, &output);
 
     EXPECT_TRUE(result.succeeded);
     EXPECT_TRUE(result.should_be_eaten);
@@ -1830,6 +1925,8 @@ TEST_F(KeyEventHandlerTest,
     EXPECT_TRUE(actual_input.key().has_key_string());
     // "あ"
     EXPECT_EQ("\xE3\x81\xA1", actual_input.key().key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -1846,11 +1943,9 @@ TEST_F(KeyEventHandlerTest,
   // and one internally-used by the session server, we should decompose a
   // control code into a tuple of an ASCII alphabet and a modifier key.
 
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -1862,12 +1957,17 @@ TEST_F(KeyEventHandlerTest,
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // Press 'Ctrl+A'
   {
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
     KeyboardStatus keyboard_status;
@@ -1884,11 +1984,11 @@ TEST_F(KeyEventHandlerTest,
         false));  // is_in_transition_state
     EXPECT_EQ(0x1e0001, lparam.lparam());
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeProcessKey(
         virtual_key, lparam.GetScanCode(), lparam.IsKeyDownInImeProcessKey(),
-        keyboard_status, behavior, initial_state, mock.mutable_client(),
-        &keyboard, &next_state, &output);
+        keyboard_status, behavior, initial_state, context,
+        mock.mutable_client(), &keyboard, &next_state, &output);
 
     EXPECT_TRUE(result.succeeded);
     EXPECT_TRUE(result.should_be_eaten);
@@ -1903,6 +2003,8 @@ TEST_F(KeyEventHandlerTest,
     EXPECT_TRUE(actual_input.key().has_key_code());
     EXPECT_EQ('a', actual_input.key().key_code());
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -1913,14 +2015,16 @@ TEST_F(KeyEventHandlerTest,
 }
 
 TEST_F(KeyEventHandlerTest,
-       Issue2801503_ModeChangeWhenIMEIsGoingToBeTurnedOff) {
-  const bool kKanaLocked = false;
+       CheckKeyCodeWhenAlphabeticalKeyIsPressedWithCtrlInKanaMode) {
+  // When a user presses an alphabet key and a control key, keyboard-layout
+  // drivers produce a control code (0x01,...,0x20), to which the session
+  // server assigns its own code.  This should not be passed to the server
+  // as a Kana-input character. See b/9684668.
 
-  commands::Output mock_output;
+  const bool kKanaLocked = true;
+
+  Output mock_output;
   mock_output.set_consumed(true);
-  mock_output.set_mode(commands::DIRECT);
-  mock_output.mutable_status()->set_activated(false);
-  mock_output.mutable_status()->set_mode(commands::HIRAGANA);
 
   MockState mock(mock_output);
   KeyboardMock keyboard(kKanaLocked);
@@ -1931,6 +2035,86 @@ TEST_F(KeyEventHandlerTest,
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
+
+  // Press 'Ctrl+A'
+  {
+    InputState initial_state;
+    initial_state.logical_conversion_mode =
+        IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
+    initial_state.open = true;
+
+    KeyboardStatus keyboard_status;
+    keyboard_status.SetState(VK_CONTROL, kPressed);
+    keyboard_status.SetState('A', kPressed);
+
+    const VirtualKey virtual_key = VirtualKey::FromVirtualKey('A');
+    const LParamKeyInfo lparam(CreateLParam(
+        0x0001,   // repeat_count
+        0x1e,     // scan_code
+        false,    // is_extended_key,
+        false,    // has_context_code,
+        false,    // is_previous_state_down,
+        false));  // is_in_transition_state
+    EXPECT_EQ(0x1e0001, lparam.lparam());
+
+    Output output;
+    result = TestableKeyEventHandler::ImeProcessKey(
+        virtual_key, lparam.GetScanCode(), lparam.IsKeyDownInImeProcessKey(),
+        keyboard_status, behavior, initial_state, context,
+        mock.mutable_client(), &keyboard, &next_state, &output);
+
+    EXPECT_TRUE(result.succeeded);
+    EXPECT_TRUE(result.should_be_eaten);
+    EXPECT_TRUE(result.should_be_sent_to_server);
+  }
+
+  {
+    commands::Input actual_input;
+    EXPECT_TRUE(mock.GetGeneratedRequest(&actual_input));
+    EXPECT_EQ(commands::Input::TEST_SEND_KEY, actual_input.type());
+    EXPECT_TRUE(actual_input.has_key());
+    EXPECT_TRUE(actual_input.key().has_key_code());
+    EXPECT_EQ('a', actual_input.key().key_code());
+    EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
+    EXPECT_TRUE(actual_input.key().has_mode());
+    EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
+    EXPECT_FALSE(actual_input.key().has_modifiers());
+    EXPECT_EQ(1, actual_input.key().modifier_keys_size());
+    EXPECT_EQ(commands::KeyEvent::CTRL, actual_input.key().modifier_keys(0));
+    EXPECT_FALSE(actual_input.key().has_special_key());
+  }
+}
+
+
+TEST_F(KeyEventHandlerTest,
+       Issue2801503_ModeChangeWhenIMEIsGoingToBeTurnedOff) {
+  const bool kKanaLocked = false;
+
+  Output mock_output;
+  mock_output.set_consumed(true);
+  mock_output.set_mode(commands::DIRECT);
+  mock_output.mutable_status()->set_activated(false);
+  mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
+
+  MockState mock(mock_output);
+  KeyboardMock keyboard(kKanaLocked);
+
+  InputState next_state;
+  KeyEventHandlerResult result;
+
+  InputBehavior behavior;
+  behavior.prefer_kana_input = kKanaLocked;
+  behavior.disabled = false;
+
+  Context context;
 
   // Press 'Hankaku/Zenkaku' to close IME.
   {
@@ -1943,14 +2127,16 @@ TEST_F(KeyEventHandlerTest,
 
     InputState initial_state;
     // Assume that the temporal half-alphanumeric is on-going.
-    initial_state.conversion_status = IME_CMODE_ALPHANUMERIC;
+    initial_state.logical_conversion_mode = IME_CMODE_ALPHANUMERIC;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard,
-        &next_state, &output);
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
+        &output);
 
     EXPECT_TRUE(result.succeeded);
     EXPECT_TRUE(result.should_be_eaten);
@@ -1960,24 +2146,20 @@ TEST_F(KeyEventHandlerTest,
     EXPECT_TRUE(mock.start_server_called());
     // Next conversion status is determined by mock_output.status() instead of
     // mock_output.mode(), which is unfortunately |commands::DIRECT| in this
-    // caise.  (This was the main reason why http://b/2801503 happened)
+    // case.  (This was the main reason why http://b/2801503 happened)
     EXPECT_EQ(IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN,
-              next_state.conversion_status);
+              next_state.logical_conversion_mode);
   }
 }
 
 TEST_F(KeyEventHandlerTest, Issue3029665_KanaLocked_WO) {
-  // Change Kana-lock preference.
-  UpdateConfigToUseKanaAsPreeditMethod();
-
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = true;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -1985,11 +2167,14 @@ TEST_F(KeyEventHandlerTest, Issue3029665_KanaLocked_WO) {
   EXPECT_TRUE(keyboard.kana_locked());
 
   InputState next_state;
-  commands::Output output;
+  Output output;
   KeyEventHandlerResult result;
 
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // "を"
   {
@@ -2001,14 +2186,16 @@ TEST_F(KeyEventHandlerTest, Issue3029665_KanaLocked_WO) {
     keyboard_status.SetState('0', kPressed);
 
     InputState initial_state;
-    initial_state.conversion_status =
+    initial_state.logical_conversion_mode =
         IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard,
+        initial_state, context, mock.mutable_client(), &keyboard,
         &next_state, &output);
 
     EXPECT_TRUE(result.succeeded);
@@ -2028,6 +2215,8 @@ TEST_F(KeyEventHandlerTest, Issue3029665_KanaLocked_WO) {
     EXPECT_TRUE(actual_input.key().has_key_string());
     // "を"
     EXPECT_EQ("\343\202\222", actual_input.key().key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -2040,11 +2229,12 @@ TEST_F(KeyEventHandlerTest,
        Issue3109571_ShiftHenkanShouldBeValid) {
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_consumed(true);
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
 
   MockState mock(mock_output);
   KeyboardMock keyboard(kKanaLocked);
@@ -2055,6 +2245,8 @@ TEST_F(KeyEventHandlerTest,
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+
+  Context context;
 
   // Press 'Shift + Henkan'
   {
@@ -2067,13 +2259,16 @@ TEST_F(KeyEventHandlerTest,
     const bool is_key_down = true;
 
     InputState initial_state;
-    initial_state.conversion_status = IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE;
+    initial_state.logical_conversion_mode =
+        IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard,
+        initial_state, context, mock.mutable_client(), &keyboard,
         &next_state, &output);
   }
   {
@@ -2082,6 +2277,8 @@ TEST_F(KeyEventHandlerTest,
     EXPECT_EQ(commands::Input::SEND_KEY, actual_input.type());
     EXPECT_TRUE(actual_input.has_key());
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -2096,11 +2293,12 @@ TEST_F(KeyEventHandlerTest,
        Issue3109571_ShiftMuhenkanShouldBeValid) {
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_consumed(true);
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
 
   MockState mock(mock_output);
   KeyboardMock keyboard(kKanaLocked);
@@ -2111,6 +2309,8 @@ TEST_F(KeyEventHandlerTest,
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+
+  Context context;
 
   // Press 'Shift + Muhenkan'
   {
@@ -2123,13 +2323,16 @@ TEST_F(KeyEventHandlerTest,
     const bool is_key_down = true;
 
     InputState initial_state;
-    initial_state.conversion_status = IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE;
+    initial_state.logical_conversion_mode =
+        IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard,
+        initial_state, context, mock.mutable_client(), &keyboard,
         &next_state, &output);
   }
   {
@@ -2138,6 +2341,8 @@ TEST_F(KeyEventHandlerTest,
     EXPECT_EQ(commands::Input::SEND_KEY, actual_input.type());
     EXPECT_TRUE(actual_input.has_key());
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -2151,11 +2356,12 @@ TEST_F(KeyEventHandlerTest,
 TEST_F(KeyEventHandlerTest, Issue7098463_HideSuggestWindow) {
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_consumed(true);
   mock_output.set_mode(commands::HIRAGANA);
   mock_output.mutable_status()->set_activated(true);
   mock_output.mutable_status()->set_mode(commands::HIRAGANA);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
 
   MockState mock(mock_output);
   KeyboardMock keyboard(kKanaLocked);
@@ -2166,7 +2372,9 @@ TEST_F(KeyEventHandlerTest, Issue7098463_HideSuggestWindow) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
-  behavior.suppress_suggestion = true;
+
+  Context context;
+  context.set_suppress_suggestion(true);
 
   // Press 'A'
   {
@@ -2178,13 +2386,16 @@ TEST_F(KeyEventHandlerTest, Issue7098463_HideSuggestWindow) {
     const bool is_key_down = true;
 
     InputState initial_state;
-    initial_state.conversion_status = IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE;
+    initial_state.logical_conversion_mode =
+        IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard,
+        initial_state, context, mock.mutable_client(), &keyboard,
         &next_state, &output);
   }
   {
@@ -2220,7 +2431,8 @@ TEST(SimpleImeKeyEventHandlerTest, ToggleInputStyleByRomanKey) {
   {
     InputState state;
     state.open = true;
-    state.conversion_status = 0;  // conversion status will not be cared about.
+    // conversion status will not be cared about.
+    state.logical_conversion_mode = 0;
 
     InputBehavior behavior;
 
@@ -2240,7 +2452,8 @@ TEST(SimpleImeKeyEventHandlerTest, ToggleInputStyleByRomanKey) {
   {
     InputState state;
     state.open = true;
-    state.conversion_status = 0;  // conversion status will not be cared about.
+    // conversion status will not be cared about.
+    state.logical_conversion_mode = 0;
 
     InputBehavior behavior;
 
@@ -2262,7 +2475,8 @@ TEST(SimpleImeKeyEventHandlerTest, ToggleInputStyleByRomanKey) {
   {
     InputState state;
     state.open = true;
-    state.conversion_status = 0;  // conversion status will not be cared about.
+    // conversion status will not be cared about.
+    state.logical_conversion_mode = 0;
 
     InputBehavior behavior;
 
@@ -2282,7 +2496,8 @@ TEST(SimpleImeKeyEventHandlerTest, ToggleInputStyleByRomanKey) {
   {
     InputState state;
     state.open = true;
-    state.conversion_status = 0;  // conversion status will not be cared about.
+    // conversion status will not be cared about.
+    state.logical_conversion_mode = 0;
 
     InputBehavior behavior;
 
@@ -2305,7 +2520,8 @@ TEST(SimpleImeKeyEventHandlerTest, ToggleInputStyleByRomanKey) {
   {
     InputState state;
     state.open = false;
-    state.conversion_status = 0;  // conversion status will not be cared about.
+    // conversion status will not be cared about.
+    state.logical_conversion_mode = 0;
 
     InputBehavior behavior;
 
@@ -2325,7 +2541,8 @@ TEST(SimpleImeKeyEventHandlerTest, ToggleInputStyleByRomanKey) {
   {
     InputState state;
     state.open = false;
-    state.conversion_status = 0;  // conversion status will not be cared about.
+    // conversion status will not be cared about.
+    state.logical_conversion_mode = 0;
 
     InputBehavior behavior;
 
@@ -2345,7 +2562,8 @@ TEST(SimpleImeKeyEventHandlerTest, ToggleInputStyleByRomanKey) {
   {
     InputState state;
     state.open = false;
-    state.conversion_status = 0;  // conversion status will not be cared about.
+    // conversion status will not be cared about.
+    state.logical_conversion_mode = 0;
 
     InputBehavior behavior;
 
@@ -2365,7 +2583,8 @@ TEST(SimpleImeKeyEventHandlerTest, ToggleInputStyleByRomanKey) {
   {
     InputState state;
     state.open = false;
-    state.conversion_status = 0;  // conversion status will not be cared about.
+    // conversion status will not be cared about.
+    state.logical_conversion_mode = 0;
 
     InputBehavior behavior;
 
@@ -2386,7 +2605,8 @@ TEST(SimpleImeKeyEventHandlerTest, ToggleInputStyleByRomanKey) {
   {
     InputState state;
     state.open = true;
-    state.conversion_status = 0;  // conversion status will not be cared about.
+    // conversion status will not be cared about.
+    state.logical_conversion_mode = 0;
 
     InputBehavior behavior;
 
@@ -2407,7 +2627,8 @@ TEST(SimpleImeKeyEventHandlerTest, ToggleInputStyleByRomanKey) {
   {
     InputState state;
     state.open = true;
-    state.conversion_status = 0;  // conversion status will not be cared about.
+    // conversion status will not be cared about.
+    state.logical_conversion_mode = 0;
 
     InputBehavior behavior;
 
@@ -2428,7 +2649,8 @@ TEST(SimpleImeKeyEventHandlerTest, ToggleInputStyleByRomanKey) {
   {
     InputState state;
     state.open = true;
-    state.conversion_status = 0;  // conversion status will not be cared about.
+    // conversion status will not be cared about.
+    state.logical_conversion_mode = 0;
 
     InputBehavior behavior;
 
@@ -2449,7 +2671,8 @@ TEST(SimpleImeKeyEventHandlerTest, ToggleInputStyleByRomanKey) {
   {
     InputState state;
     state.open = true;
-    state.conversion_status = 0;  // conversion status will not be cared about.
+    // conversion status will not be cared about.
+    state.logical_conversion_mode = 0;
 
     InputBehavior behavior;
 
@@ -2466,14 +2689,12 @@ TEST(SimpleImeKeyEventHandlerTest, ToggleInputStyleByRomanKey) {
   }
 }
 
-TEST_F(KeyEventHandlerTest, Issue3504241_VKPacketByQuestionKey) {
+TEST_F(KeyEventHandlerTest, Issue3504241_VKPacketAsRawInput) {
   // To fix b/3504241, VK_PACKET must be supported.
 
-  // Force ImeSwitchUtil to reflect the config.
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -2485,6 +2706,9 @@ TEST_F(KeyEventHandlerTest, Issue3504241_VKPacketByQuestionKey) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // Release VK_PACKET ('あ')
   {
@@ -2496,18 +2720,21 @@ TEST_F(KeyEventHandlerTest, Issue3504241_VKPacketByQuestionKey) {
     const VirtualKey last_keydown_virtual_key =
         VirtualKey::FromVirtualKey(VK_ESCAPE);
 
-    const BYTE scan_code = 36;  // for '?'. will be ignored in this test
+    const BYTE scan_code = 0;  // will be ignored in this test
     const bool is_key_down = true;
 
     InputState initial_state;
-    initial_state.conversion_status = IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE;
+    initial_state.logical_conversion_mode =
+        IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard,
-        &next_state, &output);
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
+        &output);
 
     // VK_PACKET will be handled by the server.
     EXPECT_TRUE(result.succeeded);
@@ -2520,11 +2747,12 @@ TEST_F(KeyEventHandlerTest, Issue3504241_VKPacketByQuestionKey) {
     EXPECT_TRUE(mock.GetGeneratedRequest(&actual_input));
     EXPECT_EQ(commands::Input::SEND_KEY, actual_input.type());
     EXPECT_TRUE(actual_input.has_key());
-    EXPECT_TRUE(actual_input.key().has_key_code());
-    EXPECT_EQ('?', actual_input.key().key_code());
+    EXPECT_FALSE(actual_input.key().has_key_code());
     EXPECT_TRUE(actual_input.key().has_key_string());
     // "あ"
     EXPECT_EQ("\343\201\202", actual_input.key().key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -2534,10 +2762,9 @@ TEST_F(KeyEventHandlerTest, Issue3504241_VKPacketByQuestionKey) {
 }
 
 TEST_F(KeyEventHandlerTest, CapsLock) {
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -2549,6 +2776,9 @@ TEST_F(KeyEventHandlerTest, CapsLock) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // Press VK_CAPITAL
   {
@@ -2560,14 +2790,17 @@ TEST_F(KeyEventHandlerTest, CapsLock) {
     const bool is_key_down = true;
 
     InputState initial_state;
-    initial_state.conversion_status = IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE;
+    initial_state.logical_conversion_mode =
+        IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard,
-        &next_state, &output);
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
+        &output);
 
     // VK_PACKET will be handled by the server.
     EXPECT_TRUE(result.succeeded);
@@ -2582,6 +2815,8 @@ TEST_F(KeyEventHandlerTest, CapsLock) {
     EXPECT_TRUE(actual_input.has_key());
     EXPECT_FALSE(actual_input.key().has_key_code());
     EXPECT_FALSE(actual_input.key().has_key_string());
+    EXPECT_TRUE(actual_input.key().has_activated());
+    EXPECT_TRUE(actual_input.key().activated());
     EXPECT_TRUE(actual_input.key().has_mode());
     EXPECT_EQ(commands::HIRAGANA, actual_input.key().mode());
     EXPECT_FALSE(actual_input.key().has_modifiers());
@@ -2595,10 +2830,9 @@ TEST_F(KeyEventHandlerTest, CapsLock) {
 // it to the server. Otherwise, IME On/Off flipping happens twice and a user
 // cannot activate IME by VK_KANJI.
 TEST_F(KeyEventHandlerTest, KanjiKey_Issue7970379) {
-  config::ImeSwitchUtil::Reload();
   const bool kKanaLocked = false;
 
-  commands::Output mock_output;
+  Output mock_output;
   mock_output.set_consumed(true);
 
   MockState mock(mock_output);
@@ -2610,6 +2844,9 @@ TEST_F(KeyEventHandlerTest, KanjiKey_Issue7970379) {
   InputBehavior behavior;
   behavior.prefer_kana_input = kKanaLocked;
   behavior.disabled = false;
+  behavior.direct_mode_keys = GetDefaultDirectModeKeys();
+
+  Context context;
 
   // Press VK_KANJI
   {
@@ -2621,19 +2858,90 @@ TEST_F(KeyEventHandlerTest, KanjiKey_Issue7970379) {
     const bool is_key_down = true;
 
     InputState initial_state;
-    initial_state.conversion_status = IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE;
+    initial_state.logical_conversion_mode =
+        IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
     initial_state.open = true;
 
-    commands::Output output;
+    Output output;
     result = TestableKeyEventHandler::ImeToAsciiEx(
         virtual_key, scan_code, is_key_down, keyboard_status, behavior,
-        initial_state, mock.mutable_client(), &keyboard,
-        &next_state, &output);
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
+        &output);
 
     // VK_KANJI must not be handled by the server.
     EXPECT_TRUE(result.succeeded);
     EXPECT_FALSE(result.should_be_eaten);
     EXPECT_FALSE(result.should_be_sent_to_server);
+  }
+}
+
+// Temporal alphanumeric mode will be stored into |visible_conversion_mode|.
+TEST_F(KeyEventHandlerTest, Issue8524269_ComebackMode) {
+  const bool kKanaLocked = false;
+
+  Output mock_output;
+  mock_output.set_consumed(true);
+  mock_output.set_mode(commands::HALF_ASCII);
+  mock_output.mutable_status()->set_activated(true);
+  mock_output.mutable_status()->set_mode(commands::HALF_ASCII);
+  mock_output.mutable_status()->set_comeback_mode(commands::HIRAGANA);
+
+  MockState mock(mock_output);
+  KeyboardMock keyboard(kKanaLocked);
+
+  InputState next_state;
+  KeyEventHandlerResult result;
+
+  InputBehavior behavior;
+  behavior.prefer_kana_input = kKanaLocked;
+  behavior.disabled = false;
+
+  Context context;
+
+  // Press 'Shift+A'
+  {
+    InputState initial_state;
+    initial_state.logical_conversion_mode =
+        IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN;
+    initial_state.visible_conversion_mode =
+        initial_state.logical_conversion_mode;
+    initial_state.open = true;
+
+    KeyboardStatus keyboard_status;
+    keyboard_status.SetState(VK_SHIFT, kPressed);
+    keyboard_status.SetState('A', kPressed);
+
+    const VirtualKey virtual_key = VirtualKey::FromVirtualKey('A');
+    const BYTE scan_code = 0;  // will be ignored in this test
+    const bool is_key_down = true;
+    const LParamKeyInfo lparam(CreateLParam(
+        0x0001,   // repeat_count
+        0x1e,     // scan_code
+        false,    // is_extended_key,
+        false,    // has_context_code,
+        false,    // is_previous_state_down,
+        false));  // is_in_transition_state
+    EXPECT_EQ(0x1e0001, lparam.lparam());
+
+    Output output;
+    result = TestableKeyEventHandler::ImeToAsciiEx(
+        virtual_key, scan_code, is_key_down, keyboard_status, behavior,
+        initial_state, context, mock.mutable_client(), &keyboard, &next_state,
+        &output);
+
+    EXPECT_TRUE(result.succeeded);
+    EXPECT_TRUE(result.should_be_eaten);
+    EXPECT_TRUE(result.should_be_sent_to_server);
+
+    EXPECT_TRUE(next_state.open);
+    EXPECT_TRUE(mock.start_server_called());
+    EXPECT_EQ(IME_CMODE_NATIVE | IME_CMODE_FULLSHAPE | IME_CMODE_ROMAN,
+              next_state.logical_conversion_mode);
+    // Visible mode should be half alphanumeric.
+    EXPECT_EQ(IME_CMODE_ALPHANUMERIC | IME_CMODE_ROMAN,
+              next_state.visible_conversion_mode);
   }
 }
 

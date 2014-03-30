@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -52,6 +52,17 @@
             'oss/oss_data_manager_base.gyp:oss_user_pos_manager'
           ]
         }],
+      ],
+    },
+    {
+      'target_name': 'connection_file_reader',
+      'type': 'static_library',
+      'toolsets': [ 'target', 'host' ],
+      'sources': [
+        'connection_file_reader.cc',
+      ],
+      'dependencies': [
+        '../base/base.gyp:base',
       ],
     },
   ],

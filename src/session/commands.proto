@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -60,6 +60,12 @@ message KeyEvent {
   enum SpecialKey {
     NO_SPECIALKEY = 0;
     DIGIT = 1;
+    // On Windows, SpecialKey::On and SpecialKey::OFF are obsolete. Use
+    // TURN_ON_IME session command should be used instead. See b/10216365.
+    // On other platforms, especially on Mac, please note that
+    // client/client.cc still relies on SpecialKey::On for session playback.
+    // We need to fix b/10250883 first.
+    // TODO(team): Unsupport SpecialKey::On and SpecialKey::OFF.
     ON = 2;
     OFF = 3;
     SPACE = 4;
@@ -124,20 +130,22 @@ message KeyEvent {
     DECIMAL = 61;  // Numpad [.]
     DIVIDE = 62;  // Numpad [/]
     EQUALS = 63;  // Numpad [=]
-    ASCII = 64;
+    TEXT_INPUT = 64;  // Meta key event representing any text input.
     HANKAKU = 65;
     KANJI = 66;
     KATAKANA = 67; // VK_DBE_KATAKANA(Win)
     CAPS_LOCK = 68;
-    HANJA = 69;
+    // Unsupported keys (e.g. PrtSc, Pause) fall back to UNDEFINED_KEY.
+    UNDEFINED_KEY = 69;
     COMMA = 70;  // Numpad [,]
-    NUM_SPECIALKEYS = 71;
+    CLEAR = 71;  // Numpad [5] without NUMLOCK
+    NUM_SPECIALKEYS = 72;
   };
 
   // CTRL, ALT and SHIFT cover both LEFT and RIGHT keys.  If the
   // difference between LEFT and RIGHT is no matter, using CTRL (or ALT, SHIFT)
   // is preferred.
-  // If LEFT (or RIGHT) CTRL(or ALT, SHIFT) is pressed, LEFT_CTRL is set on 
+  // If LEFT (or RIGHT) CTRL(or ALT, SHIFT) is pressed, LEFT_CTRL is set on
   // Windows or Mac client, or LEFT_CTRL and CTRL are set on Unix client.
   // Mozc key translation logic is as follows
   //
@@ -237,9 +245,11 @@ message KeyEvent {
   repeated ModifierKey modifier_keys = 4;  // ModifierKeys
 
   // String used for preedit.  Kana characters and strings typed from
-  // a software keyboard are supposed to be stored here.  To set kana
-  // value, key_code=1 should be stored an ascii character for the
-  // kana key.
+  // a software keyboard are supposed to be stored here.  If key_code
+  // is also set, key_code is treated as the raw input and key_string is
+  // treated as the composition input.  For example, to set Kana value,
+  // when key_string is "ち", key_code should be 'a' (97).  If key_code
+  // is empty, key_string is also treated as the raw input.
   optional string key_string = 5;
 
   enum InputStyle {
@@ -254,6 +264,8 @@ message KeyEvent {
   optional InputStyle input_style = 6 [default = FOLLOW_MODE];
 
   // Input mode
+  // For histrical reasons, this field expects a temporary conversion
+  // mode rather than comeback input mode.
   optional CompositionMode mode = 7;
 
   // Probable key events
@@ -261,6 +273,20 @@ message KeyEvent {
   // don't omit Input.key_code and so on
   // because preedit string is composed based on them.
   repeated ProbableKeyEvent probable_key_event = 8;
+
+  // IME on/off mode
+  // You can use this field to change the IME on/off mode indirectly without
+  // sending SpecialKey:ON or SpecialKey:OFF events.
+  // If the internal ImeContext::State is DIRECT and this field is true, the
+  // converter will change the state to PRECONPOSITION and then handles this key
+  // event.
+  // If the internal ImeContext::State is not DIRECT and this field is false,
+  // the converter will change the state to DIRECT and then handles this key
+  // event.
+  // Implementation note: We need both |mode| and |activated| to support
+  // indirect IME off, where |mode| should contain the next mode. If this field
+  // is not set, the server will act as if indirect on/off was not supported. 
+  optional bool activated = 9;
 };
 
 message GenericStorageEntry {
@@ -379,21 +405,47 @@ message SessionCommand {
     // suggest window on the correct position, this message can be ignored.
     SEND_CARET_LOCATION = 16;
 
-    // Send a command from language bar.
-    // Exact command is specified by language_bar_command_id.
-    SEND_LANGUAGE_BAR_COMMAND = 17;
+    // Obsolete command. Don't simply remove this command for NUM_OF_COMMANDS.
+    // TODO(team): Replace this command by useful one.
+    OBSOLETE_SEND_LANGUAGE_BAR_COMMAND = 17;
+
+    // When the server is hadling asynchronous request, the server returns the
+    // message with callback request which session_command is GET_ASYNC_RESULT.
+    // After the delay_millisec, the client sends this command to the server.
+    GET_ASYNC_RESULT = 18;
+
+    // Commit the raw text of the composed string.
+    COMMIT_RAW_TEXT = 19;
+
+    // Call ConvertPrevPage session command to show the previous page of
+    // candidates.
+    CONVERT_PREV_PAGE = 20;
+
+    // Call ConvertNextPage session command to show the next page of
+    // candidates.
+    CONVERT_NEXT_PAGE = 21;
+
+    // Make sure IME is turned on. Optionally you can also provide new input
+    // mode in |composition_mode| (but you must not set DIRECT to it).
+    // |composition_mode| is honored even when IME is already turned on.
+    TURN_ON_IME = 22;
+
+    // Make sure IME is turned off. Optionally you can also provide new input
+    // mode in |composition_mode| (but you must not set DIRECT to it). If IME
+    // |composition_mode| is honored even when IME is already turned off.
+    TURN_OFF_IME = 23;
 
     // Number of commands.
     // When new command is added, the command should use below number
     // and NUM_OF_COMMANDS should be incremented.
-    NUM_OF_COMMANDS = 18;
+    NUM_OF_COMMANDS = 24;
   };
   required CommandType type = 1;
 
   // Unique number specifying a candidate word.
   optional int32 id = 2;
 
-  // This is used with SWITCH_INPUT_MODE.
+  // This is used with SWITCH_INPUT_MODE, TURN_ON_IME and TURN_OFF_IME.
   optional CompositionMode composition_mode = 3;
 
   // Text argument.  This is used by CONVERT_REVERSE at this moment.
@@ -417,14 +469,8 @@ message SessionCommand {
   // position calculation. Used with SEND_CARET_LOCATION.
   optional Rectangle caret_rectangle = 8;
 
-  // Specifies the command id which is sent from language bar.
-  enum LanguageBarCommandId {
-    TOGGLE_PINYIN_CHINESE_MODE = 1;
-    TOGGLE_PINYIN_FULL_WIDTH_WORD_MODE = 2;
-    TOGGLE_PINYIN_FULL_WIDTH_PUNCTUATION_MODE = 3;
-    TOGGLE_PINYIN_SIMPLIFIED_CHINESE_MODE = 4;
-  };
-  optional LanguageBarCommandId language_bar_command_id = 9;
+  // Unique number specifying an asynchronous request.
+  optional int32 asynchronous_request_id = 10;
 };
 
 message Context {
@@ -464,6 +510,14 @@ message Context {
   };
   // Type of the input field being focused.
   optional InputFieldType input_field_type = 4;
+
+  // An unique revision ID to specify one specific typing session. A client can
+  // use arbitrary value for this field. The converter is expected to clear its
+  // internal history segments whenever this value is changed. A client should
+  // use the same revision ID whenever the converter should keep it internal
+  // history segments. In order to avoid unexpected history learnings, a client
+  // should update the revision whenever the input focus is changed.
+  optional int32 revision = 5 [default = 0];
 
   // Repeated fields to be used for experimental features.
   repeated string experimental_features = 100;
@@ -550,6 +604,7 @@ message Request {
 
     // Use special table for Godan (to number).
     GODAN_TO_NUMBER = 32;
+
   };
 
   // Use special Romanji table.
@@ -674,6 +729,22 @@ message Request {
   }
   optional CrossingEdgeBehavior crossing_edge_behavior = 13
       [default = DO_NOTHING];
+
+  // Controls the behavior of language aware input.  Language aware input
+  // guesses the actual language regardless the input mode.  For example,
+  // if user type "てｓｔ" it will be treated as "test".
+  enum LanguageAwareInputBehavior {
+    // Performs the default behavior considering the platform and channel.
+    DEFAULT_LANGUAGE_AWARE_BEHAVIOR = 0;
+
+    // Does not perform this functionarity.
+    NO_LANGUAGE_AWARE_INPUT = 1;
+
+    // Adds a language aware candidate to the suggestion.
+    LANGUAGE_AWARE_SUGGESTION = 2;
+  }
+  optional LanguageAwareInputBehavior language_aware_input = 14
+      [default = DEFAULT_LANGUAGE_AWARE_BEHAVIOR];
 }
 
 // Note there is another ApplicationInfo inside RendererCommand.
@@ -681,6 +752,11 @@ message Request {
 message ApplicationInfo {
   optional uint32 process_id = 1;
   optional uint32 thread_id = 2;
+  // The time difference between local time and UTC time in seconds.
+  // This field is not supported except for NaCl.
+  // We use this field in NaCl Mozc because we can't know the local timezone in
+  // NaCl environment.
+  optional int32 timezone_offset = 3;
 };
 
 message Input {
@@ -752,18 +828,11 @@ message Input {
     // can be used for pinging the server
     NO_OPERATION = 14;
 
-    START_CLOUD_SYNC = 18;
-    CLEAR_CLOUD_SYNC = 19;
-    // Obtains the current cloud sync status.  The converter will fill the
-    // 'cloud_sync_status' field in the output.
-    GET_CLOUD_SYNC_STATUS = 23;
-    // You need to specify "auth_code" field when this command is
-    // used.  This command adds the specified "auth_code" to the
-    // converter.  Currently the converter has only one slot for the
-    // "auth_code" so this command means just replacing authorization.
-    // TODO(mukai): prepare a command to invalidate an existing
-    // "auth_code".
-    ADD_AUTH_CODE = 24;
+    // Sync feature is deprecated since 1.13 dev.
+    // TODO(mozc-team): Remove following variables.
+    OBSOLETE_START_CLOUD_SYNC = 18;
+    OBSOLETE_GET_CLOUD_SYNC_STATUS = 23;
+    OBSOLETE_ADD_AUTH_CODE = 24;
 
     INSERT_TO_STORAGE = 20;
     READ_ALL_FROM_STORAGE = 21;
@@ -775,6 +844,11 @@ message Input {
     // Number of commands.
     // When new command is added, the command should use below number
     // and NUM_OF_COMMANDS should be incremented.
+    //
+    // Note: This enum lack the value for 15 and 19 and it may cause a crash.
+    //       Please reuse these value if you can.
+    //       15 have never been used before, and 19 was used to clear synced
+    //       data on dev channel.
     NUM_OF_COMMANDS = 27;
   };
   required CommandType type = 1;
@@ -808,21 +882,6 @@ message Input {
   // If the command is INSERT_TO_STORAGE, all the fields must be filled.
   // If READ_ALL_FROM_STORAGE, key and value fields are ignored.
   optional GenericStorageEntry storage_entry = 10;
-
-  // Authorization information for cloud sync.  You need to specify
-  // this message for SET_AUTH_CODE command.
-  message AuthorizationInfo {
-    // The auth_code.
-    optional string auth_code = 1;
-    // The name to distinguish an authorization from others.  This is
-    // prepared in case that the configuration allows multiple tokens
-    // of OAuth2, but currently it does nothing.
-    optional string name = 2;
-    // The scope of the authorization.  Ditto.
-    optional string scope = 3;
-  };
-  // Specify the authorization info if the command is SET_AUTH_CODE.
-  optional AuthorizationInfo auth_code = 11;
 
   enum TouchAction {
     TOUCH_DOWN = 1;
@@ -931,8 +990,16 @@ message Status {
   // Whether IME is ON or OFF
   optional bool activated = 1;
 
-  // Composition mode when IME is activated.
+  // Visible composition mode when IME is activated. This mode may come from a
+  // temporary composition mode. See |comeback_mode|.
+  // TODO(yukawa): Rename this field to "visible_mode".
   optional CompositionMode mode = 2;
+
+  // True composition mode that is suitable for system global and permanent
+  // composition mode. When a temporary composition mode exists,
+  // |comeback_mode| can be different from |mode|.
+  // TODO(yukawa): Use more appropriate name.
+  optional CompositionMode comeback_mode = 3;
 };
 
 // This messsage contains which characters are to be deleted by client.
@@ -949,41 +1016,6 @@ message DeletionRange {
 
   // Length of the range.
   optional int32 length = 2;
-};
-
-// TODO(peria): Move this message to a new protobuf file.
-message CloudSyncStatus {
-  enum SyncGlobalStatus {
-    SYNC_SUCCESS = 0;
-    SYNC_FAILURE = 1;
-    INSYNC = 2;
-    NOSYNC = 3;  // no synchronisation is working.
-    WAITSYNC = 4;  // waiting for minimum sync RPC duration.
-  };
-  required SyncGlobalStatus global_status = 1;
-
-  // Error types in sync feature.
-  enum ErrorCode {
-    // In case AuthToken is not accepted in OAuth2 authorization.
-    AUTHORIZATION_FAIL = 0;
-    // Any sync dictionaries have more entries than pre-defiend limit.
-    USER_DICTIONARY_NUM_ENTRY_EXCEEDED = 1;
-    // Sizes of any sync dictionaries are larger than pre-defiend limit.
-    USER_DICTIONARY_BYTESIZE_EXCEEDED = 2;
-    // The number of sync dictionaries exceeds pre-defined limit.
-    USER_DICTIONARY_NUM_DICTIONARY_EXCEEDED = 3;
-  };
-  message SyncError {
-    required ErrorCode error_code = 1;
-    optional int64 timestamp = 2 [default = -1];
-  };
-  // Error logs in sync feature.
-  repeated SyncError sync_errors = 2;
-
-  // We have no items numbered 3-5 for a historical reason.
-
-  // Timestamp of the last successful sync.
-  optional uint64 last_synced_timestamp = 6 [default = 0];
 };
 
 message Output {
@@ -1050,13 +1082,14 @@ message Output {
     // optional values such as id and composition_mode can be modified
     // or added by the client.
     optional SessionCommand session_command = 1;
+
+    // Callback command should be sent after this delay.
+    optional uint32 delay_millisec = 2;
   };
   optional Callback callback = 18;
 
   // Used when the command is READ_ALL_FROM_STORAGE.
   optional GenericStorageEntry storage_entry = 19;
-
-  optional CloudSyncStatus cloud_sync_status = 20;
 
   optional mozc.user_dictionary.UserDictionaryCommandStatus
       user_dictionary_command_status = 21;

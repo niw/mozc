@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -30,6 +30,7 @@
 #include "converter/immutable_converter.h"
 
 #include <algorithm>
+#include <cctype>
 #include <climits>
 #include <map>
 #include <string>
@@ -50,6 +51,7 @@
 #include "converter/segmenter_interface.h"
 #include "converter/segments.h"
 #include "dictionary/dictionary_interface.h"
+#include "dictionary/node_list_builder.h"
 #include "dictionary/pos_group.h"
 #include "dictionary/pos_matcher.h"
 #include "dictionary/suppression_dictionary.h"
@@ -71,6 +73,49 @@ const int    kMaxCost                           = 32767;
 const int    kMinCost                           = -32767;
 const int    kDefaultNumberCost                 = 3000;
 
+class KeyCorrectedNodeListBuilder : public BaseNodeListBuilder {
+ public:
+  KeyCorrectedNodeListBuilder(size_t pos,
+                              StringPiece original_lookup_key,
+                              const KeyCorrector *key_corrector,
+                              NodeAllocatorInterface *allocator)
+      : BaseNodeListBuilder(allocator, allocator->max_nodes_size()),
+        pos_(pos),
+        original_lookup_key_(original_lookup_key),
+        key_corrector_(key_corrector),
+        tail_(NULL) {}
+
+  virtual ResultType OnToken(StringPiece key, StringPiece actual_key,
+                             const Token &token) {
+    const size_t offset =
+        key_corrector_->GetOriginalOffset(pos_, token.key.size());
+    if (!KeyCorrector::IsValidPosition(offset) || offset == 0) {
+      return TRAVERSE_NEXT_KEY;
+    }
+    Node *node = NewNodeFromToken(token);
+    node->key.assign(original_lookup_key_.data() + pos_, offset);
+    node->wcost += KeyCorrector::GetCorrectedCostPenalty(node->key);
+
+    // Push back |node| to the end.
+    if (result_ == NULL) {
+      result_ = node;
+    } else {
+      DCHECK(tail_ != NULL);
+      tail_->bnext = node;
+    }
+    tail_ = node;
+    return TRAVERSE_CONTINUE;
+  }
+
+  Node *tail() const { return tail_; }
+
+ private:
+  const size_t pos_;
+  const StringPiece original_lookup_key_;
+  const KeyCorrector *key_corrector_;
+  Node *tail_;
+};
+
 void InsertCorrectedNodes(size_t pos, const string &key,
                           const ConversionRequest &request,
                           const KeyCorrector *key_corrector,
@@ -84,42 +129,36 @@ void InsertCorrectedNodes(size_t pos, const string &key,
   if (str == NULL || length == 0) {
     return;
   }
-
-  DictionaryInterface::Limit limit;
-  limit.kana_modifier_insensitive_lookup_enabled =
-      request.IsKanaModifierInsensitiveConversion();
-  Node *rnode = dictionary->LookupPrefixWithLimit(
-      str, length, limit, lattice->node_allocator());
-  Node *head = NULL;
-  Node *prev = NULL;
-  for (Node *node = rnode; node != NULL; node = node->bnext) {
-    const size_t offset =
-        key_corrector->GetOriginalOffset(pos, node->key.size());
-    if (!KeyCorrector::IsValidPosition(offset) || offset == 0) {
-      continue;
-    }
-    node->key.assign(key, pos, offset);
-    node->wcost += KeyCorrector::GetCorrectedCostPenalty(node->key);
-    if (head == NULL) {
-      head = node;
-    }
-    if (prev != NULL) {
-      prev->bnext = node;
-    }
-    prev = node;
+  KeyCorrectedNodeListBuilder builder(pos, key, key_corrector,
+                                      lattice->node_allocator());
+  dictionary->LookupPrefix(
+      StringPiece(str, length),
+      request.IsKanaModifierInsensitiveConversion(),
+      &builder);
+  if (builder.tail() != NULL) {
+    builder.tail()->bnext = NULL;
   }
-
-  if (prev != NULL) {
-    prev->bnext = NULL;
-  }
-
-  if (head != NULL) {
-    lattice->Insert(pos, head);
+  if (builder.result() != NULL) {
+    lattice->Insert(pos, builder.result());
   }
 }
 
 bool IsNumber(const char c) {
   return c >= '0' && c <= '9';
+}
+
+bool ContainsWhiteSpacesOnly(const StringPiece s) {
+  for (ConstChar32Iterator iter(s); !iter.Done(); iter.Next()) {
+    switch (iter.Get()) {
+      case 0x09:    // TAB
+      case 0x20:    // Half-width space
+      case 0x3000:  // Full-width space
+        break;
+      default:
+        return false;
+    }
+  }
+  return true;
 }
 
 void DecomposeNumberAndSuffix(const string &input,
@@ -695,6 +734,30 @@ bool ImmutableConverterImpl::ResegmentPersonalName(
   return modified;
 }
 
+namespace {
+
+class NodeListBuilderWithCacheEnabled : public NodeListBuilderForLookupPrefix {
+ public:
+  NodeListBuilderWithCacheEnabled(NodeAllocatorInterface *allocator,
+                                  size_t min_key_length)
+      : NodeListBuilderForLookupPrefix(allocator,
+                                       allocator->max_nodes_size(),
+                                       min_key_length) {
+    DCHECK(allocator);
+  }
+
+  virtual ResultType OnToken(StringPiece key, StringPiece actual_key,
+                             const Token &token) {
+    Node *node = NewNodeFromToken(token);
+    node->attributes |= Node::ENABLE_CACHE;
+    node->raw_wcost = node->wcost;
+    PrependNode(node);
+    return (limit_ <= 0) ? TRAVERSE_DONE : TRAVERSE_CONTINUE;
+  }
+};
+
+}  // namespace
+
 Node *ImmutableConverterImpl::Lookup(const int begin_pos,
                                      const int end_pos,
                                      const ConversionRequest &request,
@@ -712,26 +775,26 @@ Node *ImmutableConverterImpl::Lookup(const int begin_pos,
     result_node = dictionary_->LookupReverse(begin, len,
                                              lattice->node_allocator());
   } else {
-    DictionaryInterface::Limit limit;
-    limit.kana_modifier_insensitive_lookup_enabled =
-        request.IsKanaModifierInsensitiveConversion();
     if (is_prediction && !FLAGS_disable_lattice_cache) {
-      limit.key_len_lower_limit = lattice->cache_info(begin_pos) + 1;
-
-      result_node = dictionary_->LookupPrefixWithLimit(
-          begin, len, limit, lattice->node_allocator());
-
-      // add ENABLE_CACHE attribute and set raw_wcost
-      for (Node *node = result_node; node != NULL; node = node->bnext) {
-        node->attributes |= Node::ENABLE_CACHE;
-        node->raw_wcost = node->wcost;
-      }
-
+      NodeListBuilderWithCacheEnabled builder(
+          lattice->node_allocator(),
+          lattice->cache_info(begin_pos) + 1);
+      dictionary_->LookupPrefix(
+          StringPiece(begin, len),
+          request.IsKanaModifierInsensitiveConversion(),
+          &builder);
+      result_node = builder.result();
       lattice->SetCacheInfo(begin_pos, len);
     } else {
-      // when cache feature is not used, look up normally
-      result_node = dictionary_->LookupPrefixWithLimit(
-          begin, len, limit, lattice->node_allocator());
+      // When cache feature is not used, look up normally
+      BaseNodeListBuilder builder(
+          lattice->node_allocator(),
+          lattice->node_allocator()->max_nodes_size());
+      dictionary_->LookupPrefix(
+          StringPiece(begin, len),
+          request.IsKanaModifierInsensitiveConversion(),
+          &builder);
+      result_node = builder.result();
     }
   }
   return AddCharacterTypeBasedNodes(begin, end, lattice, result_node);
@@ -1605,6 +1668,9 @@ void ImmutableConverterImpl::InsertFirstSegmentToCandidates(
   InsertCandidates(segments, lattice, group,
                    max_candidates_size,
                    ONLY_FIRST_SEGMENT);
+  // Note that inserted candidates might consume the entire key.
+  // e.g. key: "なのは", value: "ナノは"
+  // Erase them later.
   if (segments->conversion_segment(0).candidates_size() <=
       only_first_segment_candidate_pos) {
     return;
@@ -1626,25 +1692,49 @@ void ImmutableConverterImpl::InsertFirstSegmentToCandidates(
           (first_segment.candidate(0).wcost -
            first_segment.candidate(only_first_segment_candidate_pos).wcost));
   for (size_t i = only_first_segment_candidate_pos;
-       i < first_segment.candidates_size();
-       ++i) {
+       i < first_segment.candidates_size();) {
     static const int kOnlyFirstSegmentOffset = 300;
     Segment::Candidate *candidate =
         segments->mutable_conversion_segment(0)->mutable_candidate(i);
+    // If the size of candidate's key is greater than or
+    // equal to 1st segment's key,
+    // it means that the result consumes the entire key.
+    // Such results are not appropriate for PARTIALLY_KEY_CONSUMED so erase it.
+    if (candidate->key.size() >= first_segment.key().size()) {
+      segments->mutable_conversion_segment(0)->erase_candidate(i);
+      continue;
+    }
     candidate->cost += (base_cost_diff + kOnlyFirstSegmentOffset);
     candidate->wcost += (base_wcost_diff + kOnlyFirstSegmentOffset);
     DCHECK(!(candidate->attributes &
              Segment::Candidate::PARTIALLY_KEY_CONSUMED));
     candidate->attributes |= Segment::Candidate::PARTIALLY_KEY_CONSUMED;
     candidate->consumed_key_size = Util::CharsLen(candidate->key);
+    ++i;
   }
 }
 
 bool ImmutableConverterImpl::IsSegmentEndNode(
     const Segments &segments, const Node *node,
     const vector<uint16> &group, bool is_single_segment) const {
+  DCHECK(node->next);
   if (node->next->node_type == Node::EOS_NODE) {
     return true;
+  }
+
+  // In reverse conversion, group consecutive white spaces into one segment.
+  // For example, "ほん むりょう" -> "ほん", " ", "むりょう".
+  if (segments.request_type() == Segments::REVERSE_CONVERSION) {
+    const bool this_node_is_ws = ContainsWhiteSpacesOnly(node->key);
+    const bool next_node_is_ws = ContainsWhiteSpacesOnly(node->next->key);
+    if (this_node_is_ws) {
+      return !next_node_is_ws;
+    }
+    if (next_node_is_ws) {
+      return true;
+    }
+    // If this and next nodes are both non-white spaces, fall back to the
+    // subsequent logic.
   }
 
   const Segment &old_segment = segments.segment(group[node->begin_pos]);

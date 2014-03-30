@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -40,7 +40,7 @@
 #include <utility>
 #include <vector>
 
-#include "base/base.h"
+#include "base/flags.h"
 #include "base/logging.h"
 #include "base/number_util.h"
 #include "base/trie.h"
@@ -500,21 +500,45 @@ int DictionaryPredictor::GetLMCost(PredictionTypes types,
   return lm_cost;
 }
 
-// return dictionary node whose value/key are |key| and |value|.
-// return NULL no words are found in the dictionary.
+namespace {
+
+class FindKeyValueCallback : public DictionaryInterface::Callback {
+ public:
+  FindKeyValueCallback(StringPiece target_value,
+                       NodeAllocatorInterface *allocator)
+      : target_value_(target_value), allocator_(allocator), node_(NULL) {}
+
+  virtual ResultType OnToken(StringPiece,  // key
+                             StringPiece,  // actual_key
+                             const Token &token) {
+    if (token.value != target_value_) {
+      return TRAVERSE_CONTINUE;
+    }
+    node_ = allocator_->NewNode();
+    node_->InitFromToken(token);
+    return TRAVERSE_DONE;
+  }
+
+  Node *node() const { return node_; }
+
+ private:
+  const StringPiece target_value_;
+  NodeAllocatorInterface *allocator_;
+  Node *node_;
+};
+
+}  // namespace
+
+// Returns a dictionary node whose key is a prefix of |key| and whose value
+// equals |value|.  Returns NULL if no words are found in the dictionary.
 const Node *DictionaryPredictor::LookupKeyValueFromDictionary(
     const string &key,
     const string &value,
     NodeAllocatorInterface *allocator) const {
   DCHECK(allocator);
-  const Node *node = dictionary_->LookupPrefix(key.data(), key.size(),
-                                               allocator);
-  for (; node != NULL; node = node->bnext) {
-    if (value == node->value) {
-      return node;
-    }
-  }
-  return NULL;
+  FindKeyValueCallback callback(value, allocator);
+  dictionary_->LookupPrefix(key, false, &callback);
+  return callback.node();
 }
 
 bool DictionaryPredictor::GetHistoryKeyAndValue(
@@ -1377,7 +1401,7 @@ const Node *DictionaryPredictor::GetPredictiveNodes(
     request.composer().GetQueriesForPrediction(&base, &expanded);
     const string input_key = history_key + base;
     DictionaryInterface::Limit limit;
-    scoped_ptr<Trie<string> > trie(NULL);
+    scoped_ptr<Trie<string> > trie;
     if (expanded.size() > 0) {
       trie.reset(new Trie<string>);
       for (set<string>::const_iterator itr = expanded.begin();
@@ -1479,7 +1503,7 @@ const Node *DictionaryPredictor::GetPredictiveNodesUsingTypingCorrection(
   for (size_t i = 0; i < queries.size(); ++i) {
     const string input_key = history_key + queries[i].base;
     DictionaryInterface::Limit limit;
-    scoped_ptr<Trie<string> > trie(NULL);
+    scoped_ptr<Trie<string> > trie;
     if (!queries[i].expanded.empty()) {
       trie.reset(new Trie<string>);
       for (set<string>::const_iterator itr = queries[i].expanded.begin();
@@ -1743,22 +1767,12 @@ bool DictionaryPredictor::IsZipCodeRequest(const string &key) {
     return false;
   }
 
-  // TODO(hidehiko): Rewrite this method by using ConstChar32Iterator.
-  const char *begin = key.data();
-  const char *end = key.data() + key.size();
-  size_t mblen = 0;
-  while (begin < end) {
-    Util::UTF8ToUCS2(begin, end, &mblen);
-    if (mblen == 1 &&
-        ((*begin >= '0' && *begin <= '9') || *begin == '-')) {
-      // do nothing
-    } else {
+  for (ConstChar32Iterator iter(key); !iter.Done(); iter.Next()) {
+    const char32 c = iter.Get();
+    if (!('0' <= c && c <= '9') && (c != '-')) {
       return false;
     }
-
-    begin += mblen;
   }
-
   return true;
 }
 

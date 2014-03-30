@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -45,7 +45,7 @@ namespace keymap {
 
 template<typename T>
 bool KeyMap<T>::GetCommand(const commands::KeyEvent &key_event,
-                           T* command) const {
+                           CommandsType* command) const {
   // Shortcut keys should be available as if CapsLock was not enabled like
   // other IMEs such as MS-IME or ATOK. b/5627459
   commands::KeyEvent normalized_key_event;
@@ -55,8 +55,7 @@ bool KeyMap<T>::GetCommand(const commands::KeyEvent &key_event,
     return false;
   }
 
-  typename map<KeyInformation, T>::const_iterator it;
-  it = keymap_.find(key);
+  typename KeyToCommandMap::const_iterator it = keymap_.find(key);
   if (it != keymap_.end()) {
     *command = it->second;
     return true;
@@ -69,12 +68,13 @@ bool KeyMap<T>::GetCommand(const commands::KeyEvent &key_event,
       return true;
     }
   }
+
   return false;
 }
 
 template<typename T>
 bool KeyMap<T>::AddRule(const commands::KeyEvent &key_event,
-                        T command) {
+                        CommandsType command) {
   KeyInformation key;
   if (!KeyEventUtil::GetKeyInformation(key_event, &key)) {
     return false;

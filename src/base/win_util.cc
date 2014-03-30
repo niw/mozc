@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -42,39 +42,24 @@
 #include <atlbase_mozc.h>
 
 #include <clocale>
+#include <memory>
 
 #include "base/logging.h"
+#include "base/mutex.h"
 #include "base/scoped_handle.h"
-#include "base/scoped_ptr.h"
-#include "base/singleton.h"
 #include "base/system_util.h"
 #include "base/util.h"
 
+using std::unique_ptr;
+
 namespace mozc {
 namespace {
-class AuxLibInitializer {
- public:
-  AuxLibInitializer() {
-    ::AuxUlibInitialize();
-  }
-  bool IsDLLSynchronizationHeld(bool *lock_status) const {
-    if (lock_status == nullptr) {
-      return false;
-    }
 
-    BOOL synchronization_held = FALSE;
-    const BOOL result =
-        ::AuxUlibIsDLLSynchronizationHeld(&synchronization_held);
-    if (!result) {
-      const int error = ::GetLastError();
-      DLOG(ERROR) << "AuxUlibIsDLLSynchronizationHeld failed. error = "
-                  << error;
-      return false;
-    }
-    *lock_status = (synchronization_held != FALSE);
-    return true;
-  }
-};
+once_t g_aux_lib_initialized = MOZC_ONCE_INIT;
+
+void CallAuxUlibInitialize() {
+  ::AuxUlibInitialize();
+}
 
 // Adjusts privileges in the process token to be able to shutdown the machine.
 // Returns true if the operation finishes without error.
@@ -214,8 +199,23 @@ HMODULE WinUtil::GetSystemModuleHandleAndIncrementRefCount(
 }
 
 bool WinUtil::IsDLLSynchronizationHeld(bool *lock_status) {
-  return Singleton<AuxLibInitializer>::get()->IsDLLSynchronizationHeld(
-      lock_status);
+  mozc::CallOnce(&g_aux_lib_initialized, &CallAuxUlibInitialize);
+
+  if (lock_status == nullptr) {
+    return false;
+  }
+
+  BOOL synchronization_held = FALSE;
+  const BOOL result =
+      ::AuxUlibIsDLLSynchronizationHeld(&synchronization_held);
+  if (!result) {
+    const int error = ::GetLastError();
+    DLOG(ERROR) << "AuxUlibIsDLLSynchronizationHeld failed. error = "
+                << error;
+    return false;
+  }
+  *lock_status = (synchronization_held != FALSE);
+  return true;
 }
 
 bool WinUtil::Logoff() {
@@ -502,6 +502,30 @@ bool WinUtil::IsProcessImmersive(HANDLE process_handle,
   return true;
 }
 
+bool WinUtil::IsProcessRestricted(HANDLE process_handle, bool *is_restricted) {
+  if (is_restricted == nullptr) {
+    return false;
+  }
+  *is_restricted = false;
+
+  HANDLE token = nullptr;
+  if (!::OpenProcessToken(process_handle, TOKEN_QUERY, &token)) {
+    return false;
+  }
+
+  ScopedHandle process_token(token);
+  ::SetLastError(NOERROR);
+  if (::IsTokenRestricted(process_token.get()) == FALSE) {
+    const DWORD error = ::GetLastError();
+    if (error != NOERROR) {
+      return false;
+    }
+  } else {
+    *is_restricted = true;
+  }
+  return true;
+}
+
 bool WinUtil::IsProcessInAppContainer(HANDLE process_handle,
                                       bool *in_appcontainer) {
   if (in_appcontainer == nullptr) {
@@ -525,8 +549,8 @@ bool WinUtil::IsProcessInAppContainer(HANDLE process_handle,
   const TOKEN_INFORMATION_CLASS kTokenIsAppContainer =
       static_cast<TOKEN_INFORMATION_CLASS>(29);  // TokenIsAppContainer
 #if defined(_WIN32_WINNT_WIN8)
-  COMPILE_ASSERT(kTokenIsAppContainer == TokenIsAppContainer,
-                 TokenDeviceClaimAttributes_Check);
+  static_assert(kTokenIsAppContainer == TokenIsAppContainer,
+                "Checking |kTokenIsAppContainer| has correct value.");
 #endif  // _WIN32_WINNT_WIN8
   DWORD returned_size = 0;
   DWORD retval = 0;
@@ -619,7 +643,7 @@ bool WinUtil::GetNtPath(const wstring &dos_path, wstring *nt_path) {
   }
 
   const size_t kMaxPath = 4096;
-  scoped_array<wchar_t> ntpath_buffer(
+  unique_ptr<wchar_t[]> ntpath_buffer(
       new wchar_t[kMaxPath]);
   const DWORD copied_len_without_null = get_final_path_name_by_handle(
       file_handle.get(),
@@ -654,7 +678,7 @@ bool WinUtil::GetProcessInitialNtPath(DWORD pid, wstring *nt_path) {
   }
 
   const size_t kMaxPath = 4096;
-  scoped_array<wchar_t> ntpath_buffer(new wchar_t[kMaxPath]);
+  unique_ptr<wchar_t[]> ntpath_buffer(new wchar_t[kMaxPath]);
   const DWORD copied_len_without_null =
       ::GetProcessImageFileNameW(process_handle.get(),
                                  ntpath_buffer.get(),
@@ -667,6 +691,26 @@ bool WinUtil::GetProcessInitialNtPath(DWORD pid, wstring *nt_path) {
 
   nt_path->assign(ntpath_buffer.get(), copied_len_without_null);
   return true;
+}
+
+// SPI_GETTHREADLOCALINPUTSETTINGS is available on Windows 8 SDK and later.
+#ifndef SPI_GETTHREADLOCALINPUTSETTINGS
+#define SPI_GETTHREADLOCALINPUTSETTINGS 0x104E
+#endif  // SPI_GETTHREADLOCALINPUTSETTINGS
+
+bool WinUtil::IsPerUserInputSettingsEnabled() {
+  if (!SystemUtil::IsWindows8OrLater()) {
+    // Windows 7 and below does not support per-user input mode.
+    return false;
+  }
+  BOOL is_thread_local = FALSE;
+  if (::SystemParametersInfo(SPI_GETTHREADLOCALINPUTSETTINGS,
+                             0,
+                             reinterpret_cast<void *>(&is_thread_local),
+                             0) == FALSE) {
+    return false;
+  }
+  return !is_thread_local;
 }
 
 ScopedCOMInitializer::ScopedCOMInitializer()

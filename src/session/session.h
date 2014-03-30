@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -34,8 +34,9 @@
 
 #include <string>
 
-#include "base/base.h"
 #include "base/coordinates.h"
+#include "base/port.h"
+#include "base/scoped_ptr.h"
 #include "composer/composer.h"
 #include "session/session_interface.h"
 #include "transliteration/transliteration.h"
@@ -74,8 +75,20 @@ class Session : public SessionInterface {
   // Perform the SEND_COMMAND command defined commands.proto.
   virtual bool SendCommand(mozc::commands::Command *command);
 
+  // Turn on IME. Do nothing (but the keyevent is consumed) when IME is already
+  // turned on.
   bool IMEOn(mozc::commands::Command *command);
+
+  // Turn off IME. Do nothing (but the keyevent is consumed) when IME is already
+  // turned off.
   bool IMEOff(mozc::commands::Command *command);
+
+  // Unlike IMEOn/IMEOff, these commands 1) can update compositioin mode, and
+  // 2) are functional even when IME is already turned on/off.
+  // TODO(team): Merge these into IMEOn/Off once b/10250883 is fixed.
+  bool MakeSureIMEOn(mozc::commands::Command *command);
+  bool MakeSureIMEOff(mozc::commands::Command *command);
+
   bool EchoBack(mozc::commands::Command *command);
   bool EchoBackAndClearUndoContext(mozc::commands::Command *command);
   bool DoNothing(mozc::commands::Command *command);
@@ -90,7 +103,7 @@ class Session : public SessionInterface {
   // composition.
   bool DeleteSelectedCandidateFromHistory(mozc::commands::Command *command);
 
-  // Reset the composer and clear conversion segments.
+  // Resets the composer and clear conversion segments.
   // History segments will not be cleared.
   // Therefore if a user commits "風"(かぜ) and Revert method is called,
   // preedit "ひいた"  will be converted into "邪引いた".
@@ -100,10 +113,10 @@ class Session : public SessionInterface {
   // on the situation described above.
   bool ResetContext(mozc::commands::Command *command);
 
-  // Return the current status such as a composition string, input mode, etc.
+  // Returns the current status such as a composition string, input mode, etc.
   bool GetStatus(mozc::commands::Command *command);
 
-  // Fill Output::Callback with the CONVERT_REVERSE SessionCommand to
+  // Fills Output::Callback with the CONVERT_REVERSE SessionCommand to
   // ask the client to send back the SessionCommand to the server.
   // This function is called when the key event representing the
   // ConvertReverse keybinding is called.
@@ -113,13 +126,13 @@ class Session : public SessionInterface {
   // is called when the CONVERT_REVERSE SessionCommand is called.
   bool ConvertReverse(mozc::commands::Command *command);
 
-  // Fill Output::Callback with the Undo SessionCommand to ask the
+  // Fills Output::Callback with the Undo SessionCommand to ask the
   // client to send back the SessionCommand to the server.
   // This function is called when the key event representing the
   // Undo keybinding is called.
   bool RequestUndo(mozc::commands::Command *command);
 
-  // Undo the commitment.  This function is called when the
+  // Undos the commitment.  This function is called when the
   // UNDO SessionCommand is called.
   bool Undo(mozc::commands::Command *command);
 
@@ -139,13 +152,13 @@ class Session : public SessionInterface {
   bool MoveCursorToBeginning(mozc::commands::Command *command);
   bool MoveCursorTo(mozc::commands::Command *command);
   bool Convert(mozc::commands::Command *command);
-  // Start converion not using user history.  This is used for debugging.
+  // Starts conversion not using user history.  This is used for debugging.
   bool ConvertWithoutHistory(mozc::commands::Command *command);
   bool ConvertNext(mozc::commands::Command *command);
   bool ConvertPrev(mozc::commands::Command *command);
-  // Show the next page of candidates.
+  // Shows the next page of candidates.
   bool ConvertNextPage(mozc::commands::Command *command);
-  // Show the previous page of candidates.
+  // Shows the previous page of candidates.
   bool ConvertPrevPage(mozc::commands::Command *command);
   bool ConvertCancel(mozc::commands::Command *command);
   bool PredictAndConvert(mozc::commands::Command *command);
@@ -157,11 +170,11 @@ class Session : public SessionInterface {
   // Expands suggestion candidates.
   bool ExpandSuggestion(mozc::commands::Command *command);
 
-  // Commit only the first segment.
+  // Commits only the first segment.
   bool CommitSegment(mozc::commands::Command *command);
-  // Commit some characters at the head of the preedit.
+  // Commits some characters at the head of the preedit.
   bool CommitHead(size_t count, mozc::commands::Command *command);
-  // Commit preedit if in password mode.
+  // Commits preedit if in password mode.
   bool CommitIfPassword(mozc::commands::Command *command);
 
   bool SegmentFocusRight(mozc::commands::Command *command);
@@ -171,7 +184,7 @@ class Session : public SessionInterface {
   bool SegmentWidthExpand(mozc::commands::Command *command);
   bool SegmentWidthShrink(mozc::commands::Command *command);
 
-  // Select the transliteration candidate.  If the current state is
+  // Selects the transliteration candidate.  If the current state is
   // composition, candidates will be generated with only translitaration
   // candidates.
   bool ConvertToHiragana(mozc::commands::Command *command);
@@ -305,6 +318,7 @@ class Session : public SessionInterface {
   // Commits without SessionConverter.
   void CommitCompositionDirectly(commands::Command *command);
   void CommitSourceTextDirectly(commands::Command *command);
+  void CommitRawTextDirectly(commands::Command *command);
   void CommitStringDirectly(const string &key, const string &preedit,
                             commands::Command *command);
 
@@ -316,7 +330,7 @@ class Session : public SessionInterface {
 
   // Commands like EditCancel should restore the original string used for
   // the reverse conversion without any modification.
-  // Returns true if the |source_text| is committed to calcel reconversion.
+  // Returns true if the |source_text| is committed to cancel reconversion.
   // Returns false if this function has nothing to do.
   bool TryCancelConvertReverse(mozc::commands::Command *command);
 
@@ -365,11 +379,14 @@ class Session : public SessionInterface {
   // AutoIMEConversion.
   bool CanStartAutoConversion(const mozc::commands::KeyEvent &key_event) const;
 
-  // Expand composition if required for nested calculation.
-  void ExpandCompositionForCalculator(mozc::commands::Command *command);
-
   // Stores received caret location into caret_rectangle_.
   bool SetCaretLocation(mozc::commands::Command *command);
+
+  // Handles KeyEvent::activated to support indirect IME on/off.
+  bool HandleIndirectImeOnOff(mozc::commands::Command *command);
+
+  // Commits the raw text of the composition.
+  bool CommitRawText(commands::Command *command);
 
   DISALLOW_COPY_AND_ASSIGN(Session);
 };

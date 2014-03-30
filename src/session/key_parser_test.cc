@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -122,7 +122,8 @@ TEST(KeyParserTest, SpecialKeys) {
     make_pair("home", commands::KeyEvent::HOME),
     make_pair("end", commands::KeyEvent::END),
     make_pair("space", commands::KeyEvent::SPACE),
-    make_pair("ascii", commands::KeyEvent::ASCII),
+    make_pair("ascii", commands::KeyEvent::TEXT_INPUT),  // depricated
+    make_pair("textinput", commands::KeyEvent::TEXT_INPUT),
     make_pair("tab", commands::KeyEvent::TAB),
     make_pair("pageup", commands::KeyEvent::PAGE_UP),
     make_pair("pagedown", commands::KeyEvent::PAGE_DOWN),

@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -125,13 +125,9 @@ class ConverterRegressionTest : public ::testing::Test {
     SystemUtil::SetUserProfileDirectory(user_profile_directory_backup_);
   }
 
-  const Request &default_request() const { return default_request_; }
-
  private:
   string user_profile_directory_backup_;
   Config config_backup_;
-
-  const Request default_request_;
 };
 
 TEST_F(ConverterRegressionTest, QueryOfDeathTest) {
@@ -164,8 +160,7 @@ TEST_F(ConverterRegressionTest, Regression3323108) {
       "\xE3\x81\x90"));
   EXPECT_EQ(3, segments.conversion_segments_size());
   const ConversionRequest default_request;
-  EXPECT_TRUE(converter->ResizeSegment(
-      &segments, default_request, 1, 2));
+  EXPECT_TRUE(converter->ResizeSegment(&segments, default_request, 1, 2));
   EXPECT_EQ(2, segments.conversion_segments_size());
 
   // "きものをぬぐ"
@@ -173,42 +168,6 @@ TEST_F(ConverterRegressionTest, Regression3323108) {
             "\xE3\x81\xAE\xE3\x82\x92"
             "\xE3\x81\xAC\xE3\x81\x90",
             segments.conversion_segment(1).key());
-}
-
-TEST_F(ConverterRegressionTest, ConvertUsingPrecedingText_Jyosushi) {
-  // TODO(noriyukit): This test requires the actual dictionary data. Rewrite the
-  // test with mock data.
-  scoped_ptr<EngineInterface> engine(EngineFactory::Create());
-  ConverterInterface *converter = engine->GetConverter();
-  Table table;
-  // To see preceding text helps conversion after number characters, consider
-  // the case where user converts "ひき".
-  {
-    // Without preceding text, test dictionary converts "ひき" to "引き".
-    Segments segments;
-    Composer composer(&table, &default_request());
-    composer.InsertCharacter("\xE3\x81\xB2\xE3\x81\x8D");  // "ひき"
-    ConversionRequest request(&composer, &default_request());
-    converter->StartConversionForRequest(request, &segments);
-
-    EXPECT_EQ(1, segments.conversion_segments_size());
-    EXPECT_EQ("\xE5\xBC\x95\xE3\x81\x8D",  // "引き"
-              segments.conversion_segment(0).candidate(0).value);
-  }
-  {
-    // However, if providing "猫が5" as preceding text, "ひき" is converted to
-    // "匹" with test dictionary.
-    Segments segments;
-    Composer composer(&table, &default_request());
-    composer.InsertCharacter("\xE3\x81\xB2\xE3\x81\x8D");  // "ひき"
-    ConversionRequest request(&composer, &default_request());
-    request.set_preceding_text("\xE7\x8C\xAB\xE3\x81\x8C\x35");  // "猫が5"
-    converter->StartConversionForRequest(request, &segments);
-
-    EXPECT_EQ(1, segments.conversion_segments_size());
-    EXPECT_EQ("\xE5\x8C\xB9",  // "匹"
-              segments.conversion_segment(0).candidate(0).value);
-  }
 }
 
 }  // namespace mozc

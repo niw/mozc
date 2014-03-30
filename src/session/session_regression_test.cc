@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -41,16 +41,13 @@
 #include "config/config_handler.h"
 #include "converter/segments.h"
 #include "engine/engine_factory.h"
-#include "engine/engine_interface.h"
 #include "rewriter/rewriter_interface.h"
 #include "session/commands.pb.h"
 #include "session/internal/ime_context.h"
 #include "session/internal/keymap.h"
-#include "session/japanese_session_factory.h"
 #include "session/key_parser.h"
 #include "session/candidates.pb.h"
 #include "session/session.h"
-#include "session/session_factory_manager.h"
 #include "session/session_converter_interface.h"
 #include "session/session_handler.h"
 #include "session/request_test_util.h"
@@ -144,15 +141,7 @@ class SessionRegressionTest : public testing::Test {
     // internally depends on global flags, e.g., for creation of rewriters.
     engine_.reset(EngineFactory::Create());
 
-    session_factory_.reset(new session::JapaneseSessionFactory(engine_.get()));
-    session::SessionFactoryManager::SetSessionFactory(session_factory_.get());
-
-    config::ConfigHandler::GetDefaultConfig(&config_);
-    // TOOD(all): Add a test for the case where
-    // use_realtime_conversion is true.
-    config_.set_use_realtime_conversion(false);
-    config::ConfigHandler::SetConfig(config_);
-    handler_.reset(new SessionHandler());
+    handler_.reset(new SessionHandler(engine_.get()));
     ResetSession();
     CHECK(session_.get());
   }
@@ -168,6 +157,18 @@ class SessionRegressionTest : public testing::Test {
 
   bool SendKey(const string &key, commands::Command *command) {
     command->Clear();
+    command->mutable_input()->set_type(commands::Input::SEND_KEY);
+    if (!KeyParser::ParseKey(key, command->mutable_input()->mutable_key())) {
+      return false;
+    }
+    return session_->SendKey(command);
+  }
+
+  bool SendKeyWithContext(const string &key,
+                          const commands::Context &context,
+                          commands::Command *command) {
+    command->Clear();
+    command->mutable_input()->mutable_context()->CopyFrom(context);
     command->mutable_input()->set_type(commands::Input::SEND_KEY);
     if (!KeyParser::ParseKey(key, command->mutable_input()->mutable_key())) {
       return false;
@@ -201,7 +202,6 @@ class SessionRegressionTest : public testing::Test {
   scoped_ptr<SessionHandler> handler_;
   scoped_ptr<session::Session> session_;
   scoped_ptr<composer::Table> table_;
-  scoped_ptr<session::JapaneseSessionFactory> session_factory_;
   config::Config config_;
 };
 
@@ -210,7 +210,7 @@ TEST_F(SessionRegressionTest, ConvertToTransliterationWithMultipleSegments) {
   InitSessionToPrecomposition(session_.get());
 
   commands::Command command;
-  InsertCharacterChars("like", &command);
+  InsertCharacterChars("liie", &command);
 
   // Convert
   command.Clear();
@@ -222,11 +222,9 @@ TEST_F(SessionRegressionTest, ConvertToTransliterationWithMultipleSegments) {
     EXPECT_FALSE(output.has_candidates());
 
     const commands::Preedit &conversion = output.preedit();
-    EXPECT_EQ(2, conversion.segment_size());
+    ASSERT_LE(2, conversion.segment_size());
     // "ぃ"
     EXPECT_EQ("\xE3\x81\x83", conversion.segment(0).value());
-    // "家"
-    EXPECT_EQ("\xE5\xAE\xB6", conversion.segment(1).value());
   }
 
   // TranslateHalfASCII
@@ -239,7 +237,7 @@ TEST_F(SessionRegressionTest, ConvertToTransliterationWithMultipleSegments) {
     EXPECT_FALSE(output.has_candidates());
 
     const commands::Preedit &conversion = output.preedit();
-    EXPECT_EQ(2, conversion.segment_size());
+    ASSERT_EQ(2, conversion.segment_size());
     EXPECT_EQ("li", conversion.segment(0).value());
   }
 }
@@ -259,7 +257,6 @@ TEST_F(SessionRegressionTest,
     EXPECT_FALSE(command.output().has_result());
 
     EXPECT_TRUE(SendKey("a", &command));
-    EXPECT_FALSE(command.output().has_candidates());
 #if OS_MACOSX
     // The MacOS default short cut of F10 is DisplayAsHalfAlphanumeric.
     // It does not start the conversion so output does not have any result.
@@ -602,4 +599,5 @@ TEST_F(SessionRegressionTest, CommitT13nSuggestion) {
   EXPECT_EQ("\xE3\x81\xA3\xEF\xBD\x93\xEF\xBD\x88",
             command.output().result().value());
 }
+
 }  // namespace mozc

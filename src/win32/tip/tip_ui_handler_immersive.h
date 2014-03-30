@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -56,10 +56,6 @@ class TipUiHandlerImmersive {
   static void OnDeactivate();
   static void OnFocusChange(TipTextService *text_service,
                             ITfDocumentMgr *focused_document_manager);
-  static bool OnLayoutChange(TipTextService *text_service,
-                             ITfContext *context,
-                             TfLayoutCode layout_code,
-                             ITfContextView *context_view);
   static bool Update(TipTextService *text_service,
                      ITfContext *context,
                      TfEditCookie read_cookie);

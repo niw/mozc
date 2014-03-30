@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,7 @@
 
 #include <string>
 #include <vector>
-#include "base/base.h"
+#include "base/port.h"
 #include "base/scoped_ptr.h"
 #include "base/string_piece.h"
 #include "dictionary/dictionary_interface.h"
@@ -61,21 +61,20 @@ class UserDictionary : public DictionaryInterface {
       NodeAllocatorInterface *allocator) const;
   virtual Node *LookupPredictive(const char *str, int size,
                                  NodeAllocatorInterface *allocator) const;
-  virtual Node *LookupPrefixWithLimit(const char *str, int size,
-                                      const Limit &limit,
-                                      NodeAllocatorInterface *allocator) const;
-  virtual Node *LookupPrefix(const char *str, int size,
-                             NodeAllocatorInterface *allocator) const;
-  virtual Node *LookupExact(const char *str, int size,
-                            NodeAllocatorInterface *allocator) const;
+  // Kana modifier insensitive lookup is not supported, meaning that
+  // Callback::OnActualKey() is never called.
+  virtual void LookupPrefix(
+      StringPiece key, bool use_kana_modifier_insensitive_lookup,
+      Callback *callback) const;
+  virtual void LookupExact(StringPiece key, Callback *callback) const;
   virtual Node *LookupReverse(const char *str, int size,
                               NodeAllocatorInterface *allocator) const;
 
   // Looks up a user comment from a pair of key and value.  When (key, value)
-  // doesn't exist in this dictionary or user comment is empty, the empty string
-  // is set to comment.
-  void LookupComment(StringPiece key, StringPiece value,
-                     string *comment) const;
+  // doesn't exist in this dictionary or user comment is empty, bool is
+  // returned and string is kept as-is.
+  virtual bool LookupComment(StringPiece key, StringPiece value,
+                             string *comment) const;
 
   // Load dictionary from UserDictionaryStorage.
   // mainly for unittesting

@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -31,7 +31,6 @@
 
 #include <string>
 
-#include "base/base.h"
 #include "base/logging.h"
 #include "base/util.h"
 #include "config/config.pb.h"
@@ -40,14 +39,14 @@
 #include "converter/segments.h"
 #include "data_manager/data_manager_interface.h"
 #include "dictionary/pos_matcher.h"
-#include "dictionary/user_dictionary.h"
+#include "dictionary/dictionary_interface.h"
 
 namespace mozc {
 
 UsageRewriter::UsageRewriter(const DataManagerInterface *data_manager,
-                             const UserDictionary *user_dictionary)
+                             const DictionaryInterface *dictionary)
     : pos_matcher_(data_manager->GetPOSMatcher()),
-      user_dictionary_(user_dictionary),
+      dictionary_(dictionary),
       base_conjugation_suffix_(NULL) {
   const ConjugationSuffix *conjugation_suffix_data = NULL;
   const int *conjugation_suffix_data_index = NULL;
@@ -188,15 +187,15 @@ bool UsageRewriter::Rewrite(const ConversionRequest &request,
       ++usage_id_for_user_comment;
 
       // First, search the user dictionary for comment.
-      if (user_dictionary_ != NULL) {
-        user_dictionary_->LookupComment(segment->candidate(j).content_key,
-                                        segment->candidate(j).content_value,
-                                        &comment);
-        if (!comment.empty()) {
+      if (dictionary_ != NULL) {
+        if (dictionary_->LookupComment(segment->candidate(j).content_key,
+                                       segment->candidate(j).content_value,
+                                       &comment)) {
           Segment::Candidate *candidate = segment->mutable_candidate(j);
           candidate->usage_id = usage_id_for_user_comment;
           candidate->usage_title = segment->candidate(j).content_value;
           candidate->usage_description = comment;
+          comment.clear();
           modified = true;
           continue;
         }

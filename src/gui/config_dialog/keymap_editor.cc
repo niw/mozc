@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -38,7 +38,6 @@
 #include <sstream>
 #include <string>
 #include <vector>
-#include "base/base.h"
 #include "base/config_file_stream.h"
 #include "base/logging.h"
 #include "base/singleton.h"
@@ -110,7 +109,7 @@ class KeyMapValidator {
     invisible_key_events_.insert(mozc::commands::KeyEvent::KANJI);
     invisible_key_events_.insert(mozc::commands::KeyEvent::ON);
     invisible_key_events_.insert(mozc::commands::KeyEvent::OFF);
-    invisible_key_events_.insert(mozc::commands::KeyEvent::ASCII);
+    invisible_key_events_.insert(mozc::commands::KeyEvent::TEXT_INPUT);
   }
 
   bool IsVisibleKey(const string &key) {
@@ -210,6 +209,7 @@ class KeyMapTableLoader {
     manager.GetAvailableCommandNamePrecomposition(&command_names);
     manager.GetAvailableCommandNameComposition(&command_names);
     manager.GetAvailableCommandNameConversion(&command_names);
+    manager.GetAvailableCommandNameZeroQuerySuggestion(&command_names);
     manager.GetAvailableCommandNameSuggestion(&command_names);
     manager.GetAvailableCommandNamePrediction(&command_names);
     for (set<string>::const_iterator itr = command_names.begin();

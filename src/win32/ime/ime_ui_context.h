@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -69,8 +69,11 @@ class UIContext {
       DWORD form_index, CANDIDATEFORM *candidate_form) const;
   bool GetCompositionFont(LOGFONTW *font) const;
   bool GetConversionMode(DWORD *conversion) const;
+  bool GetVisibleConversionMode(DWORD *conversion) const;
+  bool GetLogicalConversionMode(DWORD *conversion) const;
   bool GetOpenStatus() const;
   bool IsKanaInputPreferred() const;
+  bool IsModeIndicatorEnabled() const;
 
   mozc::client::ClientInterface *client() const;
   const INPUTCONTEXT *input_context() const;

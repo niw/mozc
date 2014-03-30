@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -51,12 +51,9 @@
 #include "session/commands.pb.h"
 #include "session/internal/ime_context.h"
 #include "session/internal/keymap.h"
-#include "session/japanese_session_factory.h"
 #include "session/key_parser.h"
 #include "session/request_test_util.h"
 #include "session/session_converter_interface.h"
-#include "session/session_factory_manager.h"
-#include "session/session_handler.h"
 #include "testing/base/public/googletest.h"
 #include "testing/base/public/gunit.h"
 #include "usage_stats/usage_stats.h"
@@ -89,8 +86,15 @@ const char kHiraganaA[] = "\xE3\x81\x82";
 // "ａ"
 const char kFullWidthSmallA[] = "\xEF\xBD\x81";
 
-bool SetSendKeyCommand(const string &key,
-                       commands::Command *command) {
+void SetSendKeyCommandWithKeyString(const string &key_string,
+                                    commands::Command *command) {
+  command->Clear();
+  command->mutable_input()->set_type(commands::Input::SEND_KEY);
+  commands::KeyEvent *key = command->mutable_input()->mutable_key();
+  key->set_key_string(key_string);
+}
+
+bool SetSendKeyCommand(const string &key, commands::Command *command) {
   command->Clear();
   command->mutable_input()->set_type(commands::Input::SEND_KEY);
   return KeyParser::ParseKey(key, command->mutable_input()->mutable_key());
@@ -116,6 +120,19 @@ bool SendKeyWithMode(const string &key,
   return session->SendKey(command);
 }
 
+bool SendKeyWithModeAndActivated(const string &key,
+                                 bool activated,
+                                 commands::CompositionMode mode,
+                                 Session *session,
+                                 commands::Command *command) {
+  if (!SetSendKeyCommand(key, command)) {
+    return false;
+  }
+  command->mutable_input()->mutable_key()->set_activated(activated);
+  command->mutable_input()->mutable_key()->set_mode(mode);
+  return session->SendKey(command);
+}
+
 bool TestSendKey(const string &key,
                  Session *session,
                  commands::Command *command) {
@@ -132,6 +149,19 @@ bool TestSendKeyWithMode(const string &key,
   if (!SetSendKeyCommand(key, command)) {
     return false;
   }
+  command->mutable_input()->mutable_key()->set_mode(mode);
+  return session->TestSendKey(command);
+}
+
+bool TestSendKeyWithModeAndActivated(const string &key,
+                                     bool activated,
+                                     commands::CompositionMode mode,
+                                     Session *session,
+                                     commands::Command *command) {
+  if (!SetSendKeyCommand(key, command)) {
+    return false;
+  }
+  command->mutable_input()->mutable_key()->set_activated(activated);
   command->mutable_input()->mutable_key()->set_mode(mode);
   return session->TestSendKey(command);
 }
@@ -382,7 +412,7 @@ void SwitchInputMode(commands::CompositionMode mode, Session *session) {
 // since History segments are almost hidden from
 class ConverterMockForReset : public ConverterMock {
  public:
-  bool ResetConversion(Segments *segments) const {
+  virtual bool ResetConversion(Segments *segments) const {
     reset_conversion_called_ = true;
     return true;
   }
@@ -439,7 +469,7 @@ class MockConverterEngineForReset : public EngineInterface {
 
 class ConverterMockForRevert : public ConverterMock {
  public:
-  bool RevertConversion(Segments *segments) const {
+  virtual bool RevertConversion(Segments *segments) const {
     revert_conversion_called_ = true;
     return true;
   }
@@ -494,6 +524,7 @@ class MockConverterEngineForRevert : public EngineInterface {
  private:
   scoped_ptr<ConverterMockForRevert> converter_mock_;
 };
+
 }  // namespace
 
 class SessionTest : public testing::Test {
@@ -513,21 +544,12 @@ class SessionTest : public testing::Test {
     mock_data_engine_.reset(MockDataEngineFactory::Create());
     engine_.reset(new MockConverterEngine);
 
-    // The constructor of JapaneseSessionFactory internally refers to the
-    // global config and request. Make sure that the global config and
-    // request have already been initialized.
-    session_factory_.reset(new JapaneseSessionFactory(engine_.get()));
-    session::SessionFactoryManager::SetSessionFactory(session_factory_.get());
-
-    handler_.reset(new SessionHandler);
     t13n_rewriter_.reset(
         new TransliterationRewriter(
             *UserPosManager::GetUserPosManager()->GetPOSMatcher()));
   }
 
   virtual void TearDown() {
-    session::SessionFactoryManager::SetSessionFactory(NULL);
-
     UsageStats::ClearAllStatsForTest();
 
     // just in case, reset the config in test_tmpdir
@@ -702,17 +724,6 @@ class SessionTest : public testing::Test {
     request->set_composer(session->get_internal_composer_only_for_unittest());
   }
 
-  void SetConfig(const config::Config &config) {
-    config::Config base_config;
-    config::ConfigHandler::GetConfig(&base_config);
-
-    commands::Command command;
-    command.mutable_input()->set_type(commands::Input::SET_CONFIG);
-    command.mutable_input()->mutable_config()->CopyFrom(base_config);
-    command.mutable_input()->mutable_config()->MergeFrom(config);
-    handler_->EvalCommand(&command);
-  }
-
   void SetupMockForReverseConversion(const string &kanji,
                                      const string &hiragana) {
     // Set up Segments for reverse conversion.
@@ -836,9 +847,7 @@ class SessionTest : public testing::Test {
   //    constructor will be called *BEFORE* SetUp() is called.
   scoped_ptr<MockConverterEngine> engine_;
   scoped_ptr<EngineInterface> mock_data_engine_;
-  scoped_ptr<SessionHandler> handler_;
   scoped_ptr<TransliterationRewriter> t13n_rewriter_;
-  scoped_ptr<JapaneseSessionFactory> session_factory_;
   scoped_ptr<composer::Table> table_;
   scoped_ptr<Request> mobile_request_;
   mozc::usage_stats::scoped_usage_stats_enabler usage_stats_enabler_;
@@ -872,10 +881,6 @@ TEST_F(SessionTest, TestOfTestForSetup) {
   // can test it later.
   config.set_use_auto_conversion(true);
   config::ConfigHandler::SetConfig(config);
-
-  // intentionally updates internal global Romaji table so that
-  // |TestOfTestForTearDown| can test it later.
-  session_factory_->Reload();
 }
 
 // This test ensures that the TearDown() against |TestOfTestForSetup|
@@ -1201,7 +1206,6 @@ TEST_F(SessionTest, Conversion) {
   // "あいうえお"
   EXPECT_EQ(kAiueo, key);
 }
-
 
 TEST_F(SessionTest, SegmentWidthShrink) {
   scoped_ptr<Session> session(new Session(engine_.get()));
@@ -1893,7 +1897,7 @@ TEST_F(SessionTest, ConvertConsonantsToFullAlphanumeric) {
 TEST_F(SessionTest, ConvertConsonantsToFullAlphanumericWithoutCascadingWindow) {
   config::Config config;
   config.set_use_cascading_window(false);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
 
   commands::Command command;
   Segments segments;
@@ -2184,6 +2188,7 @@ TEST_F(SessionTest, UpdatePreferences) {
       config::Config::MSIME);
   session->SendKey(&command);
   EXPECT_EQ(commands::HALF_ASCII, command.output().status().mode());
+  EXPECT_EQ(commands::HALF_ASCII, command.output().status().comeback_mode());
 
   // On KOTOERI keymap, EISU key does "ToggleAlphanumericMode".
   SetSendKeyCommand("EISU", &command);
@@ -2191,6 +2196,7 @@ TEST_F(SessionTest, UpdatePreferences) {
       config::Config::KOTOERI);
   session->SendKey(&command);
   EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
+  EXPECT_EQ(commands::HIRAGANA, command.output().status().comeback_mode());
 }
 
 TEST_F(SessionTest, RomajiInput) {
@@ -2589,7 +2595,7 @@ TEST_F(SessionTest, UndoForSingleSegment) {
 
     config::Config config;
     config.set_session_keymap(config::Config::MSIME);
-    SetConfig(config);
+    config::ConfigHandler::SetConfig(config);
 
     command.Clear();
     session->Undo(&command);
@@ -2889,6 +2895,229 @@ TEST_F(SessionTest, UndoOrRewind_rewind) {
   EXPECT_TRUE(command.output().has_all_candidate_words());
 }
 
+TEST_F(SessionTest, CommitRawText) {
+  {  // From composition mode.
+    scoped_ptr<Session> session(new Session(engine_.get()));
+    InitSessionToPrecomposition(session.get());
+    commands::Command command;
+    InsertCharacterChars("abc", session.get(), &command);
+    EXPECT_EQ(ImeContext::COMPOSITION, session->context().state());
+
+    Segments segments;
+    {  // Initialize segments.
+      Segment *segment = segments.add_segment();
+      // "あｂｃ"
+      segment->set_key("\xE3\x81\x82\xEF\xBD\x82\xEF\xBD\x83");
+      // "あべし"
+      segment->add_candidate()->value = "\xE3\x81\x82\xE3\x81\xB9\xE3\x81\x97";
+    }
+
+    command.Clear();
+    SetSendCommandCommand(commands::SessionCommand::COMMIT_RAW_TEXT, &command);
+    session->SendCommand(&command);
+    // "abc"
+    EXPECT_RESULT_AND_KEY("abc", "abc", command);
+    EXPECT_EQ(ImeContext::PRECOMPOSITION, session->context().state());
+  }
+  {  // From conversion mode.
+    scoped_ptr<Session> session(new Session(engine_.get()));
+    InitSessionToPrecomposition(session.get());
+    commands::Command command;
+    InsertCharacterChars("abc", session.get(), &command);
+    EXPECT_EQ(ImeContext::COMPOSITION, session->context().state());
+
+    Segments segments;
+    {  // Initialize segments.
+      Segment *segment = segments.add_segment();
+      // "あｂｃ"
+      segment->set_key("\xE3\x81\x82\xEF\xBD\x82\xEF\xBD\x83");
+      // "あべし"
+      segment->add_candidate()->value = "\xE3\x81\x82\xE3\x81\xB9\xE3\x81\x97";
+    }
+
+    ConversionRequest request;
+    SetComposer(session.get(), &request);
+    FillT13Ns(request, &segments);
+    GetConverterMock()->SetStartConversionForRequest(&segments, true);
+    command.Clear();
+    session->Convert(&command);
+    // "あべし"
+    EXPECT_PREEDIT("\xE3\x81\x82\xE3\x81\xB9\xE3\x81\x97", command);
+    EXPECT_EQ(ImeContext::CONVERSION, session->context().state());
+
+    command.Clear();
+    SetSendCommandCommand(commands::SessionCommand::COMMIT_RAW_TEXT, &command);
+    session->SendCommand(&command);
+    // "abc"
+    EXPECT_RESULT_AND_KEY("abc", "abc", command);
+    EXPECT_EQ(ImeContext::PRECOMPOSITION, session->context().state());
+  }
+}
+
+TEST_F(SessionTest, CommitRawText_KanaInput) {
+  Segments segments;
+  Segment *segment;
+  Segment::Candidate *candidate;
+  composer::Table table;
+  // "す゛", "ず"
+  table.AddRule("\xe3\x81\x99\xe3\x82\x9b", "\xe3\x81\x9a", "");
+
+  scoped_ptr<Session> session(new Session(engine_.get()));
+  session->get_internal_composer_only_for_unittest()->SetTable(&table);
+  InitSessionToPrecomposition(session.get());
+
+  commands::Command command;
+  SetSendKeyCommand("m", &command);
+  // "も"
+  command.mutable_input()->mutable_key()->set_key_string("\xe3\x82\x82");
+  session->SendKey(&command);
+
+  SetSendKeyCommand("r", &command);
+  // "す"
+  command.mutable_input()->mutable_key()->set_key_string("\xe3\x81\x99");
+  session->SendKey(&command);
+
+  SetSendKeyCommand("@", &command);
+  // "゛"
+  command.mutable_input()->mutable_key()->set_key_string("\xe3\x82\x9b");
+  session->SendKey(&command);
+
+  SetSendKeyCommand("h", &command);
+  // "く"
+  command.mutable_input()->mutable_key()->set_key_string("\xe3\x81\x8f");
+  session->SendKey(&command);
+
+  SetSendKeyCommand("!", &command);
+  command.mutable_input()->mutable_key()->set_key_string("!");
+  session->SendKey(&command);
+
+  // "もずく！"
+  EXPECT_EQ("\xe3\x82\x82\xe3\x81\x9a\xe3\x81\x8f\xef\xbc\x81",
+            command.output().preedit().segment(0).value());
+
+  segment = segments.add_segment();
+  // "もずく!"
+  segment->set_key("\xe3\x82\x82\xe3\x81\x9a\xe3\x81\x8f!");
+  candidate = segment->add_candidate();
+  // "もずく！"
+  candidate->value = "\xe3\x82\x82\xe3\x81\x9a\xe3\x81\x8f\xef\xbc\x81";
+
+  ConversionRequest request;
+  SetComposer(session.get(), &request);
+  FillT13Ns(request, &segments);
+  GetConverterMock()->SetStartConversionForRequest(&segments, true);
+
+  command.Clear();
+  SetSendCommandCommand(commands::SessionCommand::COMMIT_RAW_TEXT, &command);
+  session->SendCommand(&command);
+  // "abc"
+  EXPECT_RESULT_AND_KEY("mr@h!", "mr@h!", command);
+  EXPECT_EQ(ImeContext::PRECOMPOSITION, session->context().state());
+}
+
+TEST_F(SessionTest, ConvertNextPage_PrevPage) {
+  commands::Command command;
+  scoped_ptr<Session> session(new Session(engine_.get()));
+
+  InitSessionToPrecomposition(session.get());
+
+  // Should be ignored in precomposition state.
+  {
+    command.Clear();
+    command.mutable_input()->set_type(commands::Input::SEND_COMMAND);
+    command.mutable_input()->mutable_command()->set_type(
+        commands::SessionCommand::CONVERT_NEXT_PAGE);
+    ASSERT_TRUE(session->SendCommand(&command));
+    EXPECT_TRUE(command.output().consumed());
+
+    command.Clear();
+    command.mutable_input()->set_type(commands::Input::SEND_COMMAND);
+    command.mutable_input()->mutable_command()->set_type(
+        commands::SessionCommand::CONVERT_PREV_PAGE);
+    ASSERT_TRUE(session->SendCommand(&command));
+    EXPECT_TRUE(command.output().consumed());
+  }
+
+  InsertCharacterChars("aiueo", session.get(), &command);
+  EXPECT_PREEDIT(kAiueo, command);
+
+  // Should be ignored in composition state.
+  {
+    command.Clear();
+    command.mutable_input()->set_type(commands::Input::SEND_COMMAND);
+    command.mutable_input()->mutable_command()->set_type(
+        commands::SessionCommand::CONVERT_NEXT_PAGE);
+    ASSERT_TRUE(session->SendCommand(&command));
+    EXPECT_TRUE(command.output().consumed());
+    EXPECT_PREEDIT(kAiueo, command) << "should do nothing";
+
+    command.Clear();
+    command.mutable_input()->set_type(commands::Input::SEND_COMMAND);
+    command.mutable_input()->mutable_command()->set_type(
+        commands::SessionCommand::CONVERT_PREV_PAGE);
+    ASSERT_TRUE(session->SendCommand(&command));
+    EXPECT_TRUE(command.output().consumed());
+    EXPECT_PREEDIT(kAiueo, command) << "should do nothing";
+  }
+
+  // Generate sequential candidates as follows.
+  //   "page0-cand0"
+  //   "page0-cand1"
+  //   ...
+  //   "page0-cand8"
+  //   "page1-cand0"
+  //   ...
+  //   "page1-cand8"
+  //   "page2-cand0"
+  //   ...
+  //   "page2-cand8"
+  {
+    Segments segments;
+    Segment *segment = NULL;
+    segment = segments.add_segment();
+    segment->set_key(kAiueo);
+    for (int page_index = 0; page_index < 3; ++page_index) {
+      for (int cand_index = 0; cand_index < 9; ++cand_index) {
+        segment->add_candidate()->value = Util::StringPrintf(
+            "page%d-cand%d", page_index, cand_index);
+      }
+    }
+    GetConverterMock()->SetStartConversionForRequest(&segments, true);
+  }
+
+  // Make sure the selected candidate changes as follows.
+  //                              -> Convert
+  //  -> "page0-cand0" -> SendCommand/CONVERT_NEXT_PAGE
+  //  -> "page1-cand0" -> SendCommand/CONVERT_PREV_PAGE
+  //  -> "page0-cand0" -> SendCommand/CONVERT_PREV_PAGE
+  //  -> "page2-cand0"
+
+  command.Clear();
+  ASSERT_TRUE(session->Convert(&command));
+  EXPECT_PREEDIT("page0-cand0", command);
+
+  command.Clear();
+  command.mutable_input()->set_type(commands::Input::SEND_COMMAND);
+  command.mutable_input()->mutable_command()->set_type(
+      commands::SessionCommand::CONVERT_NEXT_PAGE);
+  ASSERT_TRUE(session->SendCommand(&command));
+  EXPECT_PREEDIT("page1-cand0", command);
+
+  command.Clear();
+  command.mutable_input()->set_type(commands::Input::SEND_COMMAND);
+  command.mutable_input()->mutable_command()->set_type(
+      commands::SessionCommand::CONVERT_PREV_PAGE);
+  ASSERT_TRUE(session->SendCommand(&command));
+  EXPECT_PREEDIT("page0-cand0", command);
+
+  command.Clear();
+  command.mutable_input()->set_type(commands::Input::SEND_COMMAND);
+  command.mutable_input()->mutable_command()->set_type(
+      commands::SessionCommand::CONVERT_PREV_PAGE);
+  ASSERT_TRUE(session->SendCommand(&command));
+  EXPECT_PREEDIT("page2-cand0", command);
+}
+
 TEST_F(SessionTest, NeedlessClearUndoContext) {
   // This is a unittest against http://b/3423910.
 
@@ -2979,7 +3208,7 @@ TEST_F(SessionTest, ClearUndoContextAfterDirectInputAfterConversion) {
   // Prepare Numpad
   config::Config config;
   config.set_numpad_character_form(config::Config::NUMPAD_DIRECT_INPUT);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
   ASSERT_EQ(config::Config::NUMPAD_DIRECT_INPUT,
             GET_CONFIG(numpad_character_form));
   // Update KeyEventTransformer
@@ -3190,7 +3419,7 @@ TEST_F(SessionTest, ComposeVoicedSoundMarkAfterUndo_Issue5369632) {
   // This is a unittest against http://b/5369632.
   config::Config config;
   config.set_preedit_method(config::Config::KANA);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
   ASSERT_EQ(config::Config::KANA, GET_CONFIG(preedit_method));
 
   scoped_ptr<Session> session(new Session(engine_.get()));
@@ -3523,7 +3752,7 @@ TEST_F(SessionTest, Shortcut) {
 
     config::Config config;
     config.set_selection_shortcut(shortcut);
-    SetConfig(config);
+    config::ConfigHandler::SetConfig(config);
     ASSERT_EQ(shortcut, GET_CONFIG(selection_shortcut));
 
     scoped_ptr<Session> session(new Session(engine_.get()));
@@ -3555,7 +3784,7 @@ TEST_F(SessionTest, Shortcut) {
 TEST_F(SessionTest, ShortcutWithCapsLock_Issue5655743) {
   config::Config config;
   config.set_selection_shortcut(config::Config::SHORTCUT_ASDFGHJKL);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
   ASSERT_EQ(config::Config::SHORTCUT_ASDFGHJKL,
             GET_CONFIG(selection_shortcut));
 
@@ -3601,7 +3830,7 @@ TEST_F(SessionTest, NumpadKey) {
 
   config::Config config;
   config.set_numpad_character_form(config::Config::NUMPAD_DIRECT_INPUT);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
   ASSERT_EQ(config::Config::NUMPAD_DIRECT_INPUT,
             GET_CONFIG(numpad_character_form));
   // Update KeyEventTransformer
@@ -3631,7 +3860,7 @@ TEST_F(SessionTest, NumpadKey) {
   EXPECT_TRUE(GetComposition(command).empty());
 
   config.set_numpad_character_form(config::Config::NUMPAD_HALF_WIDTH);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
   ASSERT_EQ(config::Config::NUMPAD_HALF_WIDTH,
             GET_CONFIG(numpad_character_form));
   // Update KeyEventTransformer
@@ -3723,7 +3952,7 @@ TEST_F(SessionTest, KanaSymbols) {
   config::Config config;
   config.set_punctuation_method(config::Config::COMMA_PERIOD);
   config.set_symbol_method(config::Config::CORNER_BRACKET_SLASH);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
   ASSERT_EQ(config::Config::COMMA_PERIOD, GET_CONFIG(punctuation_method));
   ASSERT_EQ(config::Config::CORNER_BRACKET_SLASH, GET_CONFIG(symbol_method));
 
@@ -3805,8 +4034,10 @@ TEST_F(SessionTest, ExitTemporaryAlphanumModeAfterCommitingSugesstion) {
     InitSessionToPrecomposition(session.get());
     commands::Command command;
     EXPECT_TRUE(SendKey("N", session.get(), &command));
-    EXPECT_EQ(commands::HALF_ASCII, command.output().status().mode());
     EXPECT_EQ(commands::HALF_ASCII, command.output().mode());  // obsolete
+    EXPECT_EQ(commands::HALF_ASCII, command.output().status().mode());
+    // Global mode should be kept as HIRAGANA
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().comeback_mode());
 
     Segments segments;
     Segment *segment = segments.add_segment();
@@ -3822,14 +4053,16 @@ TEST_F(SessionTest, ExitTemporaryAlphanumModeAfterCommitingSugesstion) {
     EXPECT_FALSE(command.output().candidates().has_focused_index());
     EXPECT_EQ(0, command.output().candidates().focused_index());
     EXPECT_FALSE(command.output().has_result());
-    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
     EXPECT_EQ(commands::HIRAGANA, command.output().mode());  // obsolete
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().comeback_mode());
 
     EXPECT_TRUE(SendKey("a", session.get(), &command));
     EXPECT_FALSE(command.output().has_candidates());
     EXPECT_RESULT("NFL", command);
-    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
     EXPECT_EQ(commands::HIRAGANA, command.output().mode());  // obsolete
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().comeback_mode());
   }
 
   {
@@ -3837,8 +4070,10 @@ TEST_F(SessionTest, ExitTemporaryAlphanumModeAfterCommitingSugesstion) {
     InitSessionToPrecomposition(session.get());
     commands::Command command;
     EXPECT_TRUE(SendKey("N", session.get(), &command));
-    EXPECT_EQ(commands::HALF_ASCII, command.output().status().mode());
     EXPECT_EQ(commands::HALF_ASCII, command.output().mode());  // obsolete
+    EXPECT_EQ(commands::HALF_ASCII, command.output().status().mode());
+    // Global mode should be kept as HIRAGANA
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().comeback_mode());
 
     Segments segments;
     Segment *segment = segments.add_segment();
@@ -3851,15 +4086,17 @@ TEST_F(SessionTest, ExitTemporaryAlphanumModeAfterCommitingSugesstion) {
     EXPECT_TRUE(command.output().candidates().has_focused_index());
     EXPECT_EQ(0, command.output().candidates().focused_index());
     EXPECT_FALSE(command.output().has_result());
-    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
     EXPECT_EQ(commands::HIRAGANA, command.output().mode());  // obsolete
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().comeback_mode());
 
     EXPECT_TRUE(SendKey("a", session.get(), &command));
     EXPECT_FALSE(command.output().has_candidates());
     EXPECT_RESULT("NFL", command);
 
-    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
     EXPECT_EQ(commands::HIRAGANA, command.output().mode());  // obsolete
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().comeback_mode());
   }
 
   {
@@ -3867,8 +4104,10 @@ TEST_F(SessionTest, ExitTemporaryAlphanumModeAfterCommitingSugesstion) {
     InitSessionToPrecomposition(session.get());
     commands::Command command;
     EXPECT_TRUE(SendKey("N", session.get(), &command));
-    EXPECT_EQ(commands::HALF_ASCII, command.output().status().mode());
     EXPECT_EQ(commands::HALF_ASCII, command.output().mode());  // obsolete
+    EXPECT_EQ(commands::HALF_ASCII, command.output().status().mode());
+    // Global mode should be kept as HIRAGANA
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().comeback_mode());
 
     Segments segments;
     Segment *segment = segments.add_segment();
@@ -3884,14 +4123,16 @@ TEST_F(SessionTest, ExitTemporaryAlphanumModeAfterCommitingSugesstion) {
     EXPECT_FALSE(command.output().candidates().has_focused_index());
     EXPECT_EQ(0, command.output().candidates().focused_index());
     EXPECT_FALSE(command.output().has_result());
-    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
     EXPECT_EQ(commands::HIRAGANA, command.output().mode());  // obsolete
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().comeback_mode());
 
     EXPECT_TRUE(SendKey("a", session.get(), &command));
     EXPECT_FALSE(command.output().has_candidates());
     EXPECT_RESULT("NFL", command);
-    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
     EXPECT_EQ(commands::HIRAGANA, command.output().mode());  // obsolete
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().comeback_mode());
   }
 }
 
@@ -3903,45 +4144,54 @@ TEST_F(SessionTest, StatusOutput) {
     EXPECT_TRUE(SendKey("a", session.get(), &command));  // "あ"
     ASSERT_TRUE(command.output().has_status());
     EXPECT_TRUE(command.output().status().activated());
-    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
     // command.output().mode() is going to be obsolete.
     EXPECT_EQ(commands::HIRAGANA, command.output().mode());
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().comeback_mode());
 
     EXPECT_TRUE(SendKey("A", session.get(), &command));  // "あA"
     ASSERT_TRUE(command.output().has_status());
     EXPECT_TRUE(command.output().status().activated());
-    EXPECT_EQ(commands::HALF_ASCII, command.output().status().mode());
     EXPECT_EQ(commands::HALF_ASCII, command.output().mode());  // obsolete
+    EXPECT_EQ(commands::HALF_ASCII, command.output().status().mode());
+    // Global mode should be kept as HIRAGANA
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().comeback_mode());
 
     EXPECT_TRUE(SendKey("a", session.get(), &command));  // "あAa"
     ASSERT_TRUE(command.output().has_status());
     EXPECT_TRUE(command.output().status().activated());
-    EXPECT_EQ(commands::HALF_ASCII, command.output().status().mode());
     EXPECT_EQ(commands::HALF_ASCII, command.output().mode());  // obsolete
+    EXPECT_EQ(commands::HALF_ASCII, command.output().status().mode());
+    // Global mode should be kept as HIRAGANA
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().comeback_mode());
 
     // Shift reverts the input mode to Hiragana.
     EXPECT_TRUE(SendKey("Shift", session.get(), &command));
     EXPECT_TRUE(SendKey("a", session.get(), &command));  // "あAaあ"
     ASSERT_TRUE(command.output().has_status());
     EXPECT_TRUE(command.output().status().activated());
-    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
     EXPECT_EQ(commands::HIRAGANA, command.output().mode());  // obsolete
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().comeback_mode());
 
     EXPECT_TRUE(SendKey("A", session.get(), &command));  // "あAaあA"
     ASSERT_TRUE(command.output().has_status());
     EXPECT_TRUE(command.output().status().activated());
+    EXPECT_EQ(commands::HALF_ASCII, command.output().mode());  // obsolete
     EXPECT_EQ(commands::HALF_ASCII, command.output().status().mode());
-    EXPECT_EQ(commands::HALF_ASCII, command.output().mode());
+    // Global mode should be kept as HIRAGANA
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().comeback_mode());
 
     // When the IME is deactivated, the temporary composition mode is reset.
     EXPECT_TRUE(SendKey("OFF", session.get(), &command));  // "あAaあA"
     ASSERT_TRUE(command.output().has_status());
     EXPECT_FALSE(command.output().status().activated());
-    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
     // command.output().mode() always returns DIRECT when IME is
     // deactivated.  This is the reason why command.output().mode() is
     // going to be obsolete.
     EXPECT_EQ(commands::DIRECT, command.output().mode());
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().comeback_mode());
   }
 
   {  // Katakana mode + Shift key
@@ -3949,30 +4199,39 @@ TEST_F(SessionTest, StatusOutput) {
     InitSessionToPrecomposition(session.get());
     commands::Command command;
     session->InputModeFullKatakana(&command);
-    EXPECT_EQ(commands::FULL_KATAKANA, command.output().status().mode());
     EXPECT_EQ(commands::FULL_KATAKANA, command.output().mode());  // obsolete
+    EXPECT_EQ(commands::FULL_KATAKANA, command.output().status().mode());
+    EXPECT_EQ(commands::FULL_KATAKANA,
+              command.output().status().comeback_mode());
 
     EXPECT_TRUE(SendKey("a", session.get(), &command));
     ASSERT_TRUE(command.output().has_status());
     EXPECT_TRUE(command.output().status().activated());
-    EXPECT_EQ(commands::FULL_KATAKANA, command.output().status().mode());
     EXPECT_EQ(commands::FULL_KATAKANA, command.output().mode());  // obsolete
+    EXPECT_EQ(commands::FULL_KATAKANA, command.output().status().mode());
+    EXPECT_EQ(commands::FULL_KATAKANA,
+              command.output().status().comeback_mode());
 
     EXPECT_TRUE(SendKey("A", session.get(), &command));  // "アA"
     ASSERT_TRUE(command.output().has_status());
     EXPECT_TRUE(command.output().status().activated());
-    EXPECT_EQ(commands::HALF_ASCII, command.output().status().mode());
     EXPECT_EQ(commands::HALF_ASCII, command.output().mode());  // obsolete
+    EXPECT_EQ(commands::HALF_ASCII, command.output().status().mode());
+    // Global mode should be kept as FULL_KATAKANA
+    EXPECT_EQ(commands::FULL_KATAKANA,
+              command.output().status().comeback_mode());
 
     // When the IME is deactivated, the temporary composition mode is reset.
     EXPECT_TRUE(SendKey("OFF", session.get(), &command));  // "アA"
     ASSERT_TRUE(command.output().has_status());
     EXPECT_FALSE(command.output().status().activated());
-    EXPECT_EQ(commands::FULL_KATAKANA, command.output().status().mode());
     // command.output().mode() always returns DIRECT when IME is
     // deactivated.  This is the reason why command.output().mode() is
     // going to be obsolete.
     EXPECT_EQ(commands::DIRECT, command.output().mode());
+    EXPECT_EQ(commands::FULL_KATAKANA, command.output().status().mode());
+    EXPECT_EQ(commands::FULL_KATAKANA,
+              command.output().status().comeback_mode());
   }
 }
 
@@ -4456,7 +4715,7 @@ TEST_F(SessionTest, InsertSpace) {
   // Change the setting to HALF_WIDTH.
   config::Config config;
   config.set_space_character_form(config::Config::FUNDAMENTAL_HALF_WIDTH);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
   command.Clear();
   command.mutable_input()->mutable_key()->CopyFrom(space_key);
   EXPECT_TRUE(session->InsertSpace(&command));
@@ -4466,7 +4725,7 @@ TEST_F(SessionTest, InsertSpace) {
 
   // Change the setting to FULL_WIDTH.
   config.set_space_character_form(config::Config::FUNDAMENTAL_FULL_WIDTH);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
   command.Clear();
   command.mutable_input()->mutable_key()->CopyFrom(space_key);
   EXPECT_TRUE(session->InsertSpace(&command));
@@ -4495,7 +4754,7 @@ TEST_F(SessionTest, InsertSpaceToggled) {
   // Change the setting to HALF_WIDTH.
   config::Config config;
   config.set_space_character_form(config::Config::FUNDAMENTAL_HALF_WIDTH);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
   command.Clear();
   command.mutable_input()->mutable_key()->CopyFrom(space_key);
   EXPECT_TRUE(session->InsertSpaceToggled(&command));
@@ -4506,7 +4765,7 @@ TEST_F(SessionTest, InsertSpaceToggled) {
 
   // Change the setting to FULL_WIDTH.
   config.set_space_character_form(config::Config::FUNDAMENTAL_FULL_WIDTH);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
   command.Clear();
   command.mutable_input()->mutable_key()->CopyFrom(space_key);
   EXPECT_TRUE(session->InsertSpaceToggled(&command));
@@ -4614,7 +4873,7 @@ TEST_F(SessionTest, InsertSpaceWithInputMode) {
         "Composition\tSpace\tInsertSpace\n";
     config.set_session_keymap(config::Config::CUSTOM);
     config.set_custom_keymap_table(custom_keymap_table);
-    SetConfig(config);
+    config::ConfigHandler::SetConfig(config);
   }
   {
     scoped_ptr<Session> session(new Session(engine_.get()));
@@ -4662,7 +4921,7 @@ TEST_F(SessionTest, InsertSpaceWithInputMode) {
         "Composition\tSpace\tInsertAlternateSpace\n";
     config.set_session_keymap(config::Config::CUSTOM);
     config.set_custom_keymap_table(custom_keymap_table);
-    SetConfig(config);
+    config::ConfigHandler::SetConfig(config);
   }
   {
     scoped_ptr<Session> session(new Session(engine_.get()));
@@ -4715,7 +4974,7 @@ TEST_F(SessionTest, InsertSpaceWithInputMode) {
     config.set_custom_keymap_table(custom_keymap_table);
 
     config.set_space_character_form(config::Config::FUNDAMENTAL_FULL_WIDTH);
-    SetConfig(config);
+    config::ConfigHandler::SetConfig(config);
   }
   {
     scoped_ptr<Session> session(new Session(engine_.get()));
@@ -4770,7 +5029,7 @@ TEST_F(SessionTest, InsertSpaceWithInputMode) {
     config.set_custom_keymap_table(custom_keymap_table);
 
     config.set_space_character_form(config::Config::FUNDAMENTAL_HALF_WIDTH);
-    SetConfig(config);
+    config::ConfigHandler::SetConfig(config);
   }
   {
     scoped_ptr<Session> session(new Session(engine_.get()));
@@ -4821,7 +5080,7 @@ TEST_F(SessionTest, InsertSpaceWithCustomKeyBinding) {
   config.set_session_keymap(config::Config::CUSTOM);
   config.set_custom_keymap_table(custom_keymap_table);
   config.set_space_character_form(config::Config::FUNDAMENTAL_HALF_WIDTH);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
 
   scoped_ptr<Session> session(new Session(engine_.get()));
   InitSessionToPrecomposition(session.get());
@@ -4863,7 +5122,7 @@ TEST_F(SessionTest, InsertAlternateSpaceWithCustomKeyBinding) {
   config.set_session_keymap(config::Config::CUSTOM);
   config.set_custom_keymap_table(custom_keymap_table);
   config.set_space_character_form(config::Config::FUNDAMENTAL_FULL_WIDTH);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
 
   scoped_ptr<Session> session(new Session(engine_.get()));
   InitSessionToPrecomposition(session.get());
@@ -4904,7 +5163,7 @@ TEST_F(SessionTest, InsertSpaceHalfWidthWithCustomKeyBinding) {
       "Precomposition\tShift Space\tInsertHalfSpace\n";
   config.set_session_keymap(config::Config::CUSTOM);
   config.set_custom_keymap_table(custom_keymap_table);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
 
   scoped_ptr<Session> session(new Session(engine_.get()));
   InitSessionToPrecomposition(session.get());
@@ -4945,7 +5204,7 @@ TEST_F(SessionTest, InsertSpaceFullWidthWithCustomKeyBinding) {
       "Precomposition\tShift Space\tInsertFullSpace\n";
   config.set_session_keymap(config::Config::CUSTOM);
   config.set_custom_keymap_table(custom_keymap_table);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
 
   scoped_ptr<Session> session(new Session(engine_.get()));
   InitSessionToDirect(session.get());
@@ -4992,7 +5251,7 @@ TEST_F(SessionTest, InsertSpaceInDirectMode) {
       "Direct\tCtrl d\tInsertFullSpace\n";
   config.set_session_keymap(config::Config::CUSTOM);
   config.set_custom_keymap_table(custom_keymap_table);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
 
   scoped_ptr<Session> session(new Session(engine_.get()));
   InitSessionToDirect(session.get());
@@ -5052,7 +5311,7 @@ TEST_F(SessionTest, InsertSpaceInCompositionMode) {
   config.set_session_keymap(config::Config::CUSTOM);
   config.set_custom_keymap_table(custom_keymap_table);
   config.set_space_character_form(config::Config::FUNDAMENTAL_FULL_WIDTH);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
 
   scoped_ptr<Session> session(new Session(engine_.get()));
   InitSessionToPrecomposition(session.get());
@@ -5104,7 +5363,7 @@ TEST_F(SessionTest, InsertSpaceInConversionMode) {
   config.set_session_keymap(config::Config::CUSTOM);
   config.set_custom_keymap_table(custom_keymap_table);
   config.set_space_character_form(config::Config::FUNDAMENTAL_FULL_WIDTH);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
 
   scoped_ptr<Session> session(new Session(engine_.get()));
 
@@ -5204,7 +5463,7 @@ TEST_F(SessionTest, IsFullWidthInsertSpace) {
 
     // Default config -- follow to the current mode.
     config.set_space_character_form(config::Config::FUNDAMENTAL_INPUT_MODE);
-    SetConfig(config);
+    config::ConfigHandler::SetConfig(config);
     session.reset(new Session(engine_.get()));
     InitSessionToPrecomposition(session.get());
 
@@ -5237,7 +5496,7 @@ TEST_F(SessionTest, IsFullWidthInsertSpace) {
 
     // Set config to 'half' -- all mode has to emit half-width space.
     config.set_space_character_form(config::Config::FUNDAMENTAL_HALF_WIDTH);
-    SetConfig(config);
+    config::ConfigHandler::SetConfig(config);
     session.reset(new Session(engine_.get()));
     InitSessionToPrecomposition(session.get());
 
@@ -5269,7 +5528,7 @@ TEST_F(SessionTest, IsFullWidthInsertSpace) {
     // Set config to 'FULL' -- all mode except for DIRECT emits
     // full-width space.
     config.set_space_character_form(config::Config::FUNDAMENTAL_FULL_WIDTH);
-    SetConfig(config);
+    config::ConfigHandler::SetConfig(config);
     session.reset(new Session(engine_.get()));
     InitSessionToPrecomposition(session.get());
 
@@ -5304,7 +5563,7 @@ TEST_F(SessionTest, IsFullWidthInsertSpace) {
 
     // Default config -- follow to the current mode.
     config.set_space_character_form(config::Config::FUNDAMENTAL_INPUT_MODE);
-    SetConfig(config);
+    config::ConfigHandler::SetConfig(config);
     session.reset(new Session(engine_.get()));
     InitSessionToPrecomposition(session.get());
 
@@ -5617,7 +5876,7 @@ TEST_F(SessionTest, Issue2190364) {
   // This is a unittest against http://b/2190364
   config::Config config;
   config.set_preedit_method(config::Config::KANA);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
   ASSERT_EQ(config::Config::KANA, GET_CONFIG(preedit_method));
 
   scoped_ptr<Session> session(new Session(engine_.get()));
@@ -5918,7 +6177,7 @@ TEST_F(SessionTest, Issue2282319) {
   // InsertFullSpace is not working in half-width input mode.
   config::Config config;
   config.set_session_keymap(config::Config::MSIME);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
 
   scoped_ptr<Session> session(new Session(engine_.get()));
   InitSessionToPrecomposition(session.get());
@@ -5949,7 +6208,7 @@ TEST_F(SessionTest, Issue2297060) {
   // Ctrl-Space is not working
   config::Config config;
   config.set_session_keymap(config::Config::MSIME);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
 
   scoped_ptr<Session> session(new Session(engine_.get()));
   InitSessionToPrecomposition(session.get());
@@ -5970,7 +6229,7 @@ TEST_F(SessionTest, Issue2379374) {
   {  // Set numpad_character_form with NUMPAD_DIRECT_INPUT
     config::Config config;
     config.set_numpad_character_form(config::Config::NUMPAD_DIRECT_INPUT);
-    SetConfig(config);
+    config::ConfigHandler::SetConfig(config);
     ASSERT_EQ(config::Config::NUMPAD_DIRECT_INPUT,
               GET_CONFIG(numpad_character_form));
     // Update KeyEventTransformer.
@@ -6179,7 +6438,7 @@ TEST_F(SessionTest, SendKeyDirectInputStateTest) {
       "DirectInput\tHiragana\tInputModeHiragana\n";
   config.set_session_keymap(config::Config::CUSTOM);
   config.set_custom_keymap_table(custom_keymap_table);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
 
   EXPECT_TRUE(SendKey("Hiragana", session.get(), &command));
   EXPECT_TRUE(SendKey("a", session.get(), &command));
@@ -6334,7 +6593,7 @@ TEST_F(SessionTest, InputModeConsumedForTestSendKey) {
 #ifdef OS_WIN
   config::Config config;
   config.set_session_keymap(config::Config::MSIME);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
 
   scoped_ptr<Session> session(new Session(engine_.get()));
   InitSessionToPrecomposition(session.get());
@@ -6662,7 +6921,7 @@ TEST_F(SessionTest, Issue5742293) {
 
   config::Config config;
   config.set_session_keymap(config::Config::MSIME);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
 
   SetUndoContext(session.get());
 
@@ -6688,7 +6947,7 @@ TEST_F(SessionTest, AutoConversion) {
   // Auto Off
   config::Config config;
   config.set_use_auto_conversion(false);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
   {
     scoped_ptr<Session> session(new Session(engine_.get()));
     InitSessionToPrecomposition(session.get());
@@ -6720,7 +6979,7 @@ TEST_F(SessionTest, AutoConversion) {
 
   // Auto On
   config.set_use_auto_conversion(true);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
   {
     scoped_ptr<Session> session(new Session(engine_.get()));
     InitSessionToPrecomposition(session.get());
@@ -6901,100 +7160,6 @@ TEST_F(SessionTest, AutoConversion) {
   }
 }
 
-TEST_F(SessionTest, FillHistoryContext) {
-  scoped_ptr<Session> session(new Session(engine_.get()));
-  InitSessionToPrecomposition(session.get());
-  commands::Command command;
-
-  const string kHistory[] = {"abc", "def"};
-
-  Segments segments;
-  {
-    Segment *segment = segments.add_segment();
-    segment->set_segment_type(Segment::HISTORY);
-    Segment::Candidate *candidate = segment->add_candidate();
-    candidate->value = kHistory[0];
-  }
-  // FinishConversion is expected to return empty Segments.
-  GetConverterMock()->SetFinishConversion(&segments, true);
-
-  // dummy code to set segments above
-  EXPECT_TRUE(SendKey("a", session.get(), &command));
-  EXPECT_TRUE(SendKey("Enter", session.get(), &command));
-
-  // Fill context in TestSendKey
-  EXPECT_TRUE(TestSendKey("x", session.get(), &command));
-  EXPECT_TRUE(command.input().context().has_preceding_text());
-  EXPECT_EQ("abc", command.input().context().preceding_text());
-
-  // Fill context in SendKey
-  EXPECT_TRUE(SendKey("x", session.get(), &command));
-  EXPECT_TRUE(command.input().context().has_preceding_text());
-  EXPECT_EQ("abc", command.input().context().preceding_text());
-
-  // Fill context in SendCommand
-  SendCommand(commands::SessionCommand::REVERT, session.get(), &command);
-  EXPECT_EQ("abc", command.input().context().preceding_text());
-
-  // Multiple history segments are concatenated and put into context.
-  {
-    Segment *segment = segments.add_segment();
-    segment->set_segment_type(Segment::HISTORY);
-    Segment::Candidate *candidate = segment->add_candidate();
-    candidate->value = kHistory[1];
-  }
-  // FinishConversion is expected to return empty Segments.
-  GetConverterMock()->SetFinishConversion(&segments, true);
-
-  // dummy code to set segments above
-  EXPECT_TRUE(SendKey("a", session.get(), &command));
-  EXPECT_TRUE(SendKey("Enter", session.get(), &command));
-
-  EXPECT_TRUE(TestSendKey("x", session.get(), &command));
-  EXPECT_TRUE(command.input().context().has_preceding_text());
-  EXPECT_EQ("abcdef", command.input().context().preceding_text());
-}
-
-TEST_F(SessionTest, ExpandCompositionForNestedCalculation) {
-  scoped_ptr<Session> session(new Session(engine_.get()));
-  InitSessionToPrecomposition(session.get());
-
-  commands::Context context;
-  // "あい 1１"
-  context.set_preceding_text("\xE3\x81\x82\xE3\x81\x84 1\xEF\xBC\x91");
-
-  // Incapable case
-  commands::Capability capability;
-  session->set_client_capability(capability);
-
-  commands::Command command;
-  InsertCharacterCharsWithContext("+1=", context, session.get(), &command);
-
-  EXPECT_EQ(0, command.output().deletion_range().offset());
-  EXPECT_EQ(0, command.output().deletion_range().length());
-
-  // "＋１＝"
-  EXPECT_EQ("\xEF\xBC\x8B\xEF\xBC\x91\xEF\xBC\x9D",
-            command.output().preedit().segment(0).key());
-
-  command.Clear();
-  session->Revert(&command);
-  command.Clear();
-
-  // Capable case
-  capability.set_text_deletion(commands::Capability::DELETE_PRECEDING_TEXT);
-  session->set_client_capability(capability);
-
-  InsertCharacterCharsWithContext("+1=", context, session.get(), &command);
-
-  EXPECT_TRUE(command.output().has_deletion_range());
-  EXPECT_EQ(-2, command.output().deletion_range().offset());
-  EXPECT_EQ(2, command.output().deletion_range().length());
-  // "1１＋１＝"
-  EXPECT_EQ("1\xEF\xBC\x91\xEF\xBC\x8B\xEF\xBC\x91\xEF\xBC\x9D",
-            command.output().preedit().segment(0).key());
-}
-
 TEST_F(SessionTest, InputSpaceWithKatakanaMode) {
   // This is a unittest against http://b/3203944.
   // Input mode should not be changed when a space key is typed.
@@ -7050,7 +7215,7 @@ TEST_F(SessionTest, AlphanumericOfSSH) {
 TEST_F(SessionTest, KeitaiInput_toggle) {
   config::Config config;
   config.set_session_keymap(config::Config::MSIME);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
   scoped_ptr<Session> session(new Session(engine_.get()));
 
   InitSessionToPrecomposition(session.get(), *mobile_request_);
@@ -7229,7 +7394,7 @@ TEST_F(SessionTest, KeitaiInput_toggle) {
 TEST_F(SessionTest, KeitaiInput_flick) {
   config::Config config;
   config.set_session_keymap(config::Config::MSIME);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
   commands::Command command;
 
   {
@@ -8722,7 +8887,7 @@ TEST_F(SessionTest, EditCancelAndIMEOff) {
         "Conversion\thankaku/zenkaku\tCancelAndIMEOff\n";
     config.set_session_keymap(config::Config::CUSTOM);
     config.set_custom_keymap_table(custom_keymap_table);
-    SetConfig(config);
+    config::ConfigHandler::SetConfig(config);
   }
 
   Segments segments_mo;
@@ -8856,7 +9021,7 @@ TEST_F(SessionTest, CancelInPasswordMode_Issue5955618) {
         "Conversion\tESC\tCancel\n";
     config.set_session_keymap(config::Config::CUSTOM);
     config.set_custom_keymap_table(custom_keymap_table);
-    SetConfig(config);
+    config::ConfigHandler::SetConfig(config);
   }
   Segments segments_mo;
   {
@@ -8965,7 +9130,7 @@ TEST_F(SessionTest, CancelAndIMEOffInPasswordMode_Issue5955618) {
         "Conversion\thankaku/zenkaku\tCancelAndIMEOff\n";
     config.set_session_keymap(config::Config::CUSTOM);
     config.set_custom_keymap_table(custom_keymap_table);
-    SetConfig(config);
+    config::ConfigHandler::SetConfig(config);
   }
   Segments segments_mo;
   {
@@ -9332,7 +9497,7 @@ TEST_F(SessionTest, CaretManageConversionToCompositionTest) {
     segment->add_candidate()->value = "m";
   }
 
-  scoped_ptr<ConversionRequest> request_m_conv(NULL);
+  scoped_ptr<ConversionRequest> request_m_conv;
 
   // [CONV-L] -> [COMP-R]
   //  Expectation: ^|a -> ^a|
@@ -9487,7 +9652,7 @@ TEST_F(SessionTest, DoNothingOnCompositionKeepingSuggestWindow) {
 TEST_F(SessionTest, ModeChangeOfConvertAtPunctuations) {
   config::Config config;
   config.set_use_auto_conversion(true);
-  SetConfig(config);
+  config::ConfigHandler::SetConfig(config);
 
   Session session(engine_.get());
   InitSessionToPrecomposition(&session);
@@ -9545,7 +9710,6 @@ TEST_F(SessionTest, SuppressSuggestion) {
 
 }
 
-#ifdef MOZC_ENABLE_HISTORY_DELETION
 TEST_F(SessionTest, DeleteHistory) {
   scoped_ptr<Session> session(new Session(engine_.get()));
   InitSessionToPrecomposition(session.get());
@@ -9578,7 +9742,236 @@ TEST_F(SessionTest, DeleteHistory) {
   EXPECT_EQ(ImeContext::COMPOSITION, session->context().state());
   EXPECT_PREEDIT("\xE3\x81\xA7\xEF\xBD\x8C", command);  //  "でｌ"
 }
-#endif  // MOZC_ENABLE_HISTORY_DELETION
+
+TEST_F(SessionTest, SendKeyWithKeyString_Direct) {
+  Session session(engine_.get());
+  InitSessionToDirect(&session);
+
+  commands::Command command;
+  const char kZa[] = "\xE3\x81\x96";  // "ざ"
+  SetSendKeyCommandWithKeyString(kZa, &command);
+  EXPECT_TRUE(session.TestSendKey(&command));
+  EXPECT_FALSE(command.output().consumed());
+  command.mutable_output()->Clear();
+  EXPECT_TRUE(session.SendKey(&command));
+  EXPECT_FALSE(command.output().consumed());
+}
+
+TEST_F(SessionTest, SendKeyWithKeyString) {
+  Session session(engine_.get());
+  InitSessionToPrecomposition(&session);
+
+  commands::Command command;
+
+  // Test for precomposition state.
+  EXPECT_EQ(ImeContext::PRECOMPOSITION, session.context().state());
+  const char kZa[] = "\xE3\x81\x96";  // "ざ"
+  SetSendKeyCommandWithKeyString(kZa, &command);
+  EXPECT_TRUE(session.TestSendKey(&command));
+  EXPECT_TRUE(command.output().consumed());
+  command.mutable_output()->Clear();
+  EXPECT_TRUE(session.SendKey(&command));
+  EXPECT_TRUE(command.output().consumed());
+  EXPECT_PREEDIT(kZa, command);
+
+  command.Clear();
+
+  // Test for composition state.
+  EXPECT_EQ(ImeContext::COMPOSITION, session.context().state());
+  const char kOnsenManju[] = "\xE2\x99\xA8\xE9\xA5\x85\xE9\xA0\xAD";  // "♨饅頭"
+  SetSendKeyCommandWithKeyString(kOnsenManju, &command);
+  EXPECT_TRUE(session.TestSendKey(&command));
+  EXPECT_TRUE(command.output().consumed());
+  command.mutable_output()->Clear();
+  EXPECT_TRUE(session.SendKey(&command));
+  EXPECT_TRUE(command.output().consumed());
+  EXPECT_PREEDIT(string(kZa) + kOnsenManju, command);
+}
+
+TEST_F(SessionTest, IndirectImeOnOff) {
+  scoped_ptr<Session> session(new Session(engine_.get()));
+  InitSessionToPrecomposition(session.get());
+
+  {
+    commands::Command command;
+    // IMEOff
+    SendSpecialKey(commands::KeyEvent::OFF, session.get(), &command);
+  }
+  {
+    commands::Command command;
+    // 'a'
+    TestSendKeyWithModeAndActivated(
+        "a", true, commands::HIRAGANA, session.get(), &command);
+    EXPECT_TRUE(command.output().consumed());
+  }
+  {
+    commands::Command command;
+    // 'a'
+    SendKeyWithModeAndActivated(
+        "a", true, commands::HIRAGANA, session.get(), &command);
+    EXPECT_TRUE(command.output().consumed());
+    EXPECT_TRUE(command.output().has_status());
+    EXPECT_TRUE(command.output().status().activated())
+        << "Should be activated.";
+  }
+  {
+    commands::Command command;
+    // 'a'
+    TestSendKeyWithModeAndActivated(
+        "a", false, commands::HIRAGANA, session.get(), &command);
+    EXPECT_FALSE(command.output().consumed());
+  }
+  {
+    commands::Command command;
+    // 'a'
+    SendKeyWithModeAndActivated(
+        "a", false, commands::HIRAGANA, session.get(), &command);
+    EXPECT_FALSE(command.output().consumed());
+    EXPECT_FALSE(command.output().has_result())
+        << "Indirect IME off flushes ongoing composition";
+    EXPECT_TRUE(command.output().has_status());
+    EXPECT_FALSE(command.output().status().activated())
+        << "Should be inactivated.";
+  }
+}
+
+TEST_F(SessionTest, MakeSureIMEOn) {
+  scoped_ptr<Session> session(new Session(engine_.get()));
+  InitSessionToDirect(session.get());
+
+  {
+    commands::Command command;
+    SetSendCommandCommand(commands::SessionCommand::TURN_ON_IME, &command);
+
+    ASSERT_TRUE(session->SendCommand(&command));
+    EXPECT_TRUE(command.output().consumed());
+    ASSERT_TRUE(command.output().has_status());
+    EXPECT_TRUE(command.output().status().activated());
+  }
+
+  {
+    // Make sure we can change the input mode.
+    commands::Command command;
+    SetSendCommandCommand(commands::SessionCommand::TURN_ON_IME, &command);
+    command.mutable_input()->mutable_command()->set_composition_mode(
+        commands::FULL_KATAKANA);
+
+    ASSERT_TRUE(session->SendCommand(&command));
+    EXPECT_TRUE(command.output().consumed());
+    ASSERT_TRUE(command.output().has_status());
+    EXPECT_TRUE(command.output().status().activated());
+    EXPECT_EQ(commands::FULL_KATAKANA, command.output().status().mode());
+  }
+
+  {
+    // Make sure we can change the input mode again.
+    commands::Command command;
+    SetSendCommandCommand(commands::SessionCommand::TURN_ON_IME, &command);
+    command.mutable_input()->mutable_command()->set_composition_mode(
+        commands::HIRAGANA);
+
+    ASSERT_TRUE(session->SendCommand(&command));
+    EXPECT_TRUE(command.output().consumed());
+    ASSERT_TRUE(command.output().has_status());
+    EXPECT_TRUE(command.output().status().activated());
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
+  }
+
+  {
+    // commands::DIRECT is not supported for the composition_mode.
+    commands::Command command;
+    SetSendCommandCommand(commands::SessionCommand::TURN_ON_IME, &command);
+    command.mutable_input()->mutable_command()->set_composition_mode(
+        commands::DIRECT);
+    EXPECT_FALSE(session->SendCommand(&command));
+  }
+}
+
+TEST_F(SessionTest, MakeSureIMEOff) {
+  scoped_ptr<Session> session(new Session(engine_.get()));
+  InitSessionToPrecomposition(session.get());
+
+  {
+    commands::Command command;
+    SetSendCommandCommand(commands::SessionCommand::TURN_OFF_IME, &command);
+
+    ASSERT_TRUE(session->SendCommand(&command));
+    EXPECT_TRUE(command.output().consumed());
+    ASSERT_TRUE(command.output().has_status());
+    EXPECT_FALSE(command.output().status().activated());
+  }
+
+  {
+    // Make sure we can change the input mode.
+    commands::Command command;
+    SetSendCommandCommand(commands::SessionCommand::TURN_OFF_IME, &command);
+    command.mutable_input()->mutable_command()->set_composition_mode(
+        commands::FULL_KATAKANA);
+
+    ASSERT_TRUE(session->SendCommand(&command));
+    EXPECT_TRUE(command.output().consumed());
+    ASSERT_TRUE(command.output().has_status());
+    EXPECT_FALSE(command.output().status().activated());
+    EXPECT_EQ(commands::FULL_KATAKANA, command.output().status().mode());
+  }
+
+  {
+    // Make sure we can change the input mode again.
+    commands::Command command;
+    SetSendCommandCommand(commands::SessionCommand::TURN_OFF_IME, &command);
+    command.mutable_input()->mutable_command()->set_composition_mode(
+        commands::HIRAGANA);
+
+    ASSERT_TRUE(session->SendCommand(&command));
+    EXPECT_TRUE(command.output().consumed());
+    ASSERT_TRUE(command.output().has_status());
+    EXPECT_FALSE(command.output().status().activated());
+    EXPECT_EQ(commands::HIRAGANA, command.output().status().mode());
+  }
+
+  {
+    // commands::DIRECT is not supported for the composition_mode.
+    commands::Command command;
+    SetSendCommandCommand(commands::SessionCommand::TURN_OFF_IME, &command);
+    command.mutable_input()->mutable_command()->set_composition_mode(
+        commands::DIRECT);
+    EXPECT_FALSE(session->SendCommand(&command));
+  }
+
+  {
+    // Make sure SessionCommand::TURN_OFF_IME terminates the existing
+    // composition.
+
+    InitSessionToPrecomposition(session.get());
+
+    // Set up converter.
+    {
+      commands::Command command;
+
+      Segments segments;
+      InsertCharacterChars("aiueo", session.get(), &command);
+      ConversionRequest request;
+      SetComposer(session.get(), &request);
+      SetAiueo(&segments);
+      FillT13Ns(request, &segments);
+      GetConverterMock()->SetCommitSegmentValue(&segments, true);
+    }
+
+    // Send SessionCommand::TURN_OFF_IME to commit composition.
+    {
+      commands::Command command;
+      SetSendCommandCommand(commands::SessionCommand::TURN_OFF_IME, &command);
+      command.mutable_input()->mutable_command()->set_composition_mode(
+          commands::FULL_KATAKANA);
+      ASSERT_TRUE(session->SendCommand(&command));
+      EXPECT_RESULT(kAiueo, command);
+      EXPECT_TRUE(command.output().consumed());
+      ASSERT_TRUE(command.output().has_status());
+      EXPECT_FALSE(command.output().status().activated());
+      EXPECT_EQ(commands::FULL_KATAKANA, command.output().status().mode());
+    }
+  }
+}
 
 }  // namespace session
 }  // namespace mozc

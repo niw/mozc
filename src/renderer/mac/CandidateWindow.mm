@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,6 @@
 
 #import "CandidateView.h"
 
-#include "base/base.h"
 #include "base/logging.h"
 #include "base/coordinates.h"
 #include "renderer/mac/CandidateWindow.h"
@@ -83,7 +82,7 @@ void CandidateWindow::SetCandidates(const Candidates &candidates) {
   [candidate_view setCandidates:&candidates];
   [candidate_view setNeedsDisplay:YES];
   NSSize size = [candidate_view updateLayout];
-  ::SizeWindow(window_, size.width, size.height, YES);
+  ResizeWindow(size.width, size.height);
 }
 
 void CandidateWindow::ResetView(){

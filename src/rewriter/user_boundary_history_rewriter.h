@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,8 +32,10 @@
 
 #include <vector>
 #include <string>
+
+#include "base/port.h"
+#include "base/scoped_ptr.h"
 #include "rewriter/rewriter_interface.h"
-#include "base/base.h"
 
 namespace mozc {
 
@@ -55,7 +57,7 @@ class UserBoundaryHistoryRewriter : public RewriterInterface {
   virtual bool Rewrite(const ConversionRequest &request,
                        Segments *segments) const;
 
-  virtual void Finish(Segments *segments);
+  virtual void Finish(const ConversionRequest &request, Segments *segments);
 
   virtual bool Reload();
 

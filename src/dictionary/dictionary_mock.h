@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -54,7 +54,9 @@
 #include <list>
 #include <map>
 #include <string>
-#include "base/base.h"
+#include <vector>
+
+#include "base/port.h"
 #include "base/string_piece.h"
 #include "dictionary/dictionary_interface.h"
 
@@ -89,16 +91,11 @@ class DictionaryMock : public DictionaryInterface {
   virtual Node *LookupPredictive(
       const char *str, int size, NodeAllocatorInterface *allocator) const;
 
-  // DictionaryMock doesn't support a limitation
-  virtual Node *LookupPrefixWithLimit(const char *str, int size,
-                                      const Limit &limit,
-                                      NodeAllocatorInterface *allocator) const;
+  virtual void LookupPrefix(
+      StringPiece key, bool use_kana_modifier_insensitive_lookup,
+      Callback *callback) const;
 
-  virtual Node *LookupPrefix(const char *str, int size,
-                             NodeAllocatorInterface *allocator) const;
-
-  virtual Node *LookupExact(const char *str, int size,
-                            NodeAllocatorInterface *allocator) const;
+  virtual void LookupExact(StringPiece key, Callback *callback) const;
 
   // For reverse lookup, the reading is stored in Node::value and the word
   // is stored in Node::key.
@@ -137,9 +134,9 @@ class DictionaryMock : public DictionaryInterface {
 
  private:
   map<string, list<NodeData> > predictive_dictionary_;
-  map<string, list<NodeData> > prefix_dictionary_;
   map<string, list<NodeData> > reverse_dictionary_;
-  map<string, list<NodeData> > exact_dictionary_;
+  map<string, vector<Token *> > prefix_dictionary_;
+  map<string, vector<Token *> > exact_dictionary_;
 
   DISALLOW_COPY_AND_ASSIGN(DictionaryMock);
 };

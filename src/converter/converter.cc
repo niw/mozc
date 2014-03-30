@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -37,6 +37,7 @@
 
 #include "base/base.h"
 #include "base/logging.h"
+#include "base/number_util.h"
 #include "base/util.h"
 #include "composer/composer.h"
 #include "converter/connector_interface.h"
@@ -98,7 +99,7 @@ bool IsValidSegments(const ConversionRequest &request,
     // On mobile, we don't distinguish candidates and meta candidates
     // So it's ok if we have meta candidates even if we don't have candidates
     // TODO(team): we may remove mobile check if other platforms accept
-    // meta candidate only segemnt
+    // meta candidate only segment
     if (IsMobile(request) && segments.segment(i).meta_candidates_size() != 0) {
       continue;
     }
@@ -107,10 +108,108 @@ bool IsValidSegments(const ConversionRequest &request,
   return true;
 }
 
+// Extracts the last substring that consists of the same script type.
+// Returns true if the last substring is successfully extracted.
+//   Examples:
+//   - "" -> false
+//   - "x " -> "x" / ALPHABET
+//   - "x  " -> false
+//   - "C60" -> "60" / NUMBER
+//   - "200x" -> "x" / ALPHABET
+//   (currently only NUMBER and ALPHABET are supported)
+bool ExtractLastTokenWithScriptType(const string &text,
+                                    string *last_token,
+                                    Util::ScriptType *last_script_type) {
+  last_token->clear();
+  *last_script_type = Util::SCRIPT_TYPE_SIZE;
+
+  ConstChar32ReverseIterator iter(text);
+  if (iter.Done()) {
+    return false;
+  }
+
+  // Allow one whitespace at the end.
+  if (iter.Get() == ' ') {
+    iter.Next();
+    if (iter.Done()) {
+      return false;
+    }
+    if (iter.Get() == ' ') {
+      return false;
+    }
+  }
+
+  vector<char32> reverse_last_token;
+  Util::ScriptType last_script_type_found = Util::GetScriptType(iter.Get());
+  for (; !iter.Done(); iter.Next()) {
+    const char32 w = iter.Get();
+    if ((w == ' ') || (Util::GetScriptType(w) != last_script_type_found)) {
+      break;
+    }
+    reverse_last_token.push_back(w);
+  }
+
+  *last_script_type = last_script_type_found;
+  // TODO(yukawa): Replace reverse_iterator with const_reverse_iterator when
+  //     build failure on Android is fixed.
+  for (vector<char32>::reverse_iterator it = reverse_last_token.rbegin();
+       it != reverse_last_token.rend(); ++it) {
+    Util::UCS4ToUTF8Append(*it, last_token);
+  }
+  return true;
+}
+
+// Tries normalizing input text as a math expression, where full-width numbers
+// and math symbols are converted to their half-width equivalents except for
+// some special symbols, e.g., "×", "÷", and "・". Returns false if the input
+// string contains non-math characters.
+bool TryNormalizingKeyAsMathExpression(StringPiece s, string *key) {
+  key->reserve(s.size());
+  for (ConstChar32Iterator iter(s); !iter.Done(); iter.Next()) {
+    // Half-width arabic numbers.
+    if ('0' <= iter.Get() && iter.Get() <= '9') {
+      key->append(1, static_cast<char>(iter.Get()));
+      continue;
+    }
+    // Full-width arabic numbers ("０" -- "９")
+    if (0xFF10 <= iter.Get() && iter.Get() <= 0xFF19) {
+      const char c = iter.Get() - 0xFF10 + '0';
+      key->append(1, c);
+      continue;
+    }
+    switch (iter.Get()) {
+      case 0x002B: case 0xFF0B: // "+", "＋"
+        key->append(1, '+');
+        break;
+      case 0x002D: case 0x30FC: // "-", "ー"
+        key->append(1, '-');
+        break;
+      case 0x002A: case 0xFF0A: case 0x00D7: // "*", "＊", "×"
+        key->append(1, '*');
+        break;
+      case 0x002F: case 0xFF0F: case 0x30FB: case 0x00F7:
+        // "/",  "／", "・", "÷"
+        key->append(1, '/');
+        break;
+      case 0x0028: case 0xFF08:  // "(", "（"
+        key->append(1, '(');
+        break;
+      case 0x0029: case 0xFF09:  // ")", "）"
+        key->append(1, ')');
+        break;
+      case 0x003D: case 0xFF1D:  // "=", "＝"
+        key->append(1, '=');
+        break;
+      default:
+        return false;
+    }
+  }
+  return true;
+}
+
 }  // namespace
 
 ConverterImpl::ConverterImpl() : pos_matcher_(NULL),
-                                 rewriter_(NULL),
                                  immutable_converter_(NULL),
                                  general_noun_id_(kuint16max) {
 }
@@ -131,39 +230,6 @@ void ConverterImpl::Init(const POSMatcher *pos_matcher,
   general_noun_id_ = pos_matcher_->GetGeneralNounId();
 }
 
-bool ConverterImpl::SetupHistorySegmentsFromPrecedingText(
-    const string &preceding_text, Segments *segments) const {
-  if (!StartReverseConversion(segments, preceding_text)) {
-    LOG(WARNING) << "Reverse conversion failed for " << preceding_text;
-    return false;
-  }
-  // Below we change the resulting segments to history segments. We should
-  // guarantee that the total segments size doesn't exceed the maximum size of
-  // history segments, by erasing leading segments as necessary.
-  if (segments->segments_size() > segments->max_history_segments_size()) {
-    segments->erase_segments(
-        0, segments->segments_size() - segments->max_history_segments_size());
-  }
-  for (int i = 0; i < segments->segments_size(); ++i) {
-    Segment *segment = segments->mutable_segment(i);
-    DCHECK(segment);
-    if (segment->candidates_size() == 0) {
-      LOG(WARNING) << "Empty segment was returned by reverse conversion";
-      return false;
-    }
-    // Need to swap key and value as the reverse conversion stores reading
-    // (usual key for conversion) to value.
-    for (int j = 0; j < segment->candidates_size(); ++j) {
-      Segment::Candidate *candidate = segment->mutable_candidate(j);
-      swap(candidate->key, candidate->value);
-      swap(candidate->content_key, candidate->content_value);
-    }
-    segment->set_segment_type(Segment::HISTORY);
-    segment->set_key(segment->candidate(0).key);
-  }
-  return true;
-}
-
 bool ConverterImpl::StartConversionForRequest(const ConversionRequest &request,
                                               Segments *segments) const {
   if (!request.has_composer()) {
@@ -171,16 +237,6 @@ bool ConverterImpl::StartConversionForRequest(const ConversionRequest &request,
     return false;
   }
 
-  // Existing history segments are used prior to preceding text.
-  if (segments->history_segments_size() == 0 &&
-      !request.preceding_text().empty()) {
-    if (!SetupHistorySegmentsFromPrecedingText(request.preceding_text(),
-                                               segments)) {
-      LOG(WARNING) << "Failed to utilize preceding text: "
-                   << request.preceding_text();
-      segments->Clear();  // fall back to a normal conversion
-    }
-  }
   string conversion_key;
   switch (request.composer_key_selection()) {
     case ConversionRequest::CONVERSION_KEY:
@@ -194,9 +250,7 @@ bool ConverterImpl::StartConversionForRequest(const ConversionRequest &request,
   }
   SetKey(segments, conversion_key);
   segments->set_request_type(Segments::CONVERSION);
-  if (!immutable_converter_->ConvertForRequest(request, segments)) {
-    return false;
-  }
+  immutable_converter_->ConvertForRequest(request, segments);
   RewriteAndSuppressCandidates(request, segments);
   return IsValidSegments(request, *segments);
 }
@@ -206,9 +260,7 @@ bool ConverterImpl::StartConversion(Segments *segments,
   SetKey(segments, key);
   segments->set_request_type(Segments::CONVERSION);
   const ConversionRequest default_request;
-  if (!immutable_converter_->ConvertForRequest(default_request, segments)) {
-    return false;
-  }
+  immutable_converter_->ConvertForRequest(default_request, segments);
   RewriteAndSuppressCandidates(default_request, segments);
   return IsValidSegments(default_request, *segments);
 }
@@ -216,7 +268,26 @@ bool ConverterImpl::StartConversion(Segments *segments,
 bool ConverterImpl::StartReverseConversion(Segments *segments,
                                            const string &key) const {
   segments->Clear();
+  if (key.empty()) {
+    return false;
+  }
   SetKey(segments, key);
+
+  // Check if |key| looks like a math expression.  In such case, there's no
+  // chance to get the correct reading by the immutable converter.  Rather,
+  // simply returns normalized value.
+  {
+    string value;
+    if (TryNormalizingKeyAsMathExpression(key, &value)) {
+      Segment::Candidate *cand =
+          segments->mutable_segment(0)->push_back_candidate();
+      cand->Init();
+      cand->key = key;
+      cand->value.swap(value);
+      return true;
+    }
+  }
+
   segments->set_request_type(Segments::REVERSE_CONVERSION);
   if (!immutable_converter_->Convert(segments)) {
     return false;
@@ -288,7 +359,7 @@ bool ConverterImpl::Predict(const ConversionRequest &request,
     // However, we don't have to do so for suggestion. Here, we are deciding
     // whether the input key is changed or not by using segment key. This is not
     // perfect because for roman input, conversion key is not updated by
-    // imcomplete input, for example, conversion key is "あ" for the input "a",
+    // incomplete input, for example, conversion key is "あ" for the input "a",
     // and will still be "あ" for the input "ak". For avoiding mis-reset of
     // the results, we will reset always for suggestion request type.
     SetKey(segments, key);
@@ -297,9 +368,7 @@ bool ConverterImpl::Predict(const ConversionRequest &request,
   DCHECK_EQ(key, segments->conversion_segment(0).key());
 
   segments->set_request_type(request_type);
-  if (!predictor_->PredictForRequest(request, segments)) {
-    return false;
-  }
+  predictor_->PredictForRequest(request, segments);
   RewriteAndSuppressCandidates(request, segments);
   if (request_type == Segments::PARTIAL_SUGGESTION ||
       request_type == Segments::PARTIAL_PREDICTION) {
@@ -326,16 +395,6 @@ bool ConverterImpl::StartPredictionForRequest(const ConversionRequest &request,
     return false;
   }
 
-  // Existing history segments are used prior to preceding text.
-  if (segments->history_segments_size() == 0 &&
-      !request.preceding_text().empty()) {
-    if (!SetupHistorySegmentsFromPrecedingText(request.preceding_text(),
-                                               segments)) {
-      LOG(WARNING) << "Failed to utilize preceding text: "
-                   << request.preceding_text();
-      segments->Clear();  // fall back to a normal prediction
-    }
-  }
   string prediction_key;
   request.composer().GetQueryForPrediction(&prediction_key);
   return Predict(request, prediction_key, Segments::PREDICTION, segments);
@@ -404,7 +463,8 @@ bool ConverterImpl::StartPartialPredictionForRequest(
                  Segments::PARTIAL_PREDICTION, segments);
 }
 
-bool ConverterImpl::FinishConversion(Segments *segments) const {
+bool ConverterImpl::FinishConversion(const ConversionRequest &request,
+                                     Segments *segments) const {
   CommitUsageStats(segments, segments->history_segments_size(),
                    segments->conversion_segments_size());
 
@@ -425,7 +485,7 @@ bool ConverterImpl::FinishConversion(Segments *segments) const {
   }
 
   segments->clear_revert_entries();
-  rewriter_->Finish(segments);
+  rewriter_->Finish(request, segments);
   predictor_->Finish(segments);
 
   // Remove the front segments except for some segments which will be
@@ -464,6 +524,31 @@ bool ConverterImpl::RevertConversion(Segments *segments) const {
   }
   predictor_->Revert(segments);
   segments->clear_revert_entries();
+  return true;
+}
+
+bool ConverterImpl::ReconstructHistory(Segments *segments,
+                                       const string &preceding_text) const {
+  segments->Clear();
+
+  string key;
+  string value;
+  uint16 id;
+  if (!GetLastConnectivePart(preceding_text, &key, &value, &id)) {
+    return false;
+  }
+
+  Segment *segment = segments->add_segment();
+  segment->set_key(key);
+  segment->set_segment_type(Segment::HISTORY);
+  Segment::Candidate *candidate = segment->push_back_candidate();
+  candidate->rid = id;
+  candidate->lid = id;
+  candidate->content_key = key;
+  candidate->key = key;
+  candidate->content_value = value;
+  candidate->value = value;
+  candidate->attributes = Segment::Candidate::NO_LEARNING;
   return true;
 }
 
@@ -595,7 +680,7 @@ bool ConverterImpl::ResizeSegment(Segments *segments,
   const Segment &cur_segment = segments->segment(segment_index);
   const size_t cur_length = Util::CharsLen(cur_segment.key());
 
-  // length canont become 0
+  // length cannot become 0
   if (cur_length + offset_length == 0) {
     return false;
   }
@@ -628,7 +713,7 @@ bool ConverterImpl::ResizeSegment(Segments *segments,
       segment->set_key(new_key);
     }  // scope out |segment|, |new_key|
 
-    if (length < 0) {  // remaning part
+    if (length < 0) {  // remaining part
       Segment *segment = segments->insert_segment(segment_index + 1);
       segment->set_segment_type(Segment::FREE);
       string new_key;
@@ -674,12 +759,8 @@ bool ConverterImpl::ResizeSegment(Segments *segments,
 
   segments->set_resized(true);
 
-  if (!immutable_converter_->ConvertForRequest(request, segments)) {
-    return false;
-  }
-
+  immutable_converter_->ConvertForRequest(request, segments);
   RewriteAndSuppressCandidates(request, segments);
-
   return true;
 }
 
@@ -737,12 +818,8 @@ bool ConverterImpl::ResizeSegment(Segments *segments,
 
   segments->set_resized(true);
 
-  if (!immutable_converter_->ConvertForRequest(request, segments)) {
-    return false;
-  }
-
+  immutable_converter_->ConvertForRequest(request, segments);
   RewriteAndSuppressCandidates(request, segments);
-
   return true;
 }
 
@@ -860,6 +937,41 @@ void ConverterImpl::CommitUsageStats(const Segments *segments,
   UsageStats::UpdateTiming("SubmittedSegmentNumberx1000",
                            segment_length * 1000);
   UsageStats::IncrementCountBy("SubmittedTotalLength", submitted_total_length);
+}
+
+bool ConverterImpl::GetLastConnectivePart(const string &preceding_text,
+                                          string *key,
+                                          string *value,
+                                          uint16 *id) const {
+  key->clear();
+  value->clear();
+  *id = general_noun_id_;
+
+  Util::ScriptType last_script_type = Util::SCRIPT_TYPE_SIZE;
+  string last_token;
+  if (!ExtractLastTokenWithScriptType(preceding_text,
+                                      &last_token,
+                                      &last_script_type)) {
+    return false;
+  }
+
+  // Currently only NUMBER and ALPHABET are supported.
+  switch (last_script_type) {
+    case Util::NUMBER: {
+      Util::FullWidthAsciiToHalfWidthAscii(last_token, key);
+      swap(*value, last_token);
+      *id = pos_matcher_->GetNumberId();
+      return true;
+    }
+    case Util::ALPHABET: {
+      Util::FullWidthAsciiToHalfWidthAscii(last_token, key);
+      swap(*value, last_token);
+      *id = pos_matcher_->GetUniqueNounId();
+      return true;
+    }
+    default:
+      return false;
+  }
 }
 
 }  // namespace mozc

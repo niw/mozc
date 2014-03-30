@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -133,6 +133,13 @@ LanguageBar::~LanguageBar() {}
 // Initializes button menus in the language bar.
 HRESULT LanguageBar::InitLanguageBar(LangBarCallback *text_service) {
   HRESULT result = S_OK;
+
+  // Early exit path for the better performance.
+  if (input_button_menu_ != nullptr &&
+      tool_button_menu_ != nullptr &&
+      help_menu_ != nullptr) {
+    return S_OK;
+  }
 
   // A workaround to satisfy both b/6106437 and b/6641460.
   // On Windows 8, keep the instance into |lang_bar_item_mgr_for_win8_|.

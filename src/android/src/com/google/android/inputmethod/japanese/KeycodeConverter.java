@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -199,8 +199,7 @@ public class KeycodeConverter {
     switch(keyEvent.getKeyCode()) {
       case android.view.KeyEvent.KEYCODE_3D_MODE:
       case android.view.KeyEvent.KEYCODE_APP_SWITCH:
-        // TODO(yoichio): When we support API 16, enable follow case.
-        // case android.view.KeyEvent.KEYCODE_ASSIST:
+      case android.view.KeyEvent.KEYCODE_ASSIST:
       case android.view.KeyEvent.KEYCODE_AVR_INPUT:
       case android.view.KeyEvent.KEYCODE_AVR_POWER:
       case android.view.KeyEvent.KEYCODE_BOOKMARK:

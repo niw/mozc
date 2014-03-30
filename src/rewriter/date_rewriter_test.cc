@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -1005,7 +1005,7 @@ TEST_F(DateRewriterTest, ConvertDateTest) {
     { 12, 31 }
   };
 
-  for (size_t i = 0; i < ARRAYSIZE_UNSAFE(month_days_test_data); ++i) {
+  for (size_t i = 0; i < arraysize(month_days_test_data); ++i) {
     EXPECT_TRUE(rewriter.ConvertDateWithYear(
         2001,
         month_days_test_data[i].month,

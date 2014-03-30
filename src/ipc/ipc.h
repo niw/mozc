@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -250,9 +250,7 @@ class IPCServer {
   virtual bool Process(const char *request,
                        size_t request_size,
                        char *response,
-                       size_t *response_size) {
-    return true;
-  }
+                       size_t *response_size) = 0;
 
   // Start select loop. It goes into infinite loop.
   void Loop();

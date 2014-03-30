@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -66,13 +66,6 @@
         '../testing/testing.gyp:gtest_main',
         'config.gyp:stats_config_util',
         'install_stats_config_util_test_data',
-      ],
-      'conditions': [
-        ['OS=="win" and branding=="GoogleJapaneseInput"', {
-          'dependencies': [
-            '../testing/sidestep/sidestep.gyp:sidestep',
-          ],
-        }],
       ],
       'variables': {
         'test_size': 'small',

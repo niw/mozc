@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -48,12 +48,11 @@
 #endif  // max
 
 #include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
-#include "base/base.h"
 #include "base/logging.h"
-#include "base/scoped_ptr.h"
 #include "base/util.h"
 #include "base/win_util.h"
 #include "renderer/renderer_command.pb.h"
@@ -71,6 +70,7 @@ using WTL::CPoint;
 using WTL::CFont;
 using WTL::CFontHandle;
 using WTL::CLogFont;
+using std::unique_ptr;
 
 typedef mozc::commands::RendererCommand::CompositionForm CompositionForm;
 typedef mozc::commands::RendererCommand::CandidateForm CandidateForm;
@@ -545,7 +545,7 @@ bool CalcLayoutWithTextWrappingInternal(
       } else {
         CSize line_size;
         int allowable_chars_for_confirmation = 0;
-        scoped_array<int> size_buffer(new int[allowable_chars]);
+        unique_ptr<int[]> size_buffer(new int[allowable_chars]);
         result = dc.GetTextExtentExPoint(
             layout.text.c_str(),
             layout.text.size(),
@@ -743,12 +743,23 @@ class NativeWindowPositionAPI : public WindowPositionInterface {
   static FPLogicalToPhysicalPoint GetLogicalToPhysicalPoint() {
     // LogicalToPhysicalPoint API is available in Vista or later.
     const HMODULE module = WinUtil::GetSystemModuleHandle(L"user32.dll");
-    if (module == NULL) {
-      return NULL;
+    if (module == nullptr) {
+      return nullptr;
     }
-    void *function = ::GetProcAddress(module, "LogicalToPhysicalPoint");
-    if (function == NULL) {
-      return NULL;
+    // Despite its name, LogicalToPhysicalPoint API no longer converts
+    // coordinates on Windows 8.1 and later. We must use
+    // LogicalToPhysicalPointForPerMonitorDPI API instead when it is available.
+    // See http://go.microsoft.com/fwlink/?LinkID=307061
+    void *function = ::GetProcAddress(
+        module, "LogicalToPhysicalPointForPerMonitorDPI");
+    if (function == nullptr) {
+      // When LogicalToPhysicalPointForPerMonitorDPI API does not exist but
+      // LogicalToPhysicalPoint API exists, LogicalToPhysicalPoint works fine.
+      // This is the case on Windows Vista, Windows 7 and Windows 8.
+      function = ::GetProcAddress(module, "LogicalToPhysicalPoint");
+      if (function == nullptr) {
+        return nullptr;
+      }
     }
     return reinterpret_cast<FPLogicalToPhysicalPoint>(function);
   }

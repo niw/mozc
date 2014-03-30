@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
- Copyright 2010-2013, Google Inc.
+ Copyright 2010-2014, Google Inc.
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -88,15 +88,14 @@ MozcView(Linear-V)
                         Image dropshadow_right_long_bottom
                 Image right_adjust_botton
     -->
-
 <org.mozc.android.inputmethod.japanese.MozcView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="fill_parent"
     android:layout_height="fill_parent"
     android:layout_gravity="bottom"
     android:gravity="bottom"
-    android:orientation="vertical" >
-
-    <!--
+    android:orientation="vertical"
+    android:visibility="gone" >
+<!--
          This invisible view overlays on target activity
          and makes a touchable region during candidate dragging.
     -->

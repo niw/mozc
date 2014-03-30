@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -42,6 +42,7 @@
       'dependencies': [
         '../base/base.gyp:base_core',
         '../config/config.gyp:stats_config_util',
+        '../testing/testing.gyp:testing',
         'usage_stats_base.gyp:usage_stats',
         'usage_stats_base.gyp:usage_stats_protocol',
       ],

@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -65,8 +65,8 @@ bool GtkCandidateWindowHandler::SendUpdateCommand(
       = command.mutable_application_info();
 
   // Set pid
-  COMPILE_ASSERT(sizeof(::getpid()) <= sizeof(appinfo->process_id()),
-                 pid_t_value_size_check);
+  static_assert(sizeof(::getpid()) <= sizeof(appinfo->process_id()),
+                "|appinfo->process_id()| must have sufficient room.");
   appinfo->set_process_id(::getpid());
 
   // Do not set thread_id returned from ::pthread_self() because:

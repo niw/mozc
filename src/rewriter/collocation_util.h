@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -33,7 +33,7 @@
 #define MOZC_REWRITER_COLLOCATION_UTIL_H_
 
 #include <string>
-#include "base/base.h"
+#include "base/port.h"
 #include "base/string_piece.h"
 
 namespace mozc {
@@ -55,6 +55,8 @@ class CollocationUtil {
   // Removes characters for normalizing.
   static void RemoveExtraCharacters(
       const StringPiece input, bool remove_number, string *output);
+
+  DISALLOW_IMPLICIT_CONSTRUCTORS(CollocationUtil);
 };
 
 }  // namespace mozc

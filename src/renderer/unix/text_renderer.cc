@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -39,7 +39,7 @@ namespace gtk {
 
 TextRenderer::TextRenderer(FontSpecInterface *font_spec)
   : font_spec_(font_spec),
-    pango_(NULL) {
+    pango_(nullptr) {
 }
 
 void TextRenderer::Initialize(GdkDrawable *drawable) {

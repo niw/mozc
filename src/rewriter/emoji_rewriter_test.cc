@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -499,25 +499,25 @@ TEST_F(EmojiRewriterTest, CheckUsageStats) {
   // Converting non-emoji candidates does not matter.
   SetSegment("test", "test", &segments);
   EXPECT_FALSE(rewriter_->Rewrite(request_, &segments));
-  rewriter_->Finish(&segments);
+  rewriter_->Finish(request_, &segments);
   EXPECT_STATS_NOT_EXIST(kStatsKey);
 
   // Converting an emoji candidate.
   SetSegment("Nezumi", "test", &segments);
   EXPECT_TRUE(rewriter_->Rewrite(request_, &segments));
   ChooseEmojiCandidate(&segments);
-  rewriter_->Finish(&segments);
+  rewriter_->Finish(request_, &segments);
   EXPECT_COUNT_STATS(kStatsKey, 1);
   SetSegment(kEmoji, "test", &segments);
   EXPECT_TRUE(rewriter_->Rewrite(request_, &segments));
   ChooseEmojiCandidate(&segments);
-  rewriter_->Finish(&segments);
+  rewriter_->Finish(request_, &segments);
   EXPECT_COUNT_STATS(kStatsKey, 2);
 
   // Converting non-emoji keeps the previous usage stats.
   SetSegment("test", "test", &segments);
   EXPECT_FALSE(rewriter_->Rewrite(request_, &segments));
-  rewriter_->Finish(&segments);
+  rewriter_->Finish(request_, &segments);
   EXPECT_COUNT_STATS(kStatsKey, 2);
 }
 

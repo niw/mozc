@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -76,7 +76,7 @@ TEST(AndroidUtilTest, ParseLine_valid) {
   };
   string lhs;
   string rhs;
-  for (size_t i = 0; i < ARRAYSIZE_UNSAFE(testcases); ++i) {
+  for (size_t i = 0; i < arraysize(testcases); ++i) {
     const TestCase &testcase = testcases[i];
     SCOPED_TRACE(testcase.line);
     SCOPED_TRACE(testcase.lhs);

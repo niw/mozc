@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -33,7 +33,6 @@ import static org.easymock.EasyMock.expect;
 
 import org.mozc.android.inputmethod.japanese.testing.InstrumentationTestCaseWithMock;
 import org.mozc.android.inputmethod.japanese.testing.Parameter;
-import org.mozc.android.inputmethod.japanese.testing.VisibilityProxy;
 
 import android.test.suitebuilder.annotation.SmallTest;
 
@@ -201,9 +200,7 @@ public class SnapScrollerTest extends InstrumentationTestCaseWithMock {
       while (scroller.isScrolling()) {
         scroller.computeScrollOffset();
       }
-      assertEquals(testData.toString(),
-                   testData.expectedScrollPosition,
-                   VisibilityProxy.getField(scroller, "scrollPosition"));
+      assertEquals(testData.toString(), testData.expectedScrollPosition, scroller.scrollPosition);
     }
   }
 }

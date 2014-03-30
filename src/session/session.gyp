@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -37,7 +37,6 @@
       'target_name': 'session',
       'type': 'static_library',
       'sources': [
-        'japanese_session_factory.cc',
         'session.cc',
         'session_converter.cc',
       ],
@@ -46,7 +45,6 @@
         '../config/config.gyp:config_handler',
         '../config/config.gyp:config_protocol',
         '../converter/converter_base.gyp:converter_util',
-        '../rewriter/calculator/calculator.gyp:calculator',
         '../transliteration/transliteration.gyp:transliteration',
         '../usage_stats/usage_stats_base.gyp:usage_stats',
         'session_base.gyp:key_parser',
@@ -78,27 +76,23 @@
       'target_name': 'session_handler',
       'type': 'static_library',
       'sources': [
-        'session_factory_manager.cc',
         'session_handler.cc',
         'session_observer_handler.cc',
         'session_watch_dog.cc',
       ],
       'dependencies': [
         '../client/client.gyp:client',
+        '../engine/engine.gyp:engine_factory',
         '../composer/composer.gyp:composer',
         '../config/config.gyp:config_handler',
         '../config/config.gyp:config_protocol',
+        '../dictionary/dictionary_base.gyp:dictionary_protocol',
         '../dictionary/dictionary_base.gyp:user_dictionary',
         'session_base.gyp:generic_storage_manager',
         'session_base.gyp:session_protocol',
       ],
       'conditions': [
-        ['enable_cloud_sync==1', {
-          'dependencies': [
-            '../sync/sync.gyp:sync',
-          ]
-        }],
-        ['target_platform=="NaCl" and _toolset=="target"', {
+        ['(target_platform=="NaCl" and _toolset=="target") or target_platform=="Android"', {
           'sources!': [
             'session_watch_dog.cc',
           ],

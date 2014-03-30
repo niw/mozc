@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -59,7 +59,9 @@
         'english_variants_rewriter.cc',
         'focus_candidate_rewriter.cc',
         'fortune_rewriter.cc',
+        'language_aware_rewriter.cc',
         'normalization_rewriter.cc',
+        'number_compound_util.cc',
         'number_rewriter.cc',
         'remove_redundant_candidate_rewriter.cc',
         'rewriter.cc',

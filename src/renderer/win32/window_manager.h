@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -50,6 +50,7 @@ namespace win32 {
 
 class CandidateWindow;
 class CompositionWindowList;
+class IndicatorWindow;
 class InfolistWindow;
 class LayoutManager;
 class WorkingAreaInterface;
@@ -75,6 +76,7 @@ class WindowManager {
   scoped_ptr<CandidateWindow> main_window_;
   scoped_ptr<CandidateWindow> cascading_window_;
   scoped_ptr<CompositionWindowList> composition_window_list_;
+  scoped_ptr<IndicatorWindow> indicator_window_;
   scoped_ptr<InfolistWindow> infolist_window_;
   scoped_ptr<LayoutManager> layout_manager_;
   scoped_ptr<WorkingAreaInterface> working_area_;

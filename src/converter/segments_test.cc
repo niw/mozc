@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -401,36 +401,6 @@ TEST_F(SegmentsTest, RevertEntryTest) {
 
   segments.clear_revert_entries();
   EXPECT_EQ(0, segments.revert_entries_size());
-}
-
-TEST_F(SegmentsTest, RemoveTailOfHistorySegments) {
-  Segments segments;
-  {
-    Segment *segment = segments.add_segment();
-    segment->set_segment_type(Segment::HISTORY);
-    Segment::Candidate *candidate = segment->add_candidate();
-    // "Mozc を"
-    candidate->value = "Mozc \xE3\x82\x92";
-  }
-  {
-    Segment *segment = segments.add_segment();
-    segment->set_segment_type(Segment::HISTORY);
-    Segment::Candidate *candidate = segment->add_candidate();
-    // "使う"
-    candidate->value = "\xE4\xBD\xBF\xE3\x81\x86";
-  }
-
-  segments.RemoveTailOfHistorySegments(1);
-  EXPECT_EQ(2, segments.history_segments_size());
-  // "使"
-  EXPECT_EQ("\xE4\xBD\xBF", segments.history_segment(1).candidate(0).value);
-
-  segments.RemoveTailOfHistorySegments(2);
-  EXPECT_EQ(1, segments.history_segments_size());
-  EXPECT_EQ("Mozc ", segments.history_segment(0).candidate(0).value);
-
-  segments.RemoveTailOfHistorySegments(2);
-  EXPECT_EQ("Moz", segments.history_segment(0).candidate(0).value);
 }
 
 TEST_F(SegmentsTest, CopyFromTest) {

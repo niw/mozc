@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -71,7 +71,7 @@
         '../converter/converter_base.gyp:converter_mock'
       ],
     },
-    {
+    {  # An engine just for converter/converter_main.cc.
       'target_name': 'chromeos_engine_factory',
       'type': 'static_library',
       'sources': [

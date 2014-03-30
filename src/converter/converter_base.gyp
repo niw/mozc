@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -174,6 +174,16 @@
       'dependencies': [
         '../base/base.gyp:base',
         '../session/session_base.gyp:session_protocol',
+      ],
+    },
+    {
+      'target_name': 'pos_id_printer',
+      'type': 'static_library',
+      'sources': [
+        'pos_id_printer.cc',
+      ],
+      'dependencies': [
+        '../base/base.gyp:base',
       ],
     },
   ],

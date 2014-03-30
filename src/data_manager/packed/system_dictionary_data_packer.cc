@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -31,7 +31,6 @@
 
 #include <string>
 
-#include "base/base.h"
 #include "base/codegen_bytearray_stream.h"
 #include "base/file_stream.h"
 #include "base/protobuf/gzip_stream.h"
@@ -40,11 +39,13 @@
 #include "base/version.h"
 #include "converter/boundary_struct.h"
 #include "data_manager/packed/system_dictionary_data.pb.h"
+#include "data_manager/packed/system_dictionary_format_version.h"
 #include "dictionary/suffix_dictionary_token.h"
 #include "dictionary/pos_group.h"
 #include "dictionary/pos_matcher.h"
 #include "dictionary/user_pos.h"
 #include "rewriter/correction_rewriter.h"
+#include "rewriter/counter_suffix.h"
 #include "rewriter/embedded_dictionary.h"
 #ifndef NO_USAGE_REWRITER
 #include "rewriter/usage_rewriter_data_structs.h"
@@ -52,9 +53,6 @@
 
 namespace mozc {
 namespace packed {
-namespace {
-const int kSystemDictionaryFormatVersion = 1;
-}
 
 SystemDictionaryDataPacker::SystemDictionaryDataPacker(const string &version) {
   system_dictionary_.reset(new SystemDictionaryData());
@@ -315,6 +313,14 @@ void SystemDictionaryDataPacker::SetUsageRewriterData(
   }
 }
 #endif  // NO_USAGE_REWRITER
+
+void SystemDictionaryDataPacker::SetCounterSuffixSortedArray(
+    const CounterSuffixEntry *suffix_array, size_t size) {
+  for (size_t i = 0; i < size; ++i) {
+    const string suffix_str(suffix_array[i].suffix, suffix_array[i].size);
+    system_dictionary_->add_counter_suffix_data(suffix_str);
+  }
+}
 
 bool SystemDictionaryDataPacker::Output(const string &file_path,
                                         bool use_gzip) {

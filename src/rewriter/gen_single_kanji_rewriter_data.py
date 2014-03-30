@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -114,11 +114,11 @@ def ReadVariant(stream):
 
 
 def GenNounPrefix():
-  """Generates noun prefix embedded dictioanry entries."""
+  """Generates noun prefix embedded dictionary entries."""
   token_map = {}
   for entry in NOUN_PREFIX:
-    key = entry[0] if entry[0] != "" else None
-    value = entry[1] if entry[1] != "" else None
+    key = entry[0] if entry[0] else None
+    value = entry[1] if entry[1] else None
     rank = entry[2]
 
     token_map.setdefault(key, []).append(

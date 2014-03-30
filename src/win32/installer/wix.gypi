@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -150,7 +150,6 @@
         # input files just for peoper rebiuld condition.
         '<(wxs_file)',
       ],
-      'msvs_cygwin_shell': 0,
       'message': 'candle is generating <@(_outputs)',
     },
     {
@@ -183,7 +182,6 @@
         # input files just for peoper rebiuld condition.
         '<(wixobj_file)',
       ],
-      'msvs_cygwin_shell': 0,
       'message': 'light is generating <@(_outputs)',
     },
   ],

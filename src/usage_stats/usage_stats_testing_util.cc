@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -68,10 +68,10 @@ string GetExistFailure(const string &name, Stats stats) {
     case Stats::TIMING:
       type_string = "Timing";
       value_string = string() +
-          "num:" + NumberUtil::SimpleItoa(stats.num_timings()) + " " +
-          "total:" + NumberUtil::SimpleItoa(stats.total_time()) + " " +
-          "min:" + NumberUtil::SimpleItoa(stats.min_time()) + " " +
-          "max:" + NumberUtil::SimpleItoa(stats.max_time());
+          "num:" + NumberUtil::SimpleItoa(stats.num_timings()) + " total:" +
+          NumberUtil::SimpleItoa(static_cast<uint64>(stats.total_time())) +
+          " min:" + NumberUtil::SimpleItoa(stats.min_time()) +
+          " max:" + NumberUtil::SimpleItoa(stats.max_time());
       break;
     case Stats::VIRTUAL_KEYBOARD:
       type_string = "Virtual Keyboard";

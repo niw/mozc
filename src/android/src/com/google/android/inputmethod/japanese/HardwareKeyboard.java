@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -34,6 +34,7 @@ import org.mozc.android.inputmethod.japanese.KeycodeConverter.KeyEventInterface;
 import org.mozc.android.inputmethod.japanese.preference.ClientSidePreference.HardwareKeyMap;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.CompositionMode;
+import com.google.common.annotations.VisibleForTesting;
 
 /**
  * Converter from android key events to mozc key events.
@@ -41,7 +42,11 @@ import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.CompositionM
  *
  */
 public class HardwareKeyboard {
-  static enum CompositionSwitchMode {
+
+  /**
+   * Used to switch the composition mode of harwdware keyboard.
+   **/
+  public static enum CompositionSwitchMode {
     TOGGLE,
     KANA,
     ALPHABET
@@ -63,7 +68,7 @@ public class HardwareKeyboard {
     KeyboardSpecification getAlphabetKeyboardSpecification();
   }
 
-  private HardwareKeyboadSpecificationInterface hardwareKeyboardSpecification =
+  @VisibleForTesting HardwareKeyboadSpecificationInterface hardwareKeyboardSpecification =
       HardwareKeyboardSpecification.JAPANESE109A;
 
   private CompositionMode compositionMode = CompositionMode.HIRAGANA;

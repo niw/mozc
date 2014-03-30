@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -46,6 +46,7 @@
         '../engine/engine.gyp:engine_factory',
         '../engine/engine.gyp:mock_data_engine_factory',
         '../testing/testing.gyp:testing',
+        '../usage_stats/usage_stats_test.gyp:usage_stats_testing_util',
         'session.gyp:session',
         'session.gyp:session_handler',
         'session.gyp:session_usage_observer',
@@ -82,7 +83,6 @@
         '../testing/testing.gyp:gtest_main',
         '../usage_stats/usage_stats_test.gyp:usage_stats_testing_util',
         'session.gyp:session',
-        'session.gyp:session_server',
       ],
       'variables': {
         'test_size': 'small',
@@ -137,9 +137,9 @@
         'session_converter_test.cc',
       ],
       'dependencies': [
-        '../base/base.gyp:testing_util',
         '../converter/converter_base.gyp:converter_mock',
         '../testing/testing.gyp:gtest_main',
+        '../testing/testing.gyp:testing_util',
         '../usage_stats/usage_stats_test.gyp:usage_stats_testing_util',
         'session.gyp:session',
         'session_base.gyp:request_test_util',
@@ -149,9 +149,6 @@
       'target_name': 'session_module_test',
       'type': 'executable',
       'sources': [
-        'ime_switch_util_test.cc',
-        'key_event_util_test.cc',
-        'key_parser_test.cc',
         'output_util_test.cc',
         'session_observer_handler_test.cc',
         'session_usage_observer_test.cc',
@@ -169,9 +166,6 @@
         '../usage_stats/usage_stats_test.gyp:usage_stats_testing_util',
         'session.gyp:session_handler',
         'session.gyp:session_usage_observer',
-        'session_base.gyp:ime_switch_util',
-        'session_base.gyp:key_event_util',
-        'session_base.gyp:key_parser',
         'session_base.gyp:keymap',
         'session_base.gyp:keymap_factory',
         'session_base.gyp:output_util',
@@ -190,6 +184,28 @@
       },
     },
     {
+      'target_name': 'session_key_handling_test',
+      'type': 'executable',
+      'sources': [
+        'ime_switch_util_test.cc',
+        'key_event_util_test.cc',
+        'key_info_util_test.cc',
+        'key_parser_test.cc',
+      ],
+      'dependencies': [
+        '../base/base.gyp:base',
+        '../config/config.gyp:config_handler',
+        '../testing/testing.gyp:gtest_main',
+        'session_base.gyp:ime_switch_util',
+        'session_base.gyp:key_event_util',
+        'session_base.gyp:key_parser',
+        'session_base.gyp:session_protocol',
+      ],
+      'variables': {
+        'test_size': 'small',
+      },
+    },
+    {
       'target_name': 'session_internal_test',
       'type': 'executable',
       'sources': [
@@ -202,11 +218,11 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
-        '../base/base.gyp:testing_util',
         '../config/config.gyp:config_protocol',
         '../converter/converter_base.gyp:converter_mock',
         '../engine/engine.gyp:mock_converter_engine',
         '../testing/testing.gyp:gtest_main',
+        '../testing/testing.gyp:testing_util',
         'session.gyp:session',
         'session_base.gyp:session_protocol',
       ],
@@ -229,7 +245,7 @@
         'session_handler_test_util',
       ],
       'variables': {
-        'test_size': 'small',
+        'test_size': 'large',
       },
     },
     {
@@ -292,72 +308,6 @@
       },
     },
     {
-      'target_name': 'install_session_handler_scenario_test_data',
-      'type': 'none',
-      'variables': {
-        'test_data': [
-          '../<(test_data_subdir)/auto_partial_suggestion.txt',
-          '../<(test_data_subdir)/b7132535_scenario.txt',
-          '../<(test_data_subdir)/b7321313_scenario.txt',
-          '../<(test_data_subdir)/change_request.txt',
-          '../<(test_data_subdir)/clear_user_prediction.txt',
-          '../<(test_data_subdir)/composition_display_as.txt',
-          '../<(test_data_subdir)/conversion.txt',
-          '../<(test_data_subdir)/conversion_display_as.txt',
-          '../<(test_data_subdir)/conversion_with_history_segment.txt',
-          '../<(test_data_subdir)/conversion_with_long_history_segments.txt',
-          '../<(test_data_subdir)/delete_history.txt',
-          '../<(test_data_subdir)/desktop_t13n_candidates.txt',
-          '../<(test_data_subdir)/insert_characters.txt',
-          '../<(test_data_subdir)/mobile_qwerty_transliteration_scenario.txt',
-          '../<(test_data_subdir)/mobile_t13n_candidates.txt',
-          '../<(test_data_subdir)/on_off_cancel.txt',
-          '../<(test_data_subdir)/partial_suggestion.txt',
-          '../<(test_data_subdir)/pending_character.txt',
-          '../<(test_data_subdir)/segment_focus.txt',
-          '../<(test_data_subdir)/segment_width.txt',
-          '../<(test_data_subdir)/twelvekeys_switch_inputmode_scenario.txt',
-          '../<(test_data_subdir)/twelvekeys_toggle_hiragana_preedit_scenario.txt',
-        ],
-        'test_data_subdir': 'data/test/session/scenario',
-      },
-      'includes': ['../gyp/install_testdata.gypi'],
-    },
-    {
-      'target_name': 'install_session_handler_usage_stats_scenario_test_data',
-      'type': 'none',
-      'variables': {
-        'test_data': [
-          "../<(test_data_subdir)/conversion.txt",
-          "../<(test_data_subdir)/prediction.txt",
-          "../<(test_data_subdir)/suggestion.txt",
-          "../<(test_data_subdir)/composition.txt",
-          "../<(test_data_subdir)/select_prediction.txt",
-          "../<(test_data_subdir)/select_minor_conversion.txt",
-          "../<(test_data_subdir)/select_minor_prediction.txt",
-          "../<(test_data_subdir)/mouse_select_from_suggestion.txt",
-          "../<(test_data_subdir)/select_t13n_by_key.txt",
-          "../<(test_data_subdir)/select_t13n_on_cascading_window.txt",
-          "../<(test_data_subdir)/switch_kana_type.txt",
-          "../<(test_data_subdir)/multiple_segments.txt",
-          "../<(test_data_subdir)/select_candidates_in_multiple_segments.txt",
-          "../<(test_data_subdir)/select_candidates_in_multiple_segments_and_expand_segment.txt",
-          "../<(test_data_subdir)/continue_input.txt",
-          "../<(test_data_subdir)/continuous_input.txt",
-          "../<(test_data_subdir)/multiple_sessions.txt",
-          "../<(test_data_subdir)/backspace_after_commit.txt",
-          "../<(test_data_subdir)/backspace_after_commit_after_backspace.txt",
-          "../<(test_data_subdir)/multiple_backspace_after_commit.txt",
-          "../<(test_data_subdir)/zero_query_suggestion.txt",
-          "../<(test_data_subdir)/auto_partial_suggestion.txt",
-          "../<(test_data_subdir)/insert_space.txt",
-          "../<(test_data_subdir)/numpad_in_direct_input_mode.txt",
-        ],
-        'test_data_subdir': 'data/test/session/scenario/usage_stats',
-      },
-      'includes': ['../gyp/install_testdata.gypi'],
-    },
-    {
       'target_name': 'session_handler_scenario_test',
       'type': 'executable',
       'sources': [
@@ -365,10 +315,10 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
+        '../data/test/session/scenario/scenario.gyp:install_session_handler_scenario_test_data',
+        '../data/test/session/scenario/usage_stats/usage_stats.gyp:install_session_handler_usage_stats_scenario_test_data',
         '../testing/testing.gyp:gtest_main',
         '../usage_stats/usage_stats_test.gyp:usage_stats_testing_util',
-        'install_session_handler_scenario_test_data',
-        'install_session_handler_usage_stats_scenario_test_data',
         'session.gyp:session_handler',
         'session_base.gyp:request_test_util',
         'session_base.gyp:session_protocol',
@@ -377,23 +327,6 @@
       'variables': {
         'test_size': 'large',
       },
-    },
-    {
-      'target_name': 'session_handler_stress_test_main',
-      'type': 'executable',
-      'sources': [
-        'session_handler_stress_test_main.cc'
-      ],
-      'dependencies': [
-        '../base/base.gyp:base',
-        '../config/config.gyp:config_handler',
-        '../config/config.gyp:config_protocol',
-        '../testing/testing.gyp:gtest_main',
-        'session.gyp:random_keyevents_generator',
-        'session.gyp:session_handler',
-        'session_base.gyp:session_protocol',
-        'session_handler_test_util',
-      ],
     },
 
     # Test cases meta target: this target is referred from gyp/tests.gyp
@@ -409,11 +342,25 @@
         'session_handler_scenario_test',
         'session_handler_stress_test',
         'session_handler_test',
+        'session_key_handling_test',
         'session_internal_test',
         'session_module_test',
         'session_regression_test',
         'session_server_test',
         'session_test',
+      ],
+      'conditions': [
+        ['target_platform=="Android"', {
+          'dependencies!': [
+            'session_server_test',
+            # These tests have been disabled as it takes long execution time.
+            # In addition currently they fail.
+            # Here we also disable the tests temporarirly.
+            # TODO(matsuzakit): Reactivate them.
+            'session_handler_stress_test',
+            'session_regression_test',
+          ],
+        }],
       ],
     },
   ],

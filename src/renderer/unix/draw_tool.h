@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -31,7 +31,8 @@
 #define MOZC_RENDERER_UNIX_DRAW_TOOL_H_
 #include <gtk/gtk.h>
 
-#include "base/base.h"
+#include <memory>
+
 #include "base/port.h"
 #include "renderer/unix/cairo_wrapper_interface.h"
 #include "renderer/unix/draw_tool_interface.h"
@@ -61,10 +62,11 @@ class DrawTool : public DrawToolInterface {
 
   // DrawTool class takes ownership of CairoWrapper.
   virtual void Reset(CairoWrapperInterface *cairo);
+
  private:
   friend class DrawToolTest;
   void SetColor(const RGBA &color);
-  scoped_ptr<CairoWrapperInterface> cairo_;
+  std::unique_ptr<CairoWrapperInterface> cairo_;
   DISALLOW_COPY_AND_ASSIGN(DrawTool);
 };
 

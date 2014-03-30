@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -33,11 +33,8 @@
 
 #include "base/base.h"
 #include "base/file_util.h"
-#include "config/config.pb.h"
-#include "config/config_handler.h"
 #include "engine/engine_factory.h"
 #include "session/commands.pb.h"
-#include "session/japanese_session_factory.h"
 #include "session/random_keyevents_generator.h"
 #include "session/session_handler.h"
 #include "session/session_handler_test_util.h"
@@ -67,8 +64,8 @@ DECLARE_string(test_tmpdir);
 
 namespace mozc {
 
+using session::testing::SessionHandlerTestBase;
 using session::testing::TestSessionClient;
-using session::testing::JapaneseSessionHandlerTestBase;
 
 namespace {
 #ifdef OS_ANDROID
@@ -107,7 +104,7 @@ class AndroidInitializer {
 #endif  // OS_ANDROID
 }  // namespace
 
-class SessionHandlerStressTest : public JapaneseSessionHandlerTestBase {
+class SessionHandlerStressTest : public SessionHandlerTestBase {
  protected:
   virtual EngineInterface *CreateEngine() {
 #ifdef OS_ANDROID
@@ -118,18 +115,12 @@ class SessionHandlerStressTest : public JapaneseSessionHandlerTestBase {
 };
 
 TEST_F(SessionHandlerStressTest, BasicStressTest) {
-  config::Config config;
-  config::ConfigHandler::GetDefaultConfig(&config);
-  // TOOD(all): Add a test for the case where
-  // use_realtime_conversion is true.
-  config.set_use_realtime_conversion(false);
-  config::ConfigHandler::SetConfig(config);
-
   vector<commands::KeyEvent> keys;
   commands::Output output;
-  TestSessionClient client;
+  scoped_ptr<EngineInterface> engine(EngineFactory::Create());
+  TestSessionClient client(engine.get());
   size_t keyevents_size = 0;
-  const size_t kMaxEventSize = 50000;
+  const size_t kMaxEventSize = 10000;
   ASSERT_TRUE(client.CreateSession());
 
   const uint32 random_seed = static_cast<uint32>(FLAGS_random_seed);

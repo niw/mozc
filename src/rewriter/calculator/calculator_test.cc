@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,6 @@
 #include <fstream>
 #include <string>
 
-#include "base/base.h"
 #include "base/compiler_specific.h"
 #include "base/file_util.h"
 #include "base/logging.h"

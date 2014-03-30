@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -52,8 +52,8 @@ string GenRandomString(int size) {
   string result;
   const size_t len = Util::Random(size) + 1;
   for (int i = 0; i < len; ++i) {
-    const uint16 l = Util::Random(0xFFFF) + 1;
-    Util::UCS2ToUTF8Append(l, &result);
+    const char32 l = Util::Random(0x1FFFF) + 1;
+    Util::UCS4ToUTF8Append(l, &result);
   }
   return result;
 }

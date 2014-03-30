@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -30,10 +30,10 @@
 #ifndef MOZC_UNIX_IBUS_PROPERTY_HANDLER_H_
 #define MOZC_UNIX_IBUS_PROPERTY_HANDLER_H_
 
+#include <memory>
 #include <vector>
 
 #include "base/port.h"
-#include "base/scoped_ptr.h"
 #include "unix/ibus/ibus_header.h"
 #include "unix/ibus/property_handler_interface.h"
 
@@ -54,20 +54,23 @@ class PropertyHandler : public PropertyHandlerInterface {
   virtual ~PropertyHandler();
 
   virtual void Register(IBusEngine *engine);
+  virtual void ResetContentType(IBusEngine *engine);
+  virtual void UpdateContentType(IBusEngine *engine);
   virtual void Update(IBusEngine *engine, const commands::Output &output);
   virtual void ProcessPropertyActivate(IBusEngine *engine,
                                        const gchar *property_name,
                                        guint property_state);
   virtual bool IsActivated() const;
+  virtual bool IsDisabled() const;
   virtual commands::CompositionMode GetOriginalCompositionMode() const;
 
  private:
+  void UpdateContentTypeImpl(IBusEngine *engine, bool disabled);
   // Appends composition properties into panel
   void AppendCompositionPropertyToPanel();
   // Appends tool properties into panel
   void AppendToolPropertyToPanel();
   // Appends switch properties into panel
-  void AppendSwitchPropertyToPanel();
   void UpdateCompositionModeIcon(
       IBusEngine* engine, const commands::CompositionMode new_composition_mode);
   void SetCompositionMode(IBusEngine *engine,
@@ -76,11 +79,11 @@ class PropertyHandler : public PropertyHandlerInterface {
   IBusPropList *prop_root_;
   IBusProperty *prop_composition_mode_;
   IBusProperty *prop_mozc_tool_;
-  vector<IBusProperty *> prop_switch_properties_;
   client::ClientInterface *client_;
-  scoped_ptr<MessageTranslatorInterface> translator_;
+  std::unique_ptr<MessageTranslatorInterface> translator_;
   commands::CompositionMode original_composition_mode_;
   bool is_activated_;
+  bool is_disabled_;
 };
 
 }  // namespace ibus

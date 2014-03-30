@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,6 @@ package org.mozc.android.inputmethod.japanese;
 import org.mozc.android.inputmethod.japanese.InOutAnimatedFrameLayout.VisibilityChangeListener;
 import org.mozc.android.inputmethod.japanese.testing.InstrumentationTestCaseWithMock;
 import org.mozc.android.inputmethod.japanese.testing.Parameter;
-import org.mozc.android.inputmethod.japanese.testing.VisibilityProxy;
 
 import android.test.suitebuilder.annotation.SmallTest;
 import android.view.View;
@@ -92,7 +91,7 @@ public class InOutAnimatedFrameLayoutTest extends InstrumentationTestCaseWithMoc
       view.clearAnimation();
       view.setVisibility(testData.visibility);
 
-      Animation inAnimation = VisibilityProxy.getField(view, "inAnimation");
+      Animation inAnimation = view.inAnimation;
       if (testData.animation == null) {
         assertNull(testData.toString(), inAnimation);
       } else {
@@ -132,7 +131,7 @@ public class InOutAnimatedFrameLayoutTest extends InstrumentationTestCaseWithMoc
       view.clearAnimation();
       view.setVisibility(testData.visibility);
 
-      Animation outAnimation = VisibilityProxy.getField(view, "outAnimation");
+      Animation outAnimation = view.outAnimation;
       if (testData.animation == null) {
         assertNull(testData.toString(), outAnimation);
       } else {

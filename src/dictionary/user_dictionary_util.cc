@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,6 @@
 #include <string.h>
 #include <algorithm>
 
-#include "base/base.h"
 #include "base/config_file_stream.h"
 #include "base/file_stream.h"
 #include "base/logging.h"
@@ -65,8 +64,6 @@ const size_t kMaxDictionaryNameSize = 300;
 // The limits of dictionary/entry size.
 const size_t kMaxDictionarySize = 100;
 const size_t kMaxEntrySize = 1000000;
-const size_t kMaxSyncDictionarySize = 1;
-const size_t kMaxSyncEntrySize = 10000;
 }  // namespace
 
 size_t UserDictionaryUtil::max_dictionary_size() {
@@ -75,14 +72,6 @@ size_t UserDictionaryUtil::max_dictionary_size() {
 
 size_t UserDictionaryUtil::max_entry_size() {
   return kMaxEntrySize;
-}
-
-size_t UserDictionaryUtil::max_sync_dictionary_size() {
-  return kMaxSyncDictionarySize;
-}
-
-size_t UserDictionaryUtil::max_sync_entry_size() {
-  return kMaxSyncEntrySize;
 }
 
 bool UserDictionaryUtil::IsValidEntry(
@@ -96,22 +85,17 @@ namespace {
 
 #define INRANGE(w, a, b) ((w) >= (a) && (w) <= (b))
 
-bool InternalValidateNormalizedReading(const string &normalized_reading) {
-  const char *begin = normalized_reading.c_str();
-  const char *end = begin + normalized_reading.size();
-  size_t mblen = 0;
-  while (begin < end) {
-    const uint16 w = Util::UTF8ToUCS2(begin, end, &mblen);
-    if (INRANGE(w, 0x0021, 0x007E) ||  // Basic Latin (Ascii)
-        INRANGE(w, 0x3041, 0x3096) ||  // Hiragana
-        INRANGE(w, 0x309B, 0x309C) ||  // KATAKANA-HIRAGANA VOICED/SEMI-VOICED
-                                       // SOUND MARK
-        INRANGE(w, 0x30FB, 0x30FC) ||  // Nakaten, Prolonged sound mark
-        INRANGE(w, 0x3001, 0x3002) ||  // Japanese punctuation marks
-        INRANGE(w, 0x300C, 0x300F) ||  // Japanese brackets
-        INRANGE(w, 0x301C, 0x301C)) {  // Japanese Wavedash
-      begin += mblen;
-    } else {
+bool InternalValidateNormalizedReading(const string &reading) {
+  for (ConstChar32Iterator iter(reading); !iter.Done(); iter.Next()) {
+    const char32 c = iter.Get();
+    if (!INRANGE(c, 0x0021, 0x007E) &&  // Basic Latin (Ascii)
+        !INRANGE(c, 0x3041, 0x3096) &&  // Hiragana
+        !INRANGE(c, 0x309B, 0x309C) &&  // KATAKANA-HIRAGANA VOICED/SEMI-VOICED
+                                        // SOUND MARK
+        !INRANGE(c, 0x30FB, 0x30FC) &&  // Nakaten, Prolonged sound mark
+        !INRANGE(c, 0x3001, 0x3002) &&  // Japanese punctuation marks
+        !INRANGE(c, 0x300C, 0x300F) &&  // Japanese brackets
+        !INRANGE(c, 0x301C, 0x301C)) {  // Japanese Wavedash
       LOG(INFO) << "Invalid character in reading.";
       return false;
     }
@@ -196,9 +180,7 @@ bool UserDictionaryUtil::IsStorageFull(
 
 bool UserDictionaryUtil::IsDictionaryFull(
     const user_dictionary::UserDictionary &dictionary) {
-  const size_t max_entry_size = dictionary.syncable() ?
-      kMaxSyncEntrySize : kMaxEntrySize;
-  return dictionary.entries_size() >= max_entry_size;
+  return dictionary.entries_size() >= kMaxEntrySize;
 }
 
 const user_dictionary::UserDictionary *
@@ -664,12 +646,6 @@ bool UserDictionaryUtil::DeleteDictionary(
 
   if (index < 0) {
     LOG(ERROR) << "Invalid dictionary id: " << dictionary_id;
-    return false;
-  }
-
-  // Do not delete sync dictionary.
-  if (storage->dictionaries(index).syncable()) {
-    LOG(ERROR) << "Cannot delete sync dictionary";
     return false;
   }
 

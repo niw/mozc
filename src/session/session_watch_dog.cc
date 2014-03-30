@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -101,14 +101,14 @@ void SessionWatchDog::Terminate() {
 }
 
 void SessionWatchDog::Run() {
-  scoped_ptr<client::ClientInterface> client_impl(NULL);
+  scoped_ptr<client::ClientInterface> client_impl;
   if (client_ == NULL) {
     VLOG(2) << "default client is used";
     client_impl.reset(client::ClientFactory::NewClient());
     client_ = client_impl.get();
   }
 
-  scoped_ptr<CPUStatsInterface> cpu_stats_impl(NULL);
+  scoped_ptr<CPUStatsInterface> cpu_stats_impl;
   if (cpu_stats_ == NULL) {
     VLOG(2) << "default cpu_stats is used";
     cpu_stats_impl.reset(new CPUStats);
@@ -247,12 +247,12 @@ bool SessionWatchDog::CanSendCleanupCommand(
   }
 
   const float all_avg =
-      accumulate(cpu_loads, cpu_loads + cpu_loads_index, 0.0)
+      std::accumulate(cpu_loads, cpu_loads + cpu_loads_index, 0.0)
       / cpu_loads_index;
 
   const size_t latest_size = min(2, cpu_loads_index);
   const float latest_avg =
-      accumulate(cpu_loads, cpu_loads + latest_size, 0.0)
+      std::accumulate(cpu_loads, cpu_loads + latest_size, 0.0)
       / latest_size;
 
   VLOG(1) << "Average CPU load=" << all_avg

@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -33,7 +33,8 @@
 #define MOZC_GUI_ABOUT_DIALOG_ABOUT_DIALOG_H_
 
 #include <QtGui/QDialog>
-#include "base/base.h"
+#include "base/port.h"
+#include "base/scoped_ptr.h"
 #include "gui/about_dialog/ui_about_dialog.h"
 
 #if defined(OS_WIN) && defined(GOOGLE_JAPANESE_INPUT_BUILD) \

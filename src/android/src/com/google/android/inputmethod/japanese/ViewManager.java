@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -52,6 +52,8 @@ import org.mozc.android.inputmethod.japanese.resources.R;
 import org.mozc.android.inputmethod.japanese.ui.MenuDialog;
 import org.mozc.android.inputmethod.japanese.ui.MenuDialog.MenuDialogListener;
 import org.mozc.android.inputmethod.japanese.view.SkinType;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 
 import android.content.Context;
 import android.content.res.Configuration;
@@ -61,6 +63,7 @@ import android.inputmethodservice.InputMethodService;
 import android.os.Looper;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.View.OnClickListener;
 import android.view.Window;
@@ -73,7 +76,7 @@ import java.util.List;
  * Manages Input, Candidate and Extracted views.
  *
  */
-public class ViewManager {
+public class ViewManager implements ViewManagerInterface {
 
   /**
    * An small wrapper to inject keyboard view resizing when a user selects a candidate.
@@ -352,31 +355,21 @@ public class ViewManager {
     }
   }
 
-  /**
-   * Keyboard layout position.
-   */
-  public enum LayoutAdjustment {
-    FILL,
-    RIGHT,
-    LEFT,
-  }
-
-
   // Registered by the user (typically MozcService)
-  private final ViewEventListener eventListener;
+  @VisibleForTesting final ViewEventListener eventListener;
 
   // The view of the MechaMozc.
-  private MozcView mozcView;
+  @VisibleForTesting MozcView mozcView;
 
   // Menu dialog and its listener.
   private final MenuDialogListener menuDialogListener;
-  private MenuDialog menuDialog = null;
+  @VisibleForTesting MenuDialog menuDialog = null;
 
   // Called back by keyboards.
   private final KeyEventHandler keyEventHandler;
 
   // Model to represent the current software keyboard state.
-  private final JapaneseSoftwareKeyboardModel japaneseSoftwareKeyboardModel =
+  @VisibleForTesting final JapaneseSoftwareKeyboardModel japaneseSoftwareKeyboardModel =
       new JapaneseSoftwareKeyboardModel();
 
   // The factory of parsed keyboard data.
@@ -397,9 +390,7 @@ public class ViewManager {
 
   private CompositionMode hardwareCompositionMode = CompositionMode.HIRAGANA;
 
-  // Current emoji provider type.
-  // TODO(hidehiko): Get rid of hard coded DOCOMO.
-  private EmojiProviderType emojiProviderType = EmojiProviderType.DOCOMO;
+  @VisibleForTesting EmojiProviderType emojiProviderType = EmojiProviderType.NONE;
 
   private final ProbableKeyEventGuesser guesser;
 
@@ -497,6 +488,7 @@ public class ViewManager {
    * @param context
    * @return newly created view.
    */
+  @Override
   public MozcView createMozcView(Context context) {
     // Because an issue about native bitmap memory management on older Android,
     // there is a potential OutOfMemoryError. To reduce such an error case,
@@ -506,6 +498,9 @@ public class ViewManager {
     inflater = inflater.cloneInContext(MozcUtil.getContextWithOutOfMemoryRetrial(context));
     mozcView = MozcUtil.inflateWithOutOfMemoryRetrial(
         MozcView.class, inflater, R.layout.mozc_view, null, false);
+    // Suppress update of View's internal state
+    // until all the updates done in this method are finished. Just in case.
+    mozcView.setVisibility(View.GONE);
     mozcView.setKeyboardHeightRatio(keyboardHeightRatio);
     mozcView.setEventListener(
         eventListener,
@@ -537,7 +532,7 @@ public class ViewManager {
     setJapaneseKeyboard(japaneseSoftwareKeyboardModel.getKeyboardSpecification(),
                         Collections.<TouchEvent>emptyList());
     mozcView.setFullscreenMode(fullscreenMode);
-    mozcView.setNarrowMode(narrowMode);
+    mozcView.setLayoutAdjustmentAndNarrowMode(layoutAdjustment, narrowMode);
     // At the moment, it is necessary to set the storage to the view, *before* setting emoji
     // provider type.
     // TODO(hidehiko): Remove the restriction.
@@ -547,12 +542,13 @@ public class ViewManager {
     mozcView.setPopupEnabled(popupEnabled);
     mozcView.setFlickSensitivity(flickSensitivity);
     mozcView.setSkinType(skinType);
-    mozcView.setLayoutAdjustment(layoutAdjustment);
 
     // Clear the menu dialog.
     menuDialog = null;
 
     reset();
+
+    mozcView.setVisibility(View.VISIBLE);
     return mozcView;
   }
 
@@ -583,6 +579,7 @@ public class ViewManager {
    *
    * Note that showing/hiding views is Service's responsibility.
    */
+  @Override
   public void render(Command outCommand) {
     if (outCommand == null) {
       return;
@@ -610,6 +607,7 @@ public class ViewManager {
   /**
    * @return the current keyboard specification.
    */
+  @Override
   public KeyboardSpecification getJapaneseKeyboardSpecification() {
     return japaneseSoftwareKeyboardModel.getKeyboardSpecification();
   }
@@ -617,6 +615,7 @@ public class ViewManager {
   /**
    * Set {@code EditorInfo} instance to the current view.
    */
+  @Override
   public void setEditorInfo(EditorInfo attribute) {
     mozcView.setEmojiEnabled(MozcUtil.isEmojiAllowed(attribute));
 
@@ -626,6 +625,12 @@ public class ViewManager {
         Collections.<TouchEvent>emptyList());
   }
 
+  @Override
+  public void setTextForActionButton(CharSequence text) {
+    // TODO(mozc-team): Implement action button handling.
+  }
+
+  @Override
   public boolean hideSubInputView() {
     if (mozcView == null) {
       return false;
@@ -665,6 +670,7 @@ public class ViewManager {
    * @param keyboardLayout New keyboard layout.
    * @throws NullPointerException If <code>keyboardLayout</code> is <code>null</code>.
    */
+  @Override
   public void setKeyboardLayout(KeyboardLayout keyboardLayout) {
     if (keyboardLayout == null) {
       throw new NullPointerException("keyboardLayout is null.");
@@ -687,6 +693,7 @@ public class ViewManager {
    * @throws NullPointerException If <code>inputStyle</code> is <code>null</code>.
    * TODO(hidehiko): Refactor out following keyboard switching logic into another class.
    */
+  @Override
   public void setInputStyle(InputStyle inputStyle) {
     if (inputStyle == null) {
       throw new NullPointerException("inputStyle is null.");
@@ -703,6 +710,7 @@ public class ViewManager {
         Collections.<TouchEvent>emptyList());
   }
 
+  @Override
   public void setQwertyLayoutForAlphabet(boolean qwertyLayoutForAlphabet) {
     if (japaneseSoftwareKeyboardModel.isQwertyLayoutForAlphabet() != qwertyLayoutForAlphabet) {
       // If changed, clear the keyboard cache.
@@ -715,6 +723,7 @@ public class ViewManager {
         Collections.<TouchEvent>emptyList());
   }
 
+  @Override
   public void setFullscreenMode(boolean fullscreenMode) {
     this.fullscreenMode = fullscreenMode;
     if (mozcView != null) {
@@ -722,10 +731,12 @@ public class ViewManager {
     }
   }
 
+  @Override
   public boolean isFullscreenMode() {
     return fullscreenMode;
   }
 
+  @Override
   public void setFlickSensitivity(int flickSensitivity) {
     this.flickSensitivity = flickSensitivity;
     if (mozcView != null) {
@@ -733,7 +744,10 @@ public class ViewManager {
     }
   }
 
+  @Override
   public void setEmojiProviderType(EmojiProviderType emojiProviderType) {
+    Preconditions.checkNotNull(emojiProviderType);
+
     this.emojiProviderType = emojiProviderType;
     if (mozcView != null) {
       mozcView.setEmojiProviderType(emojiProviderType);
@@ -743,17 +757,20 @@ public class ViewManager {
   /**
    * @param isNarrowMode Whether mozc view shows in narrow mode or normal.
    */
+  @Override
   public void setNarrowMode(boolean isNarrowMode) {
     this.narrowMode = isNarrowMode;
     if (mozcView != null) {
-      mozcView.setNarrowMode(isNarrowMode);
+      mozcView.setLayoutAdjustmentAndNarrowMode(layoutAdjustment, isNarrowMode);
     }
   }
 
+  @Override
   public boolean isNarrowMode() {
     return narrowMode;
   }
 
+  @Override
   public void setPopupEnabled(boolean popupEnabled) {
     this.popupEnabled = popupEnabled;
     if (mozcView != null) {
@@ -761,6 +778,7 @@ public class ViewManager {
     }
   }
 
+  @Override
   public void setHardwareKeyboardCompositionMode(CompositionMode compositionMode) {
     hardwareCompositionMode = compositionMode;
     if (mozcView != null) {
@@ -768,6 +786,7 @@ public class ViewManager {
     }
   }
 
+  @Override
   public void setSkinType(SkinType skinType) {
     this.skinType = skinType;
     if (mozcView != null) {
@@ -775,14 +794,16 @@ public class ViewManager {
     }
   }
 
+  @Override
   public void setLayoutAdjustment(Resources resources, LayoutAdjustment layoutAdjustment) {
     this.layoutAdjustment = layoutAdjustment;
 
     if (mozcView != null) {
-      mozcView.setLayoutAdjustment(layoutAdjustment);
+      mozcView.setLayoutAdjustmentAndNarrowMode(layoutAdjustment, narrowMode);
     }
   }
 
+  @Override
   public void setKeyboardHeightRatio(int keyboardHeightRatio) {
     this.keyboardHeightRatio = keyboardHeightRatio;
     if (mozcView != null) {
@@ -797,7 +818,8 @@ public class ViewManager {
    * Note that this method can be called before {@link #createMozcView(Context)}
    * so null-check is mandatory.
    */
-  protected void reset() {
+  @Override
+  public void reset() {
     if (mozcView != null) {
       mozcView.reset();
     }
@@ -806,7 +828,8 @@ public class ViewManager {
     maybeDismissMenuDialog();
   }
 
-  void computeInsets(Context context, InputMethodService.Insets outInsets, Window window) {
+  @Override
+  public void computeInsets(Context context, InputMethodService.Insets outInsets, Window window) {
     // The IME's area is prioritized than app's.
     // - contentTopInsets
     //   - This is the top part of the UI that is the main content.
@@ -845,7 +868,83 @@ public class ViewManager {
     mozcView.setInsets(contentViewWidth, contentViewHeight, outInsets);
   }
 
+  @Override
   public void onConfigurationChanged(Configuration newConfig) {
     guesser.setConfiguration(newConfig);
+  }
+
+  @Override
+  public boolean isKeyConsumedOnViewAsynchronously(KeyEvent event) {
+    return false;
+  }
+
+  @Override
+  public void consumeKeyOnViewSynchronously(KeyEvent event) {
+    throw new IllegalArgumentException("ViewManager doesn't consume any key event.");
+  }
+
+  @Override
+  public boolean isGenericMotionToConsume(MotionEvent event) {
+    return false;
+  }
+
+  @Override
+  public boolean consumeGenericMotion(MotionEvent event) {
+    return false;
+  }
+
+  @VisibleForTesting
+  @Override
+  public ViewEventListener getEventListener() {
+    return eventListener;
+  }
+
+  @VisibleForTesting
+  @Override
+  public JapaneseSoftwareKeyboardModel getJapaneseSoftwareKeyboardModel() {
+    return japaneseSoftwareKeyboardModel;
+  }
+
+  @VisibleForTesting
+  @Override
+  public boolean isPopupEnabled() {
+    return popupEnabled;
+  }
+
+  @VisibleForTesting
+  @Override
+  public int getFlickSensitivity() {
+    return flickSensitivity;
+  }
+
+  @VisibleForTesting
+  @Override
+  public EmojiProviderType getEmojiProviderType() {
+    return emojiProviderType;
+  }
+
+  @VisibleForTesting
+  @Override
+  public SkinType getSkinType() {
+    return skinType;
+  }
+
+  @VisibleForTesting
+  @Override
+  public LayoutAdjustment getLayoutAdjustment() {
+    return layoutAdjustment;
+  }
+
+  @VisibleForTesting
+  @Override
+  public int getKeyboardHeightRatio() {
+    return keyboardHeightRatio;
+  }
+
+  @Override
+  public void trimMemory() {
+    if (mozcView != null) {
+      mozcView.trimMemory();
+    }
   }
 }

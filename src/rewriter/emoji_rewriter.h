@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -116,7 +116,7 @@ class EmojiRewriter : public RewriterInterface {
   // NOTE: This method is expected to be called after the segments are processed
   // with COMMIT command in a SessionConverter instance.  May record wrong
   // stats if you call this method in other situation.
-  virtual void Finish(Segments *segments);
+  virtual void Finish(const ConversionRequest &request, Segments *segments);
 
   // Returns true if the given candidate includes emoji characters.
   // TODO(peria, hidehiko): Unify this checker and IsEmojiEntry defined in

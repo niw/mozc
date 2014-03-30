@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -30,7 +30,7 @@
 #ifndef MOZC_DATA_MANAGER_TESTING_MOCK_USER_POS_MANAGER_H_
 #define MOZC_DATA_MANAGER_TESTING_MOCK_USER_POS_MANAGER_H_
 
-#include "base/base.h"
+#include "base/port.h"
 #include "data_manager/data_manager_interface.h"
 
 namespace mozc {
@@ -43,6 +43,8 @@ class MockUserPosManager : public DataManagerInterface {
  public:
   MockUserPosManager() {}
   virtual ~MockUserPosManager() {}
+
+  static MockUserPosManager *GetUserPosManager();
 
   // Partially implement the interface because some binary only reqiures the
   // folloiwng embedded data.
@@ -75,6 +77,8 @@ class MockUserPosManager : public DataManagerInterface {
       const int **conjugation_suffix_data_index,
       const UsageDictItem **usage_data_value) const {}
 #endif  // NO_USAGE_REWRITER
+  virtual void GetCounterSuffixSortedArray(const CounterSuffixEntry **array,
+                                           size_t *size) const {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(MockUserPosManager);

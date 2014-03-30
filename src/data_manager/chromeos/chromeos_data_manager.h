@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -66,6 +66,8 @@ class ChromeOsDataManager : public ChromeOsUserPosManager {
       const int **conjugation_suffix_data_index,
       const UsageDictItem **usage_data_value) const;
 #endif  // NO_USAGE_REWRITER
+  virtual void GetCounterSuffixSortedArray(const CounterSuffixEntry **array,
+                                           size_t *size) const;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ChromeOsDataManager);

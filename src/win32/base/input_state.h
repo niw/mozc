@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -27,19 +27,29 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef MOZC_WIN32_BASE_INPUT_STATE_
-#define MOZC_WIN32_BASE_INPUT_STATE_
+#ifndef MOZC_WIN32_BASE_INPUT_STATE_H_
+#define MOZC_WIN32_BASE_INPUT_STATE_H_
 
 #include <windows.h>
 
+#include <vector>
+
+#include "session/key_info_util.h"
 #include "win32/base/keyboard.h"
 
 namespace mozc {
 namespace win32 {
 
 struct InputState {
+  // Represents the IME is turned on or not.
   bool open;
-  DWORD conversion_status;
+  // Represents the expected conversion mode visible from the input method
+  // framework (IMM32/TSF).
+  DWORD logical_conversion_mode;
+  // Represents the expected conversion mode visible from the user. So the
+  // language bar should show this mode.
+  DWORD visible_conversion_mode;
+  // Tracks the last down key mainly for handling modifer key-up event.
   VirtualKey last_down_key;
   InputState();
 };
@@ -47,18 +57,12 @@ struct InputState {
 struct InputBehavior {
   bool disabled;
   bool prefer_kana_input;
+  bool use_mode_indicator;
   bool use_romaji_key_to_toggle_input_style;
-  bool suppress_suggestion;
-  // Bitmap of experimental features.
-  enum ExperimentalFeature {
-    NO_FEATURE = 0,
-    CHROME_OMNIBOX = 1,
-    GOOGLE_SEARCH_BOX = 2,
-  };
-  uint32 experimental_features;
+  vector<KeyInformation> direct_mode_keys;
   InputBehavior();
 };
 
 }  // namespace win32
 }  // namespace mozc
-#endif  // MOZC_WIN32_BASE_INPUT_STATE_
+#endif  // MOZC_WIN32_BASE_INPUT_STATE_H_

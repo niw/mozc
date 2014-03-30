@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -53,19 +53,6 @@ extern const size_t kMozcEnginePropertiesSize;
 extern const MozcEngineProperty *kMozcEnginePropertyIMEOffState;
 
 extern const commands::CompositionMode kMozcEngineInitialCompositionMode;
-
-struct MozcEngineSwitchProperty {
-  // Specifies the command id to trigger.
-  commands::SessionCommand::LanguageBarCommandId id;
-  const char *key;      // IBus property key.
-  const char *label;    // text for the menu.
-  const char *icon;     // icon.
-  const char *tooltip;  // tooltip.
-};
-
-// This pointer should be NULL when properties size is 0.
-extern const MozcEngineSwitchProperty *kMozcEngineSwitchProperties;
-extern const size_t kMozcEngineSwitchPropertiesSize;
 
 struct MozcEngineToolProperty {
   const char *key;    // IBus property key for the MozcTool.

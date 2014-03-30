@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -105,7 +105,8 @@ SessionConverter::SessionConverter(const ConverterInterface *converter,
       result_(new commands::Result),
       candidate_list_(new CandidateList(true)),
       candidate_list_visible_(false),
-      request_(request) {
+      request_(request),
+      client_revision_(0) {
   conversion_preferences_.use_history = true;
   conversion_preferences_.max_history_size = kDefaultMaxHistorySize;
   conversion_preferences_.request_suggestion = true;
@@ -296,43 +297,21 @@ bool SessionConverter::ConvertToHalfWidth(const composer::Composer &composer) {
 
   string composition;
   if (CheckState(COMPOSITION | SUGGESTION)) {
-    if (!Convert(composer)) {
-      LOG(ERROR) << "Conversion failed";
-      return false;
-    }
-    GetPreedit(0, segments_->conversion_segments_size(), &composition);
-    // TODO(komatsu): This is a workaround to transliterate the whole
-    // preedit as a single segment.  We should modify
-    // converter/converter.cc to enable to accept mozc::Segment::FIXED
-    // from the session layer.
-    if (segments_->conversion_segments_size() != 1) {
-      ResizeSegmentWidth(composer, Util::CharsLen(composition));
-    }
+    composer.GetStringForPreedit(&composition);
   } else {
     composition = GetSelectedCandidate(segment_index_).value;
   }
 
-  DCHECK(CheckState(CONVERSION));
-  Attributes attributes = HALF_WIDTH;
   // TODO(komatsu): make a function to return a logical sum of ScriptType.
   // If composition_ is "あｂｃ", it should be treated as Katakana.
   if (Util::ContainsScriptType(composition, Util::KATAKANA) ||
       Util::ContainsScriptType(composition, Util::HIRAGANA) ||
       Util::ContainsScriptType(composition, Util::KANJI) ||
-      Util::IsKanaSymbolContained(composition)
-  ) {
-    attributes |= KATAKANA;
+      Util::IsKanaSymbolContained(composition)) {
+    return ConvertToTransliteration(composer, transliteration::HALF_KATAKANA);
   } else {
-    attributes |= ASCII;
-    attributes |= (candidate_list_->GetDeepestFocusedCandidate().attributes() &
-                   (UPPER | LOWER | CAPITALIZED));
+    return ConvertToTransliteration(composer, transliteration::HALF_ASCII);
   }
-  candidate_list_->MoveNextAttributes(attributes);
-  candidate_list_visible_ = false;
-  // Treat as top conversion candidate on usage stats.
-  selected_candidate_indices_[segment_index_] = 0;
-  SegmentFocus();
-  return true;
 }
 
 bool SessionConverter::SwitchKanaType(const composer::Composer &composer) {
@@ -442,7 +421,6 @@ bool SessionConverter::SuggestWithPreferences(
   SetConversionPreferences(preferences, segments_.get());
 
   ConversionRequest conversion_request(&composer, request_);
-
   const size_t cursor = composer.GetCursor();
   if (cursor == composer.GetLength() || cursor == 0 ||
       !request_->mixed_conversion()) {
@@ -652,16 +630,12 @@ void SessionConverter::MaybeExpandPrediction(
 
   const size_t previous_index = candidate_list_->focused_index();
   if (!PredictWithPreferences(composer, conversion_preferences_)) {
-    // TODO(komatsu): Consider the case when PredictWithPreferences fails.
     return;
   }
 
-  if (previous_index < candidate_list_->size()) {
-    candidate_list_->MoveToId(candidate_list_->candidate(previous_index).id());
-    UpdateSelectedCandidateIndex();
-  } else {
-    // Ideally this should not happen.
-  }
+  DCHECK_LT(previous_index, candidate_list_->size());
+  candidate_list_->MoveToId(candidate_list_->candidate(previous_index).id());
+  UpdateSelectedCandidateIndex();
 }
 
 void SessionConverter::Cancel() {
@@ -685,11 +659,12 @@ void SessionConverter::Reset() {
   }
 
   ResetResult();
-  // Reset segments and context
+  // Reset segments (and its internal context)
   ResetState();
 }
 
-void SessionConverter::Commit(const commands::Context &context) {
+void SessionConverter::Commit(const composer::Composer &composer,
+                              const commands::Context &context) {
   DCHECK(CheckState(PREDICTION | CONVERSION));
   ResetResult();
 
@@ -705,7 +680,8 @@ void SessionConverter::Commit(const commands::Context &context) {
                                    GetCandidateIndexForConverter(i));
   }
   CommitUsageStats(state_, context);
-  converter_->FinishConversion(segments_.get());
+  ConversionRequest conversion_request(&composer, request_);
+  converter_->FinishConversion(conversion_request, segments_.get());
   ResetState();
 }
 
@@ -753,7 +729,8 @@ bool SessionConverter::CommitSuggestionInternal(
                                    0,
                                    GetCandidateIndexForConverter(0));
     CommitUsageStats(SessionConverterInterface::SUGGESTION, context);
-    converter_->FinishConversion(segments_.get());
+    ConversionRequest conversion_request(&composer, request_);
+    converter_->FinishConversion(conversion_request, segments_.get());
     DCHECK_EQ(0, segments_->conversion_segments_size());
     ResetState();
   }
@@ -791,7 +768,8 @@ bool SessionConverter::CommitSuggestionById(
   return CommitSuggestionInternal(composer, context, consumed_key_size);
 }
 
-void SessionConverter::CommitFirstSegment(const commands::Context &context,
+void SessionConverter::CommitFirstSegment(const composer::Composer &composer,
+                                          const commands::Context &context,
                                           size_t *consumed_key_size) {
   DCHECK(CheckState(PREDICTION | CONVERSION));
   ResetResult();
@@ -800,7 +778,7 @@ void SessionConverter::CommitFirstSegment(const commands::Context &context,
 
   // If the number of segments is one, just call Commit.
   if (segments_->conversion_segments_size() == 1) {
-    Commit(context);
+    Commit(composer, context);
     return;
   }
 
@@ -848,7 +826,8 @@ void SessionConverter::CommitPreedit(const composer::Composer &composer,
                                         segments_.get());
 
   CommitUsageStats(SessionConverterInterface::COMPOSITION, context);
-  converter_->FinishConversion(segments_.get());
+  ConversionRequest conversion_request(&composer, request_);
+  converter_->FinishConversion(conversion_request, segments_.get());
   ResetState();
 }
 
@@ -1118,29 +1097,6 @@ void SessionConverter::FillOutput(
     FillAllCandidateWords(output->mutable_all_candidate_words());
   }
 #endif  // __native_client__
-
-  // Propagate config information to renderer.
-  PropagateConfigToRenderer(output);
-}
-
-void SessionConverter::FillContext(commands::Context *context) const {
-  if (context->has_preceding_text()) {
-    // Client has set the information of surrounding text, so do nothing.
-    return;
-  }
-  if (segments_->history_segments_size() == 0) {
-    return;
-  }
-
-  // Set preceding text using history segments.
-  string *preceding_text = context->mutable_preceding_text();
-  for (size_t i = 0; i < segments_->history_segments_size(); ++i) {
-    *preceding_text += segments_->history_segment(i).candidate(0).value;
-  }
-}
-
-void SessionConverter::RemoveTailOfHistorySegments(size_t num_of_characters) {
-  segments_->RemoveTailOfHistorySegments(num_of_characters);
 }
 
 // static
@@ -1158,7 +1114,7 @@ SessionConverter* SessionConverter::Clone() const {
   // Copy the members in order of their declarations.
   session_converter->state_ = state_;
   // TODO(team): copy of |converter_| member.
-  // We cannot copy the member converter_ from SessionConverterInterface becase
+  // We cannot copy the member converter_ from SessionConverterInterface because
   // it doesn't (and shouldn't) define a method like GetConverter(). At the
   // moment it's ok because the current design guarantees that the converter is
   // singleton. However, we should refactor such bad design; see also the
@@ -1225,7 +1181,7 @@ void SessionConverter::GetPreedit(const size_t index,
       DCHECK(CheckState(SUGGESTION | PREDICTION));
       // In suggestion or prediction modes, each key may have
       // different keys, so content_key is used although it is
-      // possibly droped the conjugational word (ex. the content_key
+      // possibly dropped the conjugational word (ex. the content_key
       // of "はしる" is "はし").
       preedit->append(GetSelectedCandidate(i).content_key);
     }
@@ -1299,7 +1255,7 @@ bool SessionConverter::MaybePerformCommandCandidate(
           SetPresentationMode(false);
           break;
         default:
-          LOG(WARNING) << "Unkown command: " << candidate.command;
+          LOG(WARNING) << "Unknown command: " << candidate.command;
           break;
       }
       return true;
@@ -1555,7 +1511,7 @@ void SessionConverter::FillAllCandidateWords(
       category = commands::SUGGESTION;
       break;
     default:
-      LOG(WARNING) << "Unkown request type: " << segments_->request_type();
+      LOG(WARNING) << "Unknown request type: " << segments_->request_type();
       category = commands::CONVERSION;
       break;
   }
@@ -1565,23 +1521,67 @@ void SessionConverter::FillAllCandidateWords(
       segment, *candidate_list_, category, candidates);
 }
 
-void SessionConverter::PropagateConfigToRenderer(
-    commands::Output *output) const {
-  DCHECK(output);
-  if (!candidate_list_visible_ || !CheckState(PREDICTION | CONVERSION)) {
-    return;
-  }
-  const config::Config &config = config::ConfigHandler::GetConfig();
-  if (config.has_information_list_config() &&
-      config.information_list_config().use_web_usage_dictionary() &&
-      config.information_list_config().web_service_entries_size() > 0) {
-    output->mutable_config()->mutable_information_list_config()->CopyFrom(
-        config.information_list_config());
-  }
-}
-
 void SessionConverter::SetRequest(const commands::Request *request) {
   request_ = request;
+}
+
+void SessionConverter::OnStartComposition(const commands::Context &context) {
+  bool revision_changed = false;
+  if (context.has_revision()) {
+    revision_changed = (context.revision() != client_revision_);
+    client_revision_ = context.revision();
+  }
+  if (!context.has_preceding_text()) {
+    // In this case, reset history segments when the revision is mismatched.
+    if (revision_changed) {
+      converter_->ResetConversion(segments_.get());
+    }
+    return;
+  }
+
+  const string &preceding_text = context.preceding_text();
+  // If preceding text is empty, it is OK to reset the history segments by
+  // calling ResetConversion.
+  if (preceding_text.empty()) {
+    converter_->ResetConversion(segments_.get());
+    return;
+  }
+
+  // Hereafter, we keep the existing history segments as long as it is
+  // consistent with the preceding text even when revision_changed is true.
+  string history_text;
+  for (size_t i = 0; i < segments_->segments_size(); ++i) {
+    const Segment &segment = segments_->segment(i);
+    if (segment.segment_type() != Segment::HISTORY) {
+      break;
+    }
+    if (segment.candidates_size() == 0) {
+      break;
+    }
+    history_text.append(segment.candidate(0).value);
+  }
+
+  if (!history_text.empty()) {
+    // Compare |preceding_text| with |history_text| to check if the history
+    // segments are still valid or not.
+    DCHECK(!preceding_text.empty());
+    DCHECK(!history_text.empty());
+    if (preceding_text.size() > history_text.size()) {
+      if (Util::EndsWith(preceding_text, history_text)) {
+        // History segments seem to be consistent with preceding text.
+        return;
+      }
+    } else {
+      if (Util::EndsWith(history_text, preceding_text)) {
+        // History segments seem to be consistent with preceding text.
+        return;
+      }
+    }
+  }
+
+  // Here we reconstruct history segments from |preceding_text| regardless
+  // of revision mismatch. If it fails the history segments is cleared anyway.
+  converter_->ReconstructHistory(segments_.get(), preceding_text);
 }
 
 void SessionConverter::UpdateSelectedCandidateIndex() {

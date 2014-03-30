@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -188,6 +188,10 @@ public class MenuDialog {
   }
 
   public void setWindowToken(IBinder windowToken) {
-    MozcUtil.setWindowToken(windowToken, dialog);
+    if (windowToken != null) {
+      MozcUtil.setWindowToken(windowToken, dialog);
+    } else {
+      MozcLog.w("Unknown window token.");
+    }
   }
 }

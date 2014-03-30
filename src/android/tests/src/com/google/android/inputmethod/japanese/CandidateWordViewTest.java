@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -35,7 +35,6 @@ import static org.easymock.EasyMock.expect;
 import static org.easymock.EasyMock.isA;
 import static org.easymock.EasyMock.same;
 
-import org.mozc.android.inputmethod.japanese.CandidateWordView.CandidateSelectListener;
 import org.mozc.android.inputmethod.japanese.CandidateWordView.Orientation;
 import org.mozc.android.inputmethod.japanese.CandidateWordView.OrientationTrait;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidates.CandidateList;
@@ -45,17 +44,18 @@ import org.mozc.android.inputmethod.japanese.testing.MozcLayoutUtil;
 import org.mozc.android.inputmethod.japanese.testing.Parameter;
 import org.mozc.android.inputmethod.japanese.testing.VisibilityProxy;
 import org.mozc.android.inputmethod.japanese.ui.CandidateLayout;
-import org.mozc.android.inputmethod.japanese.ui.CandidateLayouter;
 import org.mozc.android.inputmethod.japanese.ui.CandidateLayout.Row;
 import org.mozc.android.inputmethod.japanese.ui.CandidateLayout.Span;
+import org.mozc.android.inputmethod.japanese.ui.CandidateLayouter;
 import org.mozc.android.inputmethod.japanese.ui.SnapScroller;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.view.MotionEvent;
 import android.view.View;
 
-import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -178,116 +178,124 @@ public class CandidateWordViewTest extends InstrumentationTestCaseWithMock {
     CandidateSelectListener candidateSelectListener = createMock(CandidateSelectListener.class);
     candidateWordView.setCandidateSelectListener(candidateSelectListener);
     CandidateLayout mockLayout = MozcLayoutUtil.createCandidateLayoutMock(getMockSupport());
-    VisibilityProxy.setField(candidateWordView, "calculatedLayout", mockLayout);
+    candidateWordView.calculatedLayout = mockLayout;
 
     // onCandidateSelected() is never be called back.
-    expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
-    replayAll();
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0, Integer.MIN_VALUE, 0)));
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, 0, Integer.MIN_VALUE, 0)));
-    verifyAll();
+    List<MotionEvent> events = new ArrayList<MotionEvent>();
 
-    resetAll();
-    expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
-    replayAll();
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0, Integer.MAX_VALUE, 0)));
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, 0, Integer.MAX_VALUE, 0)));
-    verifyAll();
+    try {
+      expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
+      replayAll();
+      events.add(MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0, Integer.MIN_VALUE, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      events.add(MotionEvent.obtain(0, 1000, MotionEvent.ACTION_UP, 0, Integer.MIN_VALUE, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      verifyAll();
 
-    resetAll();
-    expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
-    replayAll();
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, Integer.MIN_VALUE, 0, 0)));
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, Integer.MIN_VALUE, 0, 0)));
-    verifyAll();
+      resetAll();
+      expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
+      replayAll();
+      events.add(MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0, Integer.MAX_VALUE, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      events.add(MotionEvent.obtain(0, 1000, MotionEvent.ACTION_UP, 0, Integer.MAX_VALUE, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      verifyAll();
 
-    resetAll();
-    expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
-    replayAll();
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, Integer.MAX_VALUE, 0, 0)));
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, Integer.MAX_VALUE, 0, 0)));
-    verifyAll();
+      resetAll();
+      expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
+      replayAll();
+      events.add(MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, Integer.MIN_VALUE, 0, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      events.add(MotionEvent.obtain(0, 1000, MotionEvent.ACTION_UP, Integer.MIN_VALUE, 0, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      verifyAll();
 
-    // TouchUp on a candidate.
-    resetAll();
-    expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
-    candidateSelectListener.onCandidateSelected(
-        ROW_DATA.get(0).getSpanList().get(0).getCandidateWord());
-    replayAll();
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 10, 10, 0)));
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, 10, 10, 0)));
-    verifyAll();
+      resetAll();
+      expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
+      replayAll();
+      events.add(MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, Integer.MAX_VALUE, 0, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      events.add(MotionEvent.obtain(0, 1000, MotionEvent.ACTION_UP, Integer.MAX_VALUE, 0, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      verifyAll();
 
-    // Slide within a candidate.
-    resetAll();
-    expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
-    candidateSelectListener.onCandidateSelected(
-        ROW_DATA.get(0).getSpanList().get(0).getCandidateWord());
-    replayAll();
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 10, 10, 0)));
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_MOVE, 29, 10, 0)));
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, 25, 10, 0)));
-    verifyAll();
+      // TouchUp on a candidate.
+      resetAll();
+      expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
+      candidateSelectListener.onCandidateSelected(
+          ROW_DATA.get(0).getSpanList().get(0).getCandidateWord());
+      replayAll();
+      events.add(MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 10, 10, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      events.add(MotionEvent.obtain(0, 1000, MotionEvent.ACTION_UP, 10, 10, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      verifyAll();
 
-    // Slide out of a candidate. No selection.
-    resetAll();
-    expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
-    replayAll();
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 10, 10, 0)));
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_MOVE, 30, 10, 0)));
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, 30, 10, 0)));
-    verifyAll();
+      // Slide within a candidate.
+      resetAll();
+      expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
+      candidateSelectListener.onCandidateSelected(
+          ROW_DATA.get(0).getSpanList().get(0).getCandidateWord());
+      replayAll();
+      events.add(MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 20, 10, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      events.add(MotionEvent.obtain(0, 1000, MotionEvent.ACTION_MOVE, 29, 10, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      events.add(MotionEvent.obtain(0, 2000, MotionEvent.ACTION_UP, 25, 10, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      verifyAll();
 
-    // Slide out of a candidate, then come back and release. No selection.
-    resetAll();
-    expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
-    replayAll();
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 10, 10, 0)));
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_MOVE, 31, 10, 0)));
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_MOVE, 15, 10, 0)));
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, 15, 10, 0)));
-    verifyAll();
+      // Slide out of a candidate. No selection.
+      resetAll();
+      expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
+      replayAll();
+      events.add(MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 20, 10, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      events.add(MotionEvent.obtain(0, 1000, MotionEvent.ACTION_MOVE, 30, 10, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      events.add(MotionEvent.obtain(0, 2000, MotionEvent.ACTION_UP, 30, 10, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      verifyAll();
 
-    // Must consider scroll value.
-    resetAll();
-    expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
-    replayAll();
-    candidateWordView.scrollTo(0, -5);
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 10, 10, 0)));
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, 10, 10, 0)));
-    verifyAll();
+      // Slide out of a candidate, then come back and release. No selection.
+      resetAll();
+      expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
+      replayAll();
+      events.add(MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 20, 10, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      events.add(MotionEvent.obtain(0, 1000, MotionEvent.ACTION_MOVE, 31, 10, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      events.add(MotionEvent.obtain(0, 2000, MotionEvent.ACTION_MOVE, 15, 10, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      events.add(MotionEvent.obtain(0, 3000, MotionEvent.ACTION_UP, 15, 10, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      verifyAll();
 
-    resetAll();
-    expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
-    replayAll();
-    candidateWordView.scrollTo(-5, 0);
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 10, 10, 0)));
-    assertTrue(candidateWordView.onTouchEvent(
-        MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, 10, 10, 0)));
-    verifyAll();
+      // Must consider scroll value.
+      resetAll();
+      expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
+      replayAll();
+      candidateWordView.scrollTo(0, -5);
+      events.add(MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 10, 10, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      events.add(MotionEvent.obtain(0, 1000, MotionEvent.ACTION_UP, 10, 10, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      verifyAll();
+
+      resetAll();
+      expect(mockLayout.getRowList()).andStubReturn(ROW_DATA);
+      replayAll();
+      candidateWordView.scrollTo(-5, 0);
+      events.add(MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 10, 10, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      events.add(MotionEvent.obtain(0, 1000, MotionEvent.ACTION_UP, 10, 10, 0));
+      assertTrue(candidateWordView.onTouchEvent(events.get(events.size() - 1)));
+      verifyAll();
+    } finally {
+      for (MotionEvent event : events) {
+        event.recycle();
+      }
+    }
   }
 
   @SmallTest
@@ -296,10 +304,8 @@ public class CandidateWordViewTest extends InstrumentationTestCaseWithMock {
         getInstrumentation().getTargetContext(), Orientation.VERTICAL);
     assertNull(candidateWordView.getCandidateLayouter());
     candidateWordView.update(CANDIDATE_LIST);
-    assertEquals(
-        CANDIDATE_LIST,
-        VisibilityProxy.getField(candidateWordView, "currentCandidateList"));
-    assertNull(VisibilityProxy.getField(candidateWordView, "calculatedLayout"));
+    assertEquals(CANDIDATE_LIST, candidateWordView.currentCandidateList);
+    assertNull(candidateWordView.calculatedLayout);
   }
 
   @SmallTest
@@ -309,19 +315,17 @@ public class CandidateWordViewTest extends InstrumentationTestCaseWithMock {
     CandidateLayouter layouter = createMock(CandidateLayouter.class);
     expect(layouter.layout(isA(CandidateList.class)))
         .andReturn(MozcLayoutUtil.createNiceCandidateLayoutMock(getMockSupport()));
-    candidateWordView.setCandidateLayouter(layouter);
+    candidateWordView.layouter = layouter;
     expect(layouter.getPageHeight()).andReturn(50);
     replayAll();
 
     candidateWordView.updateLayouter();
-    assertNotNull(VisibilityProxy.getField(candidateWordView, "layouter"));  // Pre-condition
+    assertNotNull(candidateWordView.layouter);  // Pre-condition
     candidateWordView.update(CANDIDATE_LIST);
 
     verifyAll();
-    assertEquals(
-        CANDIDATE_LIST,
-        VisibilityProxy.getField(candidateWordView, "currentCandidateList"));
-    assertNotNull(VisibilityProxy.getField(candidateWordView, "calculatedLayout"));
+    assertEquals(CANDIDATE_LIST, candidateWordView.currentCandidateList);
+    assertNotNull(candidateWordView.calculatedLayout);
   }
 
   @SmallTest
@@ -332,20 +336,18 @@ public class CandidateWordViewTest extends InstrumentationTestCaseWithMock {
     expect(layouter.layout(isA(CandidateList.class)))
         .andStubReturn(MozcLayoutUtil.createNiceCandidateLayoutMock(getMockSupport()));
     expect(layouter.getPageHeight()).andStubReturn(50);
-    candidateWordView.setCandidateLayouter(layouter);
+    candidateWordView.layouter = layouter;
     replayAll();
 
     candidateWordView.updateLayouter();
-    assertNotNull(VisibilityProxy.getField(candidateWordView, "layouter"));  // Pre-condition
+    assertNotNull(candidateWordView.layouter);  // Pre-condition
     // If the same CandidateList is passed, post-condition should not be changed.
     candidateWordView.update(CANDIDATE_LIST);
     candidateWordView.update(CANDIDATE_LIST);
 
     verifyAll();
-    assertEquals(
-        CANDIDATE_LIST,
-        VisibilityProxy.getField(candidateWordView, "currentCandidateList"));
-    assertNotNull(VisibilityProxy.getField(candidateWordView, "calculatedLayout"));
+    assertEquals(CANDIDATE_LIST, candidateWordView.currentCandidateList);
+    assertNotNull(candidateWordView.calculatedLayout);
   }
 
   @SmallTest
@@ -356,18 +358,17 @@ public class CandidateWordViewTest extends InstrumentationTestCaseWithMock {
     expect(layouter.layout(isA(CandidateList.class)))
         .andStubReturn(MozcLayoutUtil.createNiceCandidateLayoutMock(getMockSupport()));
     expect(layouter.getPageHeight()).andReturn(50);
-    candidateWordView.setCandidateLayouter(layouter);
+    candidateWordView.layouter = layouter;
 
     replayAll();
 
     candidateWordView.updateLayouter();
-    assertNotNull(VisibilityProxy.getField(candidateWordView, "layouter"));
+    assertNotNull(candidateWordView.layouter);
     candidateWordView.update(CANDIDATE_LIST);
 
     // Pre-condition
     verifyAll();
-    assertNotNull(
-        VisibilityProxy.getField(candidateWordView, "calculatedLayout"));
+    assertNotNull(candidateWordView.calculatedLayout);
 
     resetAll();
     replayAll();
@@ -376,11 +377,11 @@ public class CandidateWordViewTest extends InstrumentationTestCaseWithMock {
     candidateWordView.update(null);
 
     verifyAll();
-    assertNull(VisibilityProxy.getField(candidateWordView, "calculatedLayout"));
+    assertNull(candidateWordView.calculatedLayout);
   }
 
   @SmallTest
-  public void testGetUpdatedScrollPosition() throws InvocationTargetException {
+  public void testGetUpdatedScrollPosition() {
     class TestData extends Parameter {
       final float candidatePosition;
       final int scrollPosition;
@@ -424,7 +425,7 @@ public class CandidateWordViewTest extends InstrumentationTestCaseWithMock {
       assertEquals(
           testData.toString(),
           testData.expected,
-          VisibilityProxy.invokeByName(candidateWordView, "getUpdatedScrollPosition", row, span));
+          candidateWordView.getUpdatedScrollPosition(row, span));
       verifyAll();
     }
   }
@@ -455,7 +456,7 @@ public class CandidateWordViewTest extends InstrumentationTestCaseWithMock {
     expect(scroller.getScrollPosition()).andReturn(0);
     trait.scrollTo(same(candidateWordView), eq(0));
     replayAll();
-    VisibilityProxy.setField(candidateWordView, "calculatedLayout", mockLayout);
+    candidateWordView.calculatedLayout = mockLayout;
     candidateWordView.scrollTo(100, 100);
     candidateWordView.updateScrollPositionBasedOnFocusedIndex();
     verifyAll();
@@ -473,22 +474,23 @@ public class CandidateWordViewTest extends InstrumentationTestCaseWithMock {
     expect(scroller.getScrollPosition()).andReturn(10);
     trait.scrollTo(same(candidateWordView), eq(10));
     replayAll();
-    VisibilityProxy.setField(candidateWordView, "calculatedLayout", mockLayout);
+    candidateWordView.calculatedLayout = mockLayout;
     candidateWordView.updateScrollPositionBasedOnFocusedIndex();
     verifyAll();
   }
 
+  @SuppressLint("WrongCall")
   @SmallTest
   public void testOnLayout() {
     CandidateWordView candWordView = new StubCandidateWordView(
         getInstrumentation().getTargetContext(), Orientation.VERTICAL);
     CandidateLayouter layouter = createMock(CandidateLayouter.class);
-    candWordView.setCandidateLayouter(layouter);
+    candWordView.layouter = layouter;
     replayAll();
 
     // Check pre-condition.
-    assertNull(VisibilityProxy.getField(candWordView, "calculatedLayout"));
-    assertNull(VisibilityProxy.getField(candWordView, "currentCandidateList"));
+    assertNull(candWordView.calculatedLayout);
+    assertNull(candWordView.currentCandidateList);
 
     verifyAll();
 
@@ -497,12 +499,12 @@ public class CandidateWordViewTest extends InstrumentationTestCaseWithMock {
     expect(layouter.setViewSize(0, 0)).andReturn(false);
     replayAll();
 
-    VisibilityProxy.setField(candWordView, "currentCandidateList", CANDIDATE_LIST);
+    candWordView.currentCandidateList = CANDIDATE_LIST;
     candWordView.onLayout(true, 0, 0, 0, 0);
 
     verifyAll();
-    assertNull(VisibilityProxy.getField(candWordView, "calculatedLayout"));
-    assertNotNull(VisibilityProxy.getField(candWordView, "currentCandidateList"));
+    assertNull(candWordView.calculatedLayout);
+    assertNotNull(candWordView.currentCandidateList);
 
     // Call onLayout with non-empty view size.
     resetAll();
@@ -515,7 +517,7 @@ public class CandidateWordViewTest extends InstrumentationTestCaseWithMock {
     candWordView.onLayout(true, 0, 0, 320, 240);
 
     verifyAll();
-    assertNotNull(VisibilityProxy.getField(candWordView, "calculatedLayout"));
-    assertNotNull(VisibilityProxy.getField(candWordView, "currentCandidateList"));
+    assertNotNull(candWordView.calculatedLayout);
+    assertNotNull(candWordView.currentCandidateList);
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -45,35 +45,37 @@ namespace mozc {
 namespace win32 {
 namespace {
 
-using msl::utilities::SafeAdd;
-using msl::utilities::SafeCast;
-using msl::utilities::SafeMultiply;
-using msl::utilities::SafeSubtract;
+using ::mozc::commands::CandidateList;
+using ::mozc::commands::Candidates;
+
+using ::msl::utilities::SafeAdd;
+using ::msl::utilities::SafeCast;
+using ::msl::utilities::SafeMultiply;
+using ::msl::utilities::SafeSubtract;
 
 // Since IMM32 uses DWORD rather than size_t for data size in data structures,
 // relevant data size are stored into DWORD constants here.
-COMPILE_ASSERT(sizeof(DWORD) <= kint32max, SIZE_OF_DWORD_IS_TOO_LARGE);
+static_assert(sizeof(DWORD) <= kint32max, "Check DWORD size.");
+
 const DWORD kSizeOfDWORD = static_cast<DWORD>(sizeof(DWORD));
 
-COMPILE_ASSERT(sizeof(wchar_t) <= kint32max, SIZE_OF_WCHAR_T_IS_TOO_LARGE);
+static_assert(sizeof(wchar_t) <= kint32max, "Check wchar_t size.");
 const DWORD kSizeOfWCHAR = static_cast<DWORD>(sizeof(wchar_t));
 
-COMPILE_ASSERT(sizeof(CANDIDATEINFO) <= kint32max,
-               SIZE_OF_CANDIDATE_INFO_IS_TOO_LARGE);
+static_assert(sizeof(CANDIDATEINFO) <= kint32max, "Check CANDIDATEINFO size.");
 const DWORD kSizeOfCANDIDATEINFO = static_cast<DWORD>(sizeof(CANDIDATEINFO));
 
-COMPILE_ASSERT(sizeof(CANDIDATELIST) <= kint32max,
-               SIZE_OF_CANDIDATELIST_IS_TOO_LARGE);
+static_assert(sizeof(CANDIDATELIST) <= kint32max, "Check CANDIDATELIST size.");
 const DWORD kSizeOfCANDIDATELIST = static_cast<DWORD>(sizeof(CANDIDATELIST));
 
-COMPILE_ASSERT(sizeof(CANDIDATELIST) > sizeof(DWORD),
-               WEIRD_CANDIDATELIST_SIZE);
+static_assert(sizeof(CANDIDATELIST) > sizeof(DWORD),
+              "Check CANDIDATELIST size.");
 const DWORD kSizeOfCANDIDATELISTHeader =
     static_cast<DWORD>(sizeof(CANDIDATELIST) - sizeof(DWORD));
 
-COMPILE_ASSERT((static_cast<int64>(sizeof(CANDIDATEINFO)) +
-                static_cast<int64>(sizeof(CANDIDATELIST))) < kint32max,
-               SIZE_OF_CANDIDATELIST_AND_CANDIDATE_INFO_ARE_TOO_LARGE);
+static_assert((static_cast<int64>(sizeof(CANDIDATEINFO)) +
+               static_cast<int64>(sizeof(CANDIDATELIST))) < kint32max,
+               "Check CANDIDATEINFO + CANDIDATELIST size.");
 const DWORD kSizeOfCANDIDATEINFOAndCANDIDATELIST =
     static_cast<DWORD>(sizeof(CANDIDATEINFO) + sizeof(CANDIDATELIST));
 
@@ -202,7 +204,7 @@ bool CandidateInfoUtil::Convert(const mozc::commands::Output &output,
     return true;
   }
 
-  const mozc::commands::Candidates &candidates = output.candidates();
+  const Candidates &candidates = output.candidates();
   if (candidates.has_category() &&
       (candidates.category() == mozc::commands::SUGGESTION)) {
     // If this is a suggest UI popup, we will not update the candidate info.
@@ -218,8 +220,7 @@ bool CandidateInfoUtil::Convert(const mozc::commands::Output &output,
     return false;
   }
 
-  const mozc::commands::CandidateList &candidate_list =
-      output.all_candidate_words();
+  const CandidateList &candidate_list = output.all_candidate_words();
 
   if (!candidate_list.has_focused_index()) {
     return false;

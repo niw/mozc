@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -128,6 +128,10 @@ TransliterationCandidates7
 TransliterationCandidates8
 TransliterationCandidates9
 TransliterationCandidatesGE10
+
+# The count of language aware suggestions are displayed and committed.
+LanguageAwareSuggestionTriggered
+LanguageAwareSuggestionCommitted
 
 # The count of mouse selection command call
 MouseSelect
@@ -300,7 +304,13 @@ SendCommand_UsageStatsEvent
 SendCommand_UndoOrRewind
 SendCommand_ExpandSuggestion
 SendCommand_SendCaretLocation
-SendCommand_SendLanguageBarCommand
+SendCommand_ObsoleteSendLanguageBarCommand
+SendCommand_GetAsyncResult
+SendCommand_CommitRawText
+SendCommand_ConvertPrevPage
+SendCommand_ConvertNextPage
+SendCommand_TurnOnIme
+SendCommand_TurnOffIme
 
 # The count of revert in Chrome Omnibox or Google search box
 SendCommand_RevertInChromeOmnibox
@@ -380,14 +390,17 @@ DECIMAL
 DIVIDE
 # Numpad [=]
 EQUALS
-ASCII
+TEXT_INPUT
 HANKAKU
 KANJI
 KATAKANA
 CAPS_LOCK
-HANJA
+# Unsupported keys (e.g. PrtSc, Pause) fall back to UNDEFINED_KEY.
+UNDEFINED_KEY
 # Numpad [,]
 COMMA
+# Numpad [5]
+CLEAR
 
 # Stats for config
 # Keymap style
@@ -452,18 +465,6 @@ ConfigYenSignCharacter
 ConfigUseJapaneseLayout
 # Space input style
 ConfigSpaceCharacterForm
-# Use cloud sync
-ConfigUseCloudSync
-# Use config sync
-ConfigUseConfigSync
-# Use user dictionary sync
-ConfigUseUserDictionarySync
-# Use history sync
-ConfigUseHistorySync
-# Use learning preference sync
-ConfigUseLearningPreferenceSync
-# Use contact list sync
-ConfigUseContactListSync
 # Allow cloud handwriting
 ConfigAllowCloudHandwriting
 # Use local usage dictionary
@@ -472,6 +473,8 @@ ConfigUseLocalUsageDictionary
 ConfigUseWebUsageDictionary
 # Prelauncher is enabled or not
 PrelauncherEnabled
+# Use Mode Indicator
+ConfigUseModeIndicator
 
 # Need to show the help page after install (TSF is disabled)
 PostInstallShowPageRequired
@@ -497,8 +500,6 @@ IMEActivationKeyCustomized
 
 # Number of user registered dictionary word
 UserRegisteredWord
-# Number of user registered sync dictionary word
-UserRegisteredSyncWord
 # Number of user history entries for UserHistoryPredictor
 UserHistoryPredictorEntrySize
 # Number of user history entries for UserBoundaryHistoryRewriter
@@ -509,8 +510,6 @@ UserSegmentHistoryEntrySize
 AndroidApiLevel
 # Total memory in MB
 TotalPhysicalMemory
-# Web service entry size of web usage dictionary
-WebServiceEntrySize
 
 # The count of the handwriting tool opened
 HandwritingOpen
@@ -532,6 +531,8 @@ MsctfVerBuild
 MsctfVerRevision
 # CUAS status
 CuasEnabled
+# Windows 8
+PerUserInputSettingsEnabled
 
 # Virtual keyboard touch event stats
 VirtualKeyboardStats

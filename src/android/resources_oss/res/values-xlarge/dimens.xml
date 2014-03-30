@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
- Copyright 2010-2013, Google Inc.
+ Copyright 2010-2014, Google Inc.
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -34,16 +34,15 @@
 
   <dimen name="candidate_text_size">32dip</dimen>
   <dimen name="candidate_description_text_size">12dip</dimen>
-  <!-- The size of the icon should equal to
-       (candidate_text_size + candidate_vertical_padding_size * 2) -->
-  <dimen name="keyboard_folding_icon_size">48dip</dimen>
+  <dimen name="candidate_text_size_aligned_layout">20dip</dimen>
+  <dimen name="candidate_description_text_size_aligned_layout">10dip</dimen>
 
   <dimen name="symbol_view_scroll_guide_width_per_page">70dip</dimen>
   <dimen name="symbol_view_minor_category_height">79.5dip</dimen>
   <dimen name="symbol_view_major_category_height">79.5dip</dimen>
 
-  <dimen name="ime_window_height_portrait">500dip</dimen>
-  <dimen name="ime_window_height_landscape">450dip</dimen>
+  <dimen name="ime_window_height_portrait">@dimen/ime_window_height_portrait_xlarge</dimen>
+  <dimen name="ime_window_height_landscape">@dimen/ime_window_height_landscape_xlarge</dimen>
   <dimen name="input_frame_height">325.4dip</dimen>
 
   <dimen name="firsttime_app_name_text_size">32dip</dimen>

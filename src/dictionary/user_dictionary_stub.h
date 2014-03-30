@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -54,30 +54,27 @@ class UserDictionaryStub : public DictionaryInterface {
     return NULL;
   }
 
-  virtual Node *LookupPrefixWithLimit(
-      const char *str, int size,
-      const Limit &limit,
-      NodeAllocatorInterface *allocator) const {
-    return NULL;
-  }
+  virtual void LookupPrefix(
+      StringPiece key, bool use_kana_modifier_insensitive_lookup,
+      Callback *callback) const {}
 
-  virtual Node *LookupPrefix(const char *str, int size,
-                             NodeAllocatorInterface *allocator) const {
-    return NULL;
-  }
-
-  virtual Node *LookupExact(const char *str, int size,
-                            NodeAllocatorInterface *allocator) const {
-    return NULL;
-  }
+  virtual void LookupExact(StringPiece key, Callback *callback) const {}
 
   virtual Node *LookupReverse(const char *str, int size,
                               NodeAllocatorInterface *allocator) const {
     return NULL;
   }
+
+  virtual bool LookupComment(StringPiece key, StringPiece value,
+                             string *comment) const {
+    if (key == "comment" || value == "comment") {
+      comment->assign("UserDictionaryStub");
+      return true;
+    }
+    return false;
+  }
 };
 
 }  // namespace mozc
-
 
 #endif  // MOZC_DICTIONARY_USER_DICTIONARY_STUB_H_

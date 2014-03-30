@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -142,7 +142,7 @@ TEST_F(TableTest, LookUp) {
     // "ん"
     { "nn", true, "\xe3\x82\x93", "" },
   };
-  static const int size = ARRAYSIZE_UNSAFE(test_cases);
+  static const int size = arraysize(test_cases);
 
   Table table;
   InitTable(&table);
@@ -204,7 +204,7 @@ TEST_F(TableTest, Punctuations) {
   config::ConfigHandler::Reload();
   commands::Request request;
 
-  for (int i = 0; i < ARRAYSIZE_UNSAFE(test_cases); ++i) {
+  for (int i = 0; i < arraysize(test_cases); ++i) {
     config::Config config;
     config.set_punctuation_method(test_cases[i].method);
     EXPECT_TRUE(config::ConfigHandler::SetConfig(config));
@@ -253,7 +253,7 @@ TEST_F(TableTest, Symbols) {
   config::ConfigHandler::Reload();
   commands::Request request;
 
-  for (int i = 0; i < ARRAYSIZE_UNSAFE(test_cases); ++i) {
+  for (int i = 0; i < arraysize(test_cases); ++i) {
     config::Config config;
     config.set_symbol_method(test_cases[i].method);
     EXPECT_TRUE(config::ConfigHandler::SetConfig(config));
@@ -838,6 +838,7 @@ TEST_F(TableTest, MobileMode) {
     // "き"
     EXPECT_EQ("\xE3\x81\x8D", entry->pending());
   }
+
 }
 
 TEST_F(TableTest, OrderOfAddRule) {

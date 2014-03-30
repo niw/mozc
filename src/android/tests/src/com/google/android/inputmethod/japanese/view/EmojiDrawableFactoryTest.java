@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -150,7 +150,7 @@ public class EmojiDrawableFactoryTest extends InstrumentationTestCaseWithMock {
       expect(drawableFactory.getDrawable(1)).andReturn(mockDrawable);
       replayAll();
 
-      emojiFactory.setProviderType(null);
+      emojiFactory.setProviderType(EmojiProviderType.NONE);
       emojiFactory.setProviderType(testData.emojiProviderType);
       assertSame(mockDrawable, emojiFactory.getDrawable(testData.codePoint));
 

@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -89,7 +89,7 @@ TEST(ConverterTest, Converter) {
     { "nannkanain", "\xE3\x81\xAA\xE3\x82\x93\xE3\x81\x8B\xE3\x81\xAA\xE3\x81"
                     "\x84\xE3\x82\x93" },
   };
-  static const int size = ARRAYSIZE_UNSAFE(test_cases);
+  static const int size = arraysize(test_cases);
 
   mozc::composer::Table table;
   InitTable(&table);

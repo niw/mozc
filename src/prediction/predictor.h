@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,6 +32,7 @@
 
 #include <string>
 
+#include "base/scoped_ptr.h"
 #include "converter/conversion_request.h"
 #include "prediction/predictor_interface.h"
 
@@ -43,8 +44,7 @@ class BasePredictor : public PredictorInterface {
   // predictors are owned by this class and deleted on destruction of this
   // instance.
   BasePredictor(PredictorInterface *dictionary_predictor,
-                PredictorInterface *user_history_predictor,
-                PredictorInterface *extra_predictor);
+                PredictorInterface *user_history_predictor);
   virtual ~BasePredictor();
 
   // Overwrite predictor
@@ -80,7 +80,6 @@ class BasePredictor : public PredictorInterface {
  protected:
   scoped_ptr<PredictorInterface> dictionary_predictor_;
   scoped_ptr<PredictorInterface> user_history_predictor_;
-  scoped_ptr<PredictorInterface> extra_predictor_;
 };
 
 // TODO(team): The name should be DesktopPredictor
@@ -88,12 +87,10 @@ class DefaultPredictor : public BasePredictor {
  public:
   static PredictorInterface *CreateDefaultPredictor(
       PredictorInterface *dictionary_predictor,
-      PredictorInterface *user_history_predictor,
-      PredictorInterface *extra_predictor);
+      PredictorInterface *user_history_predictor);
 
   DefaultPredictor(PredictorInterface *dictionary_predictor,
-                   PredictorInterface *user_history_predictor,
-                   PredictorInterface *extra_predictor);
+                   PredictorInterface *user_history_predictor);
   virtual ~DefaultPredictor();
 
   virtual bool PredictForRequest(const ConversionRequest &request,
@@ -110,12 +107,10 @@ class MobilePredictor : public BasePredictor {
  public:
   static PredictorInterface *CreateMobilePredictor(
       PredictorInterface *dictionary_predictor,
-      PredictorInterface *user_history_predictor,
-      PredictorInterface *extra_predictor);
+      PredictorInterface *user_history_predictor);
 
   MobilePredictor(PredictorInterface *dictionary_predictor,
-                  PredictorInterface *user_history_predictor,
-                  PredictorInterface *extra_predictor);
+                  PredictorInterface *user_history_predictor);
   virtual ~MobilePredictor();
 
   virtual bool PredictForRequest(const ConversionRequest &request,

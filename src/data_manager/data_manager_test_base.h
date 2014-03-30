@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -30,7 +30,8 @@
 #ifndef MOZC_DATA_MANAGER_DATA_MANAGER_TEST_BASE_H_
 #define MOZC_DATA_MANAGER_DATA_MANAGER_TEST_BASE_H_
 
-#include "base/base.h"
+#include "base/port.h"
+#include "base/scoped_ptr.h"
 #include "testing/base/public/gunit.h"
 
 namespace mozc {
@@ -65,6 +66,7 @@ class DataManagerTestBase : public ::testing::Test {
   void SegmenterTest_RNodeTest();
   void SegmenterTest_SameAsInternal();
   void SuggestionFilterTest_IsBadSuggestion();
+  void CounterSuffixTest_ValidateTest();
 
   scoped_ptr<DataManagerInterface> data_manager_;
   const uint16 lsize_;

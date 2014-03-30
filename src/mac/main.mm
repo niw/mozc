@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -34,7 +34,6 @@
 #import "mac/GoogleJapaneseInputController.h"
 #import "mac/GoogleJapaneseInputServer.h"
 
-#include "base/base.h"
 #include "base/const.h"
 #include "base/crash_report_handler.h"
 #include "base/logging.h"
@@ -70,7 +69,7 @@ int main(int argc, char *argv[]) {
     scoped_ptr<mozc::client::Client> client(new mozc::client::Client);
     client->PingServer();
   }
-  RunApplicationEventLoop();
+  NSApplicationMain(argc, (const char **)argv);
   [pool drain];
 #ifdef GOOGLE_JAPANESE_INPUT_BUILD
   mozc::CrashReportHandler::Uninitialize();

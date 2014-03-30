@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -202,6 +202,23 @@ CandidateFilter::ResultType CandidateFilter::FilterCandidateInternal(
     return CandidateFilter::BAD_CANDIDATE;
   }
 
+  // Suppress "書います", "買いて"
+  if (Util::GetScriptType(nodes[0]->value) != Util::HIRAGANA &&
+      ((nodes.size() >= 2 &&
+        pos_matcher_->IsKagyoTaConnectionVerb(nodes[0]->rid) &&
+        pos_matcher_->IsMasuSuffix(nodes[1]->lid)) ||
+       (nodes[0]->lid != nodes[0]->rid &&
+        pos_matcher_->IsKagyoTaConnectionVerb(nodes[0]->lid) &&
+        pos_matcher_->IsMasuSuffix(nodes[0]->rid)) ||
+       (nodes.size() >= 2 &&
+        pos_matcher_->IsWagyoRenyoConnectionVerb(nodes[0]->rid) &&
+        pos_matcher_->IsTeSuffix(nodes[1]->lid)) ||
+       (nodes[0]->lid != nodes[0]->rid &&
+        pos_matcher_->IsWagyoRenyoConnectionVerb(nodes[0]->lid) &&
+        pos_matcher_->IsTeSuffix(nodes[0]->rid)))) {
+    return CandidateFilter::BAD_CANDIDATE;
+  }
+
   // The candidate consists of only one token
   if (nodes.size() == 1) {
     VLOG(1) << "don't filter single segment";
@@ -345,13 +362,21 @@ CandidateFilter::ResultType CandidateFilter::FilterCandidate(
     const Segment::Candidate *candidate,
     const vector<const Node *> &nodes,
     Segments::RequestType request_type) {
-  const ResultType result =
-      FilterCandidateInternal(original_key, candidate, nodes, request_type);
-  if (result != GOOD_CANDIDATE) {
+  if (request_type == Segments::REVERSE_CONVERSION) {
+    // In reverse conversion, only remove duplicates because the filtering
+    // criteria of FilterCandidateInternal() are completely designed for
+    // (forward) conversion.
+    const bool inserted = seen_.insert(candidate->value).second;
+    return inserted ? GOOD_CANDIDATE : BAD_CANDIDATE;
+  } else {
+    const ResultType result = FilterCandidateInternal(original_key, candidate,
+                                                      nodes, request_type);
+    if (result != GOOD_CANDIDATE) {
+      return result;
+    }
+    seen_.insert(candidate->value);
     return result;
   }
-  seen_.insert(candidate->value);
-  return result;
 }
 
 }  // namespace converter

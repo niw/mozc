@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -39,6 +39,10 @@ namespace commands {
 class Candidates;
 }  // namespace commands
 
+namespace renderer {
+class TableLayout;
+}  // namespace renderer
+
 namespace win32 {
 namespace tsf {
 
@@ -51,6 +55,7 @@ class TipUiRendererImmersive {
   // offset length from the left edge with which the candidate UI should be
   // aligned.
   static HBITMAP Render(const commands::Candidates &candidates,
+                        renderer::TableLayout *table_layout,
                         SIZE *size,
                         int *left_align_offset);
 

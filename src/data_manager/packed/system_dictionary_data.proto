@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -137,4 +137,5 @@ message SystemDictionaryData {
   optional bytes dictionary_data = 14;
   optional bytes collocation_data = 15;
   optional bytes collocation_suppression_data = 16;
+  repeated string counter_suffix_data = 17;
 };

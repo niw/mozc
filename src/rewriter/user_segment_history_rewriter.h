@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -34,9 +34,7 @@
 #include <vector>
 
 #include "rewriter/rewriter_interface.h"
-#include "base/base.h"
 #include "converter/segments.h"
-#include "dictionary/pos_matcher.h"
 
 namespace mozc {
 class ConversionRequest;
@@ -62,7 +60,7 @@ class UserSegmentHistoryRewriter : public RewriterInterface {
   virtual bool Rewrite(const ConversionRequest &request,
                        Segments *segments) const;
 
-  virtual void Finish(Segments *segments);
+  virtual void Finish(const ConversionRequest &request, Segments *segments);
 
   virtual bool Reload();
 

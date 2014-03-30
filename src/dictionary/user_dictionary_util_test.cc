@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -29,12 +29,12 @@
 
 #include "dictionary/user_dictionary_util.h"
 
-#include "base/testing_util.h"
 #include "base/util.h"
 #include "base/protobuf/message.h"
 #include "base/protobuf/unknown_field_set.h"
 #include "testing/base/public/googletest.h"
 #include "testing/base/public/gunit.h"
+#include "testing/base/public/testing_util.h"
 
 namespace mozc {
 
@@ -286,18 +286,6 @@ TEST(UserDictionaryUtilTest, IsStorageFull) {
 TEST(UserDictionaryUtilTest, IsDictionaryFull) {
   UserDictionary dictionary;
   for (int i = 0; i < UserDictionaryUtil::max_entry_size(); ++i) {
-    EXPECT_FALSE(UserDictionaryUtil::IsDictionaryFull(dictionary));
-    dictionary.add_entries();
-  }
-
-  EXPECT_TRUE(UserDictionaryUtil::IsDictionaryFull(dictionary));
-}
-
-TEST(UserDictioanryUtilTest, IsSyncDictionaryFull) {
-  UserDictionary dictionary;
-  dictionary.set_syncable(true);
-
-  for (int i = 0; i < UserDictionaryUtil::max_sync_entry_size(); ++i) {
     EXPECT_FALSE(UserDictionaryUtil::IsDictionaryFull(dictionary));
     dictionary.add_entries();
   }
@@ -630,13 +618,6 @@ TEST(UserDictionaryUtilTest, DeleteDictionary) {
   storage.add_dictionaries()->set_id(2);
   EXPECT_FALSE(UserDictionaryUtil::DeleteDictionary(
       &storage, 100, NULL, NULL));
-
-  // Deletion for syncable dictionary should fail, too.
-  storage.Clear();
-  storage.add_dictionaries()->set_id(1);
-  storage.add_dictionaries()->set_id(2);
-  storage.mutable_dictionaries(0)->set_syncable(true);
-  EXPECT_FALSE(UserDictionaryUtil::DeleteDictionary(&storage, 1, NULL, NULL));
 
   // Keep deleted dictionary.
   storage.Clear();
