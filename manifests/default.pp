@@ -36,7 +36,7 @@ exec {
     command => "/usr/bin/apt-get update";
 
   "download android-sdk":
-    command => "/usr/bin/curl 'http://dl.google.com/android/android-sdk_r22.0.1-linux.tgz' | /bin/tar -x -z -C /opt/android",
+    command => "/usr/bin/curl 'http://dl.google.com/android/android-sdk_r22.6.2-linux.tgz' | /bin/tar -x -z -C /opt/android",
     creates => "/opt/android/android-sdk-linux",
     user => $user,
     require => [
@@ -57,8 +57,8 @@ exec {
     ];
 
   "download android-ndk":
-    command => "/usr/bin/curl 'http://dl.google.com/android/ndk/android-ndk-r8c-linux-x86.tar.bz2' | /bin/tar -x -j -C /opt/android",
-    creates => "/opt/android/android-ndk-r8c",
+    command => "/usr/bin/curl 'http://dl.google.com/android/ndk/android-ndk-r9d-linux-x86.tar.bz2' | /bin/tar -x -j -C /opt/android",
+    creates => "/opt/android/android-ndk-r9d",
     user => $user,
     require => [
       Package["curl"],
