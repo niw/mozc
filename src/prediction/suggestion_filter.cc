@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -29,14 +29,12 @@
 
 #include "prediction/suggestion_filter.h"
 
-#include "base/base.h"
 #include "base/util.h"
 #include "storage/existence_filter.h"
 
 namespace mozc {
 
-SuggestionFilter::SuggestionFilter(const char *data, size_t size)
-    : filter_(NULL) {
+SuggestionFilter::SuggestionFilter(const char *data, size_t size) {
   filter_.reset(mozc::storage::ExistenceFilter::Read(data, size));
   LOG_IF(ERROR, filter_.get() == NULL)
       << "SuggestionFilterData is broken";

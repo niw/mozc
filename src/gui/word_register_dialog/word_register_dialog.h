@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -33,7 +33,8 @@
 #include <QtCore/QString>
 #include <QtGui/QtGui>
 #include <QtGui/QDialog>
-#include "base/base.h"
+#include "base/port.h"
+#include "base/scoped_ptr.h"
 #include "gui/word_register_dialog/ui_word_register_dialog.h"
 
 namespace mozc {

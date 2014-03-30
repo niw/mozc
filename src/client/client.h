@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -34,7 +34,8 @@
 
 #include <string>
 #include <vector>
-#include "base/base.h"
+#include "base/port.h"
+#include "base/scoped_ptr.h"
 #include "client/client_interface.h"
 #include "session/commands.pb.h"
 #include "testing/base/public/gunit_prod.h"
@@ -133,13 +134,6 @@ class Client : public ClientInterface {
 
   bool NoOperation();
   bool PingServer() const;
-
-  // these methods are expected to be called from
-  // the converter process.
-  bool StartCloudSync();
-  bool ClearCloudSync();
-  bool GetCloudSyncStatus(commands::CloudSyncStatus *cloud_sync_status);
-  bool AddAuthCode(const commands::Input::AuthorizationInfo &auth_info);
 
   void Reset();
 
@@ -252,7 +246,7 @@ class Client : public ClientInterface {
   uint64 id_;
   IPCClientFactoryInterface *client_factory_;
   scoped_ptr<ServerLauncherInterface> server_launcher_;
-  scoped_array<char> result_;
+  scoped_ptr<char[]> result_;
   scoped_ptr<config::Config> preferences_;
   int timeout_;
   ServerStatus server_status_;

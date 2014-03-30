@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -40,7 +40,9 @@
 #include <vector>
 
 #include "base/port.h"
+#ifdef OS_ANDROID
 #include "base/scoped_ptr.h"
+#endif  // OS_ANDROID
 #include "base/singleton.h"
 #include "base/system_util.h"
 #include "base/util.h"
@@ -127,7 +129,12 @@ class TestHTTPClient : public HTTPClientInterface {
 
 const uint32 kOneDaySec = 24 * 60 * 60;  // 24 hours
 const uint32 kHalfDaySec = 12 * 60 * 60;  // 12 hours
-const char kBaseUrl[] = "http://clients4.google.com/tbproxy/usagestats";
+const char kBaseUrl[] =
+#ifdef __native_client__
+    "https://clients4.google.com/tbproxy/usagestats";
+#else  // __native_client__
+    "http://clients4.google.com/tbproxy/usagestats";
+#endif  // __native_client__
 const char kTestClientId[] = "TestClientId";
 const char kCountStatsKey[] = "Commit";
 const uint32 kCountStatsDefaultValue = 100;
@@ -665,7 +672,7 @@ class ClientIdTestMockJavaEncryptor : public ::mozc::jni::MockJavaEncryptor {
   }
 
   static string GetRandomAsciiSequence(size_t size) {
-    scoped_array<char> buffer(new char[size]);
+    scoped_ptr<char[]> buffer(new char[size]);
     Util::GetRandomAsciiSequence(buffer.get(), size);
     return string(buffer.get(), size);
   }
@@ -696,7 +703,7 @@ class ClientIdTest : public ::testing::Test {
  private:
 #ifdef OS_ANDROID
   scoped_ptr< ::mozc::jni::MockJavaVM> jvm_;
-#endif
+#endif  // OS_ANDROID
 };
 }  // namespace
 

@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -47,7 +47,8 @@
 #include <streambuf>
 #include <string>
 
-#include "base/base.h"
+#include "base/port.h"
+#include "base/scoped_ptr.h"
 
 #ifdef OS_ANDROID
 // This is used only for code generation, so shouldn't be used from android
@@ -287,7 +288,7 @@ class BasicCodeGenByteArrayStreamBuf
 #endif
 
   size_t internal_output_buffer_size_;
-  scoped_array<char_type> internal_output_buffer_;
+  scoped_ptr<char_type[]> internal_output_buffer_;
 
   std::basic_ostream<char> *output_stream_;
   codegenstream::StreamOwner own_output_stream_;

@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,6 @@
 
 #include <QtGui/QApplication>
 #include <QtGui/QtGui>
-#include "base/base.h"
 #include "base/system_util.h"
 #include "gui/administration_dialog/administration_dialog.h"
 #include "gui/base/locale_util.h"

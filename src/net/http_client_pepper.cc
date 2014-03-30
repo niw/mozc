@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -36,12 +36,15 @@
 #include <ppapi/cpp/var.h>
 #include <ppapi/utility/completion_callback_factory.h>
 
-#include "base/base.h"
+#include <memory>
+
 #include "base/logging.h"
 #include "base/mutex.h"
 #include "base/number_util.h"
 #include "base/pepper_scoped_obj.h"
 #include "base/util.h"
+
+using std::unique_ptr;
 
 namespace mozc {
 namespace {
@@ -75,7 +78,7 @@ class PepperURLLoader {
   bool result_;
   bool finished_;
   bool timeouted_;
-  scoped_array<char> tmp_buffer_;
+  unique_ptr<char[]> tmp_buffer_;
   pp::CompletionCallbackFactory<PepperURLLoader> cc_factory_;
   scoped_main_thread_destructed_object<pp::URLRequestInfo> url_request_;
   scoped_main_thread_destructed_object<pp::URLLoader> url_loader_;
@@ -126,6 +129,7 @@ void PepperURLLoader::StartImpl(int32_t result) {
   CHECK(!url_loader_.get());
   url_request_.reset(new pp::URLRequestInfo(g_pepper_instance));
   url_loader_.reset(new pp::URLLoader(g_pepper_instance));
+  url_request_->SetAllowCrossOriginRequests(true);
   url_request_->SetURL(url_);
   switch (type_) {
     case HTTP_GET:

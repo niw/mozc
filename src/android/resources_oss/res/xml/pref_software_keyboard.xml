@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
- Copyright 2010-2013, Google Inc.
+ Copyright 2010-2014, Google Inc.
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -53,7 +53,7 @@
       <intent
           android:action="android.intent.action.MAIN"
           android:targetPackage="org.mozc.android.inputmethod.japanese"
-          android:targetClass="@string/mozc_software_keyboard_advanced_settings_preference_activity" />
+          android:targetClass="org.mozc.android.inputmethod.japanese.MozcProxySoftwareKeyboardAdvancedSettingActivity" />
     </Preference>
   </PreferenceCategory>
 </PreferenceScreen>

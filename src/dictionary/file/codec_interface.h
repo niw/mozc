@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -33,7 +33,7 @@
 #include <ostream>
 #include <vector>
 
-#include "base/base.h"
+#include "base/port.h"
 #include "dictionary/file/section.h"
 
 namespace mozc {
@@ -68,8 +68,7 @@ class DictionaryFileCodecFactory {
   static void SetCodec(DictionaryFileCodecInterface *codec);
 
  private:
-  DictionaryFileCodecFactory() {}
-  ~DictionaryFileCodecFactory() {}
+  DISALLOW_IMPLICIT_CONSTRUCTORS(DictionaryFileCodecFactory);
 };
 
 }  // namespace mozc

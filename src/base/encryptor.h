@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -31,7 +31,8 @@
 #define MOZC_BASE_ENCRYPTOR_H_
 
 #include <string>
-#include "base/base.h"
+#include "base/port.h"
+#include "base/scoped_ptr.h"
 
 namespace mozc {
 
@@ -89,7 +90,7 @@ class Encryptor {
 
    private:
     scoped_ptr<KeyData> data_;
-    scoped_array<uint8> iv_;
+    scoped_ptr<uint8[]> iv_;
     bool is_available_;
   };
 

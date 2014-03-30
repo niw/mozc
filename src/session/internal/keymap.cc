@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -36,10 +36,11 @@
 #include <string>
 #include <vector>
 
-#include "base/base.h"
 #include "base/config_file_stream.h"
 #include "base/file_stream.h"
 #include "base/logging.h"
+#include "base/port.h"
+#include "base/scoped_ptr.h"
 #include "base/util.h"
 #include "config/config.pb.h"
 #include "config/config_handler.h"
@@ -58,9 +59,8 @@ static const char kCustomKeyMapFile[] = "user://keymap.tsv";
 static const char kMobileKeyMapFile[] = "system://mobile.tsv";
 
 // TODO(team): Investigate if "InputModeX" commands should be
-//     functional on ChromeOS and/or Android or not. Remove the
-//     condition if available.
-#if defined(OS_MACOSX) || defined(OS_CHROMEOS) || defined(OS_ANDROID)
+//     functional on Android or not. Remove the condition if available.
+#if defined(OS_MACOSX) || defined(OS_ANDROID)
 const bool kInputModeXCommandSupported = false;
 #else
 const bool kInputModeXCommandSupported = true;
@@ -203,7 +203,7 @@ bool KeyMapManager::LoadStreamWithErrors(istream *ifs, vector<string> *errors) {
   }
 
   commands::KeyEvent key_event;
-  KeyParser::ParseKey("ASCII", &key_event);
+  KeyParser::ParseKey("TextInput", &key_event);
   keymap_precomposition_.AddRule(key_event,
                                  PrecompositionState::INSERT_CHARACTER);
   keymap_composition_.AddRule(key_event, CompositionState::INSERT_CHARACTER);

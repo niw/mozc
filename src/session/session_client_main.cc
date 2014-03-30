@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -85,8 +85,8 @@ void Loop(istream *input, ostream *output) {
 
 int main(int argc, char **argv) {
   InitGoogle(argv[0], &argc, &argv, false);
-  scoped_ptr<mozc::InputFileStream> input_file(NULL);
-  scoped_ptr<mozc::OutputFileStream> output_file(NULL);
+  scoped_ptr<mozc::InputFileStream> input_file;
+  scoped_ptr<mozc::OutputFileStream> output_file;
   istream *input = NULL;
   ostream *output = NULL;
 

@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -31,6 +31,7 @@
   'variables': {
     'relative_dir': 'base',
     'gen_out_dir': '<(SHARED_INTERMEDIATE_DIR)/<(relative_dir)',
+    'document_dir%': '/usr/lib/mozc/documents',
   },
   'targets': [
     {
@@ -47,7 +48,6 @@
         'run_level.cc',
         'scheduler.cc',
         'stopwatch.cc',
-        'svm.cc',
         'timer.cc',
         'unnamed_event.cc',
         'update_checker.cc',
@@ -71,14 +71,8 @@
         }],
         ['OS=="win"', {
           'sources': [
+            'win_api_test_helper.cc',
             'win_sandbox.cc',
-          ],
-          'conditions': [
-            ['branding=="GoogleJapaneseInput"', {
-              'dependencies': [
-                '<(DEPTH)/third_party/breakpad/breakpad.gyp:breakpad',
-              ],
-            }],
           ],
         }],
         # When the target platform is 'Android', build settings are currently
@@ -157,6 +151,16 @@
             },
           },
         }],
+        ['target_platform=="Linux" and server_dir!=""', {
+          'defines': [
+            'MOZC_SERVER_DIRECTORY="<(server_dir)"',
+          ],
+        }],
+        ['target_platform=="Linux" and document_dir!=""', {
+          'defines': [
+            'MOZC_DOCUMENT_DIRECTORY="<(document_dir)"',
+          ],
+        }],
         ['target_platform=="Android" and _toolset=="target"', {
           'sources': [
             'android_util.cc',
@@ -219,17 +223,6 @@
       ],
     },
     {
-      'target_name': 'jni_proxy',
-      'type': 'static_library',
-      'conditions': [
-        ['target_platform=="Android"', {
-          'sources': [
-            'android_jni_proxy.cc'
-          ],
-        }],
-      ],
-    },
-    {
       'target_name': 'encryptor',
       'type': 'static_library',
       'sources': [
@@ -258,9 +251,8 @@
           'link_settings': {
             'libraries': [
               '/usr/lib/libcrypto.dylib',  # used in 'encryptor.cc'
-              '/usr/lib/libssl.dylib',     # used in 'encryptor.cc'
             ],
-          }
+          },
         }],
         ['OS=="linux" and target_platform!="Android" and '
          'not (target_platform=="NaCl" and _toolset=="target")', {
@@ -296,17 +288,6 @@
       ],
     },
     {
-      'target_name': 'testing_util',
-      'type': 'static_library',
-      'sources': [
-        'testing_util.cc',
-      ],
-      'dependencies': [
-        'base_core',
-        '../protobuf/protobuf.gyp:protobuf',
-      ],
-    },
-    {
       'target_name': 'gen_version_def',
       'type': 'none',
       'toolsets': ['host'],
@@ -326,6 +307,7 @@
             '--version_file', '../mozc_version.txt',
             '--input', 'version_def_template.h',
             '--output', '<(gen_out_dir)/version_def.h',
+            '--branding', '<(branding)',
           ],
         },
       ],
@@ -408,19 +390,8 @@
       ],
     },
     {
-      'target_name': 'pepper_file_system_mock',
-      'type': 'static_library',
-      'sources': [
-        'pepper_file_system_mock.cc',
-      ],
-      'dependencies': [
-        'base.gyp:base',
-      ],
-    },
-    {
       'target_name': 'crash_report_handler',
       'type': 'static_library',
-      'toolsets': ['target'],
       'sources': [
         'crash_report_handler.cc',
       ],
@@ -428,29 +399,100 @@
         'base',
       ],
       'conditions': [
-        ['OS=="mac"', {
+        ['OS=="win" and branding=="GoogleJapaneseInput"', {
           'dependencies': [
-            # We cannot add 'crash_report_handler.mm' to 'sources' here
-            # because we already have 'crash_report_handler.cc' in this
-            # target. When a static library target has multiple files
-            # with the same basenames in its 'sources' list,
-            # gyp (r1354+) treats it as an error.
-            'crash_report_handler_mac',
+            'breakpad',
           ],
+        }],
+        ['OS=="mac"', {
+          'sources': [
+            'crash_report_handler_mac.mm',
+          ],
+          'sources!': [
+            'crash_report_handler.cc',
+          ]
         }],
       ],
     },
   ],
   'conditions': [
-    ['OS=="mac"', {
+    ['target_platform=="Android"', {
       'targets': [
         {
-          'target_name': 'crash_report_handler_mac',
+          'target_name': 'jni_proxy',
           'type': 'static_library',
           'sources': [
-            'crash_report_handler.mm',
+            'android_jni_proxy.cc'
           ],
         },
+      ],
+    }],
+    ['OS=="win" and branding=="GoogleJapaneseInput"', {
+      'targets': [
+        {
+          'target_name': 'breakpad',
+          'type': 'static_library',
+          'variables': {
+            'breakpad_root': '<(third_party_dir)/breakpad',
+          },
+          'include_dirs': [
+            # Use the local glog configured for Windows.
+            # See b/2954681 for details.
+            '<(breakpad_root)/src/third_party/glog/glog/src/windows',
+            '<(breakpad_root)/src',
+          ],
+          'sources': [
+            '<(breakpad_root)/src/client/windows/crash_generation/client_info.cc',
+            '<(breakpad_root)/src/client/windows/crash_generation/crash_generation_client.cc',
+            '<(breakpad_root)/src/client/windows/crash_generation/crash_generation_server.cc',
+            '<(breakpad_root)/src/client/windows/crash_generation/minidump_generator.cc',
+            '<(breakpad_root)/src/client/windows/handler/exception_handler.cc',
+            '<(breakpad_root)/src/client/windows/sender/crash_report_sender.cc',
+            '<(breakpad_root)/src/common/windows/guid_string.cc',
+            '<(breakpad_root)/src/common/windows/http_upload.cc'
+          ],
+          'direct_dependent_settings': {
+            'include_dirs': [
+              '<(breakpad_root)/src',
+            ],
+          },
+          'link_settings': {
+            'msvs_settings': {
+              'VCLinkerTool': {
+                'AdditionalDependencies': [
+                  'dbghelp.lib',
+                ],
+              },
+            },
+          },
+        },
+      ]},
+    ],
+    ['OS=="win"', {
+      'targets': [
+        {
+          'target_name': 'win_font_test_helper',
+          'type': 'static_library',
+          'sources': [
+            'win_font_test_helper.cc',
+          ],
+          'dependencies': [
+            'base',
+          ],
+          'copies': [
+            {
+              'files': [
+                '<(DEPTH)/third_party/ipa_font/ipaexg.ttf',
+                '<(DEPTH)/third_party/ipa_font/ipaexm.ttf',
+              ],
+              'destination': '<(PRODUCT_DIR)/data',
+            },
+          ],
+        },
+      ]},
+    ],
+    ['OS=="mac"', {
+      'targets': [
         {
           'target_name': 'mac_util_main',
           'type': 'executable',
@@ -465,6 +507,16 @@
     ],
     ['target_platform=="NaCl"', {
       'targets': [
+        {
+          'target_name': 'pepper_file_system_mock',
+          'type': 'static_library',
+          'sources': [
+            'pepper_file_system_mock.cc',
+          ],
+          'dependencies': [
+            'base.gyp:base',
+          ],
+        },
         {
           'target_name': 'openssl_crypto_aes',
           'type': 'static_library',

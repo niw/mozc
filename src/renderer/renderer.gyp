@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -87,13 +87,6 @@
         '../ipc/ipc.gyp:ipc',
         '../session/session_base.gyp:session_protocol',
         'renderer_protocol',
-      ],
-      'conditions': [
-        ['enable_webservice_infolist==1', {
-          'dependencies': [
-            'webservice_infolist_handler',
-          ],
-        }],
       ],
     },
     {
@@ -224,11 +217,6 @@
         'window_util_test',
       ],
       'conditions': [
-        ['enable_webservice_infolist==1', {
-          'dependencies': [
-            'webservice_infolist_handler_test',
-          ],
-        }],
         ['OS=="win"', {
           'dependencies': [
             'win32_font_util_test',
@@ -240,50 +228,15 @@
             'gtk_renderer_test',
           ],
         }],
+        # Android runs nothing.
+        ['target_platform=="Android"', {
+          'dependencies=': [],
+        },
+      ],
       ],
     },
   ],
   'conditions': [
-    ['enable_webservice_infolist==1', {
-      'targets': [
-        {
-          'target_name': 'webservice_infolist_handler',
-          'type': 'static_library',
-          'sources': [
-            'webservice_infolist_handler.cc',
-          ],
-          'dependencies': [
-            '../base/base.gyp:base',
-            '../config/config.gyp:config_handler',
-            '../config/config.gyp:genproto_config#host',
-            '../libxml/libxml.gyp:libxml',
-            '../net/net.gyp:jsonpath',
-            '../net/net.gyp:http_client',
-            '../session/session_base.gyp:session_protocol',
-            'renderer_protocol',
-          ],
-          'include_dirs' : [
-            '../libxml/libxml2-2.7.7/include',
-          ],
-        },
-        {
-          'target_name': 'webservice_infolist_handler_test',
-          'type': 'executable',
-          'sources': [
-            'webservice_infolist_handler_test.cc',
-          ],
-          'dependencies': [
-            '../net/net.gyp:http_client_mock',
-            '../testing/testing.gyp:gtest_main',
-            'renderer_server',
-            'webservice_infolist_handler',
-          ],
-          'variables': {
-            'test_size': 'small',
-          },
-        },
-      ],
-    }],
     ['OS=="win"', {
       'targets': [
         {
@@ -409,7 +362,8 @@
             'win32/win32_renderer_util_test.cc',
           ],
           'dependencies': [
-            '../net/net.gyp:jsoncpp',
+            '../base/base.gyp:win_font_test_helper',
+            '../net/jsoncpp.gyp:jsoncpp',
             '../testing/testing.gyp:gtest_main',
             'install_renderer_core_test_data',
             'win32_renderer_core',
@@ -424,16 +378,6 @@
               ],
             },
           },
-          # Use IPAex font, which contains IVS characters for b/2876066
-          'copies': [
-            {
-              'files': [
-                '<(DEPTH)/third_party/ipa_font/ipaexg.ttf',
-                '<(DEPTH)/third_party/ipa_font/ipaexm.ttf',
-              ],
-              'destination': '<(PRODUCT_DIR)/data',
-            },
-          ],
         },
         {
           'target_name': 'win32_text_renderer',
@@ -458,6 +402,7 @@
             'win32/candidate_window.cc',
             'win32/composition_window.cc',
             'win32/infolist_window.cc',
+            'win32/indicator_window.cc',
             '<(gen_out_dir)/mozc_renderer_autogen.rc',
           ],
           'dependencies': [
@@ -480,7 +425,7 @@
           'msvs_settings': {
             'VCManifestTool': {
               'AdditionalManifestFiles': 'mozc_renderer.exe.manifest',
-              'EmbedManifest': 'false',
+              'EmbedManifest': 'true',
             },
           },
         },

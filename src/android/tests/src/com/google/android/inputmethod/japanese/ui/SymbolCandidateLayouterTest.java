@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -51,8 +51,8 @@ public class SymbolCandidateLayouterTest extends TestCase {
 
   @SmallTest
   public void testSetViewSize() {
-    SymbolCandidateLayouter layouter = new SymbolCandidateLayouter(DUMMY_SPAN_FACTORY);
-
+    SymbolCandidateLayouter layouter = new SymbolCandidateLayouter();
+    layouter.setSpanFactory(DUMMY_SPAN_FACTORY);
     layouter.setViewSize(0, 0);
 
     // If and only if the width is changed, the layout should be invalidated.
@@ -63,8 +63,8 @@ public class SymbolCandidateLayouterTest extends TestCase {
   }
 
   public void testPageSize() {
-    SymbolCandidateLayouter layouter = new SymbolCandidateLayouter(DUMMY_SPAN_FACTORY);
-
+    SymbolCandidateLayouter layouter = new SymbolCandidateLayouter();
+    layouter.setSpanFactory(DUMMY_SPAN_FACTORY);
     layouter.setRowHeight(10);
 
     // The page width should be equal to the view width.

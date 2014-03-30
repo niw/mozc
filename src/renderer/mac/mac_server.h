@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -33,8 +33,8 @@
 #include <string>
 #include <pthread.h>
 
-#include "base/base.h"
 #include "base/mutex.h"
+#include "base/port.h"
 #include "renderer/renderer_interface.h"
 #include "renderer/renderer_server.h"
 
@@ -48,7 +48,7 @@ class CandidateController;
 // Actual window management is delegated to CandidateController class.
 class MacServer : public RendererServer {
  public:
-  MacServer();
+  MacServer(int argc, const char **argv);
   virtual bool AsyncExecCommand(string *proto_message);
   virtual int StartMessageLoop();
 
@@ -64,6 +64,8 @@ class MacServer : public RendererServer {
   pthread_cond_t event_;
   string message_;
   scoped_ptr<CandidateController> controller_;
+  int argc_;
+  const char **argv_;
 
   DISALLOW_COPY_AND_ASSIGN(MacServer);
 };

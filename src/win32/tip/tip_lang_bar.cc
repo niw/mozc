@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -147,8 +147,7 @@ TipLangBarCallback::ItemId GetItemId(DWORD composition_mode) {
 TipLangBarCallback::~TipLangBarCallback() {}
 
 TipLangBar::TipLangBar()
-    : input_button_cookie_(TF_INVALID_COOKIE),
-      tool_button_menu_(nullptr),
+    : tool_button_menu_(nullptr),
       help_menu_(nullptr),
       help_menu_cookie_(TF_INVALID_COOKIE) {}
 
@@ -158,9 +157,13 @@ TipLangBar::~TipLangBar() {}
 HRESULT TipLangBar::InitLangBar(TipLangBarCallback *text_service) {
   HRESULT result = S_OK;
 
+  // TODO(yukawa): Optimize this method. We do not need to obtain an instance of
+  // ITfLangBarItemMgr unless there remains something to be initialized for
+  // LangBar.
+
   // A workaround to satisfy both b/6106437 and b/6641460.
   // On Windows 8, keep the instance into |lang_bar_item_mgr_for_win8_|.
-  // On prior OSes, always instanciate new LangBarItemMgr object.
+  // On prior OSes, always instantiate new LangBarItemMgr object.
   CComPtr<ITfLangBarItemMgr> item;
   if (SystemUtil::IsWindows8OrLater()) {
     if (!lang_bar_item_mgr_for_win8_) {
@@ -382,7 +385,7 @@ HRESULT TipLangBar::UninitLangBar() {
 
   // A workaround to satisfy both b/6106437 and b/6641460.
   // On Windows 8, retrieves the instance from |lang_bar_item_mgr_for_win8_|.
-  // On prior OSes, always instanciates new LangBarItemMgr object.
+  // On prior OSes, always instantiates new LangBarItemMgr object.
   CComPtr<ITfLangBarItemMgr> item;
   if (SystemUtil::IsWindows8OrLater()) {
     // Move the ownership.

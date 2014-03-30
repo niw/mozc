@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -106,7 +106,7 @@ int main(int argc, char *argv[]) {
     result_code = server.StartServer();
 #elif defined(OS_MACOSX)
     mozc::renderer::mac::MacServer::Init();
-    mozc::renderer::mac::MacServer server;
+    mozc::renderer::mac::MacServer server(argc, (const char **)argv);
     mozc::renderer::mac::CandidateController renderer;
     mozc::renderer::mac::MacServerSendCommand send_command;
     server.SetRendererInterface(&renderer);

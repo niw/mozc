@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,11 +32,13 @@
 
 #include <vector>
 
-#include "base/base.h"
 #include "base/stl_util.h"
+#include "config/config.pb.h"
+#include "config/config_handler.h"
 #include "converter/conversion_request.h"
 #include "converter/segments.h"
 #include "rewriter/rewriter_interface.h"
+#include "session/commands.pb.h"
 
 namespace mozc {
 
@@ -84,6 +86,18 @@ class MergerRewriter : public RewriterInterface {
         result |= rewriters_[i]->Rewrite(request, segments);
       }
     }
+
+    if (segments->request_type() == Segments::SUGGESTION &&
+        segments->conversion_segments_size() == 1 &&
+        !request.request().mixed_conversion()) {
+      const size_t max_suggestions = GET_CONFIG(suggestions_size);
+      Segment *segment = segments->mutable_conversion_segment(0);
+      const size_t candidate_size = segment->candidates_size();
+      if (candidate_size > max_suggestions) {
+        segment->erase_candidates(max_suggestions,
+                                  candidate_size - max_suggestions);
+      }
+    }
     return result;
   }
 
@@ -105,9 +119,9 @@ class MergerRewriter : public RewriterInterface {
   }
 
   // Hook(s) for all mutable operations
-  virtual void Finish(Segments *segments) {
+  virtual void Finish(const ConversionRequest &request, Segments *segments) {
     for (size_t i = 0; i < rewriters_.size(); ++i) {
-      rewriters_[i]->Finish(segments);
+      rewriters_[i]->Finish(request, segments);
     }
   }
 

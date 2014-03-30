@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -202,7 +202,7 @@ int main(int argc, char **argv) {
     mozc::SystemUtil::SetUserProfileDirectory(FLAGS_profile_dir);
   }
 
-  scoped_ptr<mozc::InputFileStream> input_file(NULL);
+  scoped_ptr<mozc::InputFileStream> input_file;
   istream *input = NULL;
 
   if (!FLAGS_input.empty()) {

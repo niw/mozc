@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -48,8 +48,6 @@ class CommandRewriter : public RewriterInterface  {
 
   virtual bool Rewrite(const ConversionRequest &request,
                        Segments *segments) const;
-
-  virtual void Finish(Segments *segments);
 
  private:
   bool RewriteSegment(Segment *segment) const;

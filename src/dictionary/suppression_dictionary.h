@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,8 +32,9 @@
 
 #include <set>
 #include <string>
-#include "base/base.h"
+
 #include "base/mutex.h"
+#include "base/port.h"
 
 namespace mozc {
 
@@ -44,7 +45,7 @@ class SuppressionDictionary {
   SuppressionDictionary();
   virtual ~SuppressionDictionary();
 
-  // Lock dictioanry.
+  // Lock dictionary.
   // call Lock() before calling AddWord() or Clear();
   // When the dictionary is locked, Supress() return false.
   //
@@ -85,7 +86,10 @@ class SuppressionDictionary {
   bool has_key_empty_;
   bool has_value_empty_;
   Mutex mutex_;
+
+  DISALLOW_COPY_AND_ASSIGN(SuppressionDictionary);
 };
-}
+
+}  // namespace mozc
 
 #endif  // MOZC_DICTIONARY_SUPPRESSION_DICTIONARY_H_

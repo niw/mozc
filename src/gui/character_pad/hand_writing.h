@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -31,6 +31,8 @@
 #define MOZC_GUI_CHARACTER_PAD_HAND_WRITING_H_
 
 #include <QtGui/QMainWindow>
+
+#include "base/scoped_ptr.h"
 #include "gui/character_pad/ui_hand_writing.h"
 
 namespace mozc {

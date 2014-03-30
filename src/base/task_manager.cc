@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -31,7 +31,6 @@
 
 #include <map>
 
-#include "base/base.h"
 #include "base/logging.h"
 #include "base/mutex.h"
 #include "base/stl_util.h"
@@ -54,7 +53,8 @@ struct TaskManager::TaskInfo {
   TaskInfo(const TaskRequestInterface *request_interface,
            TaskManagerCallbackFunc callback_func,
            void *callback_data)
-      : status(TASK_NOT_STARTED), request(request_interface), response(NULL),
+      : status(TASK_NOT_STARTED),
+        request(request_interface),
         callback_func_(callback_func), callback_data_(callback_data),
         task_runner(NULL) {
   }

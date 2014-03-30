@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -28,6 +28,9 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 {
+  'variables': {
+    'zinnia_model_file%': '/usr/share/tegaki/models/zinnia/handwriting-ja.model',
+  },
   'targets': [
     {
       'target_name': 'zinnia_handwriting',
@@ -37,13 +40,20 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
-        '../gui/zinnia.gyp:zinnia',
+        'zinnia.gyp:zinnia',
       ],
-      'conditions': [['use_libzinnia==1 and OS=="linux"', {
-        'defines': [
-          'USE_LIBZINNIA',
-        ],
-      }]],
+      'conditions': [
+        ['target_platform=="Linux" and use_libzinnia==1', {
+          'defines': [
+            'USE_LIBZINNIA',
+          ],
+        }],
+        ['target_platform=="Linux" and use_libzinnia==1 and zinnia_model_file!=""', {
+          'defines': [
+            'MOZC_ZINNIA_MODEL_FILE="<(zinnia_model_file)"',
+          ],
+        }],
+      ],
     },
     {
       'target_name': 'handwriting_manager',
@@ -67,8 +77,8 @@
           ],
           'dependencies': [
             '../base/base.gyp:base',
+            '../net/jsoncpp.gyp:jsoncpp',
             '../net/net.gyp:http_client',
-            '../net/net.gyp:jsoncpp',
           ],
         },
       ],

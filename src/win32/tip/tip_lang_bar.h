@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -113,9 +113,6 @@ class TipLangBar {
   // To avoid the compile error we use CComPtr<ITfLangBarItemButton> instead.
   ATL::CComPtr<ITfLangBarItemButton> input_button_menu_;
   ATL::CComPtr<ITfLangBarItemButton> input_mode_button_for_win8_;
-
-  // The cookie issued for installing ITfLangBarItemSink of input_button_menu_.
-  DWORD input_button_cookie_;
 
   // Represents the tool button menu in the language bar.
   ATL::CComPtr<ITfLangBarItemButton> tool_button_menu_;

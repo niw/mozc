@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -33,8 +33,6 @@ import org.mozc.android.inputmethod.japanese.keyboard.KeyState.MetaState;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Input.TouchAction;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Input.TouchEvent;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCommands.Input.TouchPosition;
-
-import java.util.List;
 
 /**
  * This class represents user's one action, e.g., the sequence of:
@@ -113,7 +111,7 @@ public class KeyEventContext {
   /**
    * Returns the key entity corresponding to {@code metaState} and {@code direction}.
    */
-  static KeyEntity getKeyEntity(Key key, MetaState metaState, Flick.Direction direction) {
+  public static KeyEntity getKeyEntity(Key key, MetaState metaState, Flick.Direction direction) {
     if (key == null || metaState == null || direction == null) {
       return null;
     }

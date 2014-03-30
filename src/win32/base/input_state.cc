@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,17 +32,17 @@
 namespace mozc {
 namespace win32 {
 
+InputState::InputState()
+    : open(false),
+      logical_conversion_mode(0),
+      visible_conversion_mode(0) {
+}
+
 InputBehavior::InputBehavior()
     : disabled(false),
       prefer_kana_input(false),
-      use_romaji_key_to_toggle_input_style(false),
-      suppress_suggestion(false),
-      experimental_features(NO_FEATURE) {}
-
-InputState::InputState()
-    : open(false),
-      conversion_status(0) {
-}
+      use_mode_indicator(false),
+      use_romaji_key_to_toggle_input_style(false) {}
 
 }  // namespace win32
 }  // namespace mozc

@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -62,7 +62,6 @@
         '<(RULE_INPUT_PATH)',
       ],
       'message': 'Generatinc moc files from <(RULE_INPUT_PATH)',
-      'msvs_cygwin_shell': 0,
     },
   ],
 

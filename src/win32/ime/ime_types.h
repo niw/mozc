@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -38,6 +38,7 @@ namespace win32 {
 
 extern const LPARAM kNotifyUpdateUI;
 extern const LPARAM kNotifyReconvertFromIME;
+extern const LPARAM kNotifyDelayedCallback;
 
 class UIMessage {
  public:

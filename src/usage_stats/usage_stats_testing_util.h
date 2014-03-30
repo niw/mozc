@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -28,7 +28,7 @@
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #ifndef MOZC_USAGE_STATS_USAGE_STATS_TESTING_UTIL_H_
-#define MOZC_USAGE_STATS_USAGE_STATS_TESTING_UTIL_H__
+#define MOZC_USAGE_STATS_USAGE_STATS_TESTING_UTIL_H_
 
 #include "base/port.h"
 #include "base/scoped_ptr.h"
@@ -113,4 +113,4 @@ class scoped_usage_stats_enabler {
 }  // namespace usage_stats
 }  // namespace mozc
 
-#endif  // MOZC_USAGE_STATS_USAGE_STATS_TESTING_UTIL_H__
+#endif  // MOZC_USAGE_STATS_USAGE_STATS_TESTING_UTIL_H_

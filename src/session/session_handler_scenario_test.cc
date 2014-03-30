@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -39,10 +39,9 @@
 #include "config/config.pb.h"
 #include "config/config_handler.h"
 #include "converter/converter_interface.h"
-#include "engine/engine_interface.h"
+#include "engine/mock_data_engine_factory.h"
 #include "engine/user_data_manager_interface.h"
 #include "session/commands.pb.h"
-#include "session/japanese_session_factory.h"
 #include "session/key_parser.h"
 #include "session/request_test_util.h"
 #include "session/session_handler_test_util.h"
@@ -72,22 +71,25 @@ using mozc::commands::Request;
 using mozc::commands::RequestForUnitTest;
 using mozc::config::Config;
 using mozc::config::ConfigHandler;
+using mozc::MockDataEngineFactory;
+using mozc::EngineInterface;
 using mozc::protobuf::FieldDescriptor;
 using mozc::protobuf::Message;
 using mozc::protobuf::TextFormat;
-using mozc::session::testing::JapaneseSessionHandlerTestBase;
+using mozc::session::testing::SessionHandlerTestBase;
 using mozc::session::testing::TestSessionClient;
 using testing::WithParamInterface;
 
-class SessionHandlerScenarioTest : public JapaneseSessionHandlerTestBase,
+class SessionHandlerScenarioTest : public SessionHandlerTestBase,
                                    public WithParamInterface<const char *> {
  protected:
   virtual void SetUp() {
     // Note that singleton Config instance is backed up and restored
-    // by JapaneseSessionHandlerTestBase's SetUp and TearDown methods.
-    JapaneseSessionHandlerTestBase::SetUp();
+    // by SessionHandlerTestBase's SetUp and TearDown methods.
+    SessionHandlerTestBase::SetUp();
 
-    client_.reset(new TestSessionClient);
+    engine_.reset(MockDataEngineFactory::Create());
+    client_.reset(new TestSessionClient(engine_.get()));
     config_.reset(new Config);
     last_output_.reset(new Output);
     request_.reset(new Request);
@@ -108,13 +110,14 @@ class SessionHandlerScenarioTest : public JapaneseSessionHandlerTestBase,
 
   void ClearUserPrediction() {
     EXPECT_TRUE(client_->ClearUserPrediction());
-    EXPECT_TRUE(engine()->GetUserDataManager()->WaitForSyncerForTest());
+    EXPECT_TRUE(engine_->GetUserDataManager()->WaitForSyncerForTest());
   }
 
   void ClearUsageStats() {
     mozc::usage_stats::UsageStats::ClearAllStatsForTest();
   }
 
+  scoped_ptr<EngineInterface> engine_;
   scoped_ptr<TestSessionClient> client_;
   scoped_ptr<Config> config_;
   scoped_ptr<Output> last_output_;
@@ -123,30 +126,48 @@ class SessionHandlerScenarioTest : public JapaneseSessionHandlerTestBase,
 
 // Tests should be passed.
 const char *kScenarioFileList[] = {
-  "data/test/session/scenario/b7132535_scenario.txt",
-  "data/test/session/scenario/b7321313_scenario.txt",
-  "data/test/session/scenario/change_request.txt",
-  "data/test/session/scenario/clear_user_prediction.txt",
-  "data/test/session/scenario/conversion.txt",
-  "data/test/session/scenario/conversion_with_history_segment.txt",
-  "data/test/session/scenario/conversion_with_long_history_segments.txt",
-#ifdef MOZC_ENABLE_HISTORY_DELETION
-  "data/test/session/scenario/delete_history.txt",
-#endif  // MOZC_ENABLE_HISTORY_DELETION
-  "data/test/session/scenario/desktop_t13n_candidates.txt",
-  "data/test/session/scenario/mobile_qwerty_transliteration_scenario.txt",
-  "data/test/session/scenario/twelvekeys_switch_inputmode_scenario.txt",
-  "data/test/session/scenario/twelvekeys_toggle_hiragana_preedit_scenario.txt",
-  "data/test/session/scenario/mobile_t13n_candidates.txt",
-  "data/test/session/scenario/partial_suggestion.txt",
-  "data/test/session/scenario/auto_partial_suggestion.txt",
-  "data/test/session/scenario/pending_character.txt",
-  "data/test/session/scenario/composition_display_as.txt",
-  "data/test/session/scenario/conversion_display_as.txt",
-  "data/test/session/scenario/insert_characters.txt",
-  "data/test/session/scenario/on_off_cancel.txt",
-  "data/test/session/scenario/segment_focus.txt",
-  "data/test/session/scenario/segment_width.txt",
+#define DATA_DIR "data/test/session/scenario/"
+  DATA_DIR "auto_partial_suggestion.txt",
+  DATA_DIR "b7132535_scenario.txt",
+  DATA_DIR "b7321313_scenario.txt",
+  DATA_DIR "b7548679_scenario.txt",
+  DATA_DIR "b8703702_scenario.txt",
+  DATA_DIR "change_request.txt",
+  DATA_DIR "clear_user_prediction.txt",
+  DATA_DIR "commit.txt",
+  DATA_DIR "composition_display_as.txt",
+  DATA_DIR "conversion.txt",
+  DATA_DIR "conversion_display_as.txt",
+  DATA_DIR "conversion_with_history_segment.txt",
+  DATA_DIR "conversion_with_long_history_segments.txt",
+  DATA_DIR "convert_from_full_ascii_to_t13n.txt",
+  DATA_DIR "convert_from_full_katakana_to_t13n.txt",
+  DATA_DIR "convert_from_half_ascii_to_t13n.txt",
+  DATA_DIR "convert_from_half_katakana_to_t13n.txt",
+  DATA_DIR "convert_from_hiragana_to_t13n.txt",
+  DATA_DIR "delete_history.txt",
+  DATA_DIR "desktop_t13n_candidates.txt",
+#if !defined(OS_MACOSX) && !defined(OS_ANDROID)
+  // "InputModeX" commands are not supported on Mac and Android.
+  // Mac: We do not have the way to change the mode indicator from IME.
+  // Android: Input mode change is performed by changing software keyboard.
+  DATA_DIR "input_mode.txt",
+#endif
+  DATA_DIR "insert_characters.txt",
+  DATA_DIR "mobile_qwerty_transliteration_scenario.txt",
+  DATA_DIR "mobile_t13n_candidates.txt",
+  DATA_DIR "on_off_cancel.txt",
+  DATA_DIR "partial_suggestion.txt",
+  DATA_DIR "pending_character.txt",
+  DATA_DIR "predict_and_convert.txt",
+  DATA_DIR "reconvert.txt",
+  DATA_DIR "revert.txt",
+  DATA_DIR "segment_focus.txt",
+  DATA_DIR "segment_width.txt",
+  DATA_DIR "twelvekeys_switch_inputmode_scenario.txt",
+  DATA_DIR "twelvekeys_toggle_hiragana_preedit_scenario.txt",
+  DATA_DIR "undo.txt",
+#undef DATA_DIR
 };
 
 INSTANTIATE_TEST_CASE_P(SessionHandlerScenarioParameters,
@@ -154,36 +175,36 @@ INSTANTIATE_TEST_CASE_P(SessionHandlerScenarioParameters,
                         ::testing::ValuesIn(kScenarioFileList));
 
 const char *kUsageStatsScenarioFileList[] = {
-  "data/test/session/scenario/usage_stats/composition.txt",
-  "data/test/session/scenario/usage_stats/conversion.txt",
-  "data/test/session/scenario/usage_stats/prediction.txt",
-  "data/test/session/scenario/usage_stats/suggestion.txt",
-  "data/test/session/scenario/usage_stats/select_prediction.txt",
-  "data/test/session/scenario/usage_stats/select_minor_conversion.txt",
-  "data/test/session/scenario/usage_stats/select_minor_prediction.txt",
-  "data/test/session/scenario/usage_stats/mouse_select_from_suggestion.txt",
-  "data/test/session/scenario/usage_stats/continue_input.txt",
-  "data/test/session/scenario/usage_stats/continuous_input.txt",
-  "data/test/session/scenario/usage_stats/select_t13n_by_key.txt",
+#define DATA_DIR "data/test/session/scenario/usage_stats/"
+  DATA_DIR "auto_partial_suggestion.txt",
+  DATA_DIR "backspace_after_commit.txt",
+  DATA_DIR "backspace_after_commit_after_backspace.txt",
+  DATA_DIR "composition.txt",
+  DATA_DIR "continue_input.txt",
+  DATA_DIR "continuous_input.txt",
+  DATA_DIR "conversion.txt",
+  DATA_DIR "insert_space.txt",
+  DATA_DIR "language_aware_input.txt",
+  DATA_DIR "mouse_select_from_suggestion.txt",
+  DATA_DIR "multiple_backspace_after_commit.txt",
+  DATA_DIR "multiple_segments.txt",
+  DATA_DIR "numpad_in_direct_input_mode.txt",
+  DATA_DIR "prediction.txt",
+  DATA_DIR "select_candidates_in_multiple_segments.txt",
+  DATA_DIR "select_candidates_in_multiple_segments_and_expand_segment.txt",
+  DATA_DIR "select_minor_conversion.txt",
+  DATA_DIR "select_minor_prediction.txt",
+  DATA_DIR "select_prediction.txt",
+  DATA_DIR "select_t13n_by_key.txt",
 #ifndef OS_LINUX
   // This test requires cascading window.
   // TODO(hsumita): Removes this ifndef block.
-  "data/test/session/scenario/usage_stats/select_t13n_on_cascading_window.txt",
+  DATA_DIR "select_t13n_on_cascading_window.txt",
 #endif  // OS_LINUX
-  "data/test/session/scenario/usage_stats/switch_kana_type.txt",
-  "data/test/session/scenario/usage_stats/multiple_segments.txt",
-  "data/test/session/scenario/usage_stats/"
-      "select_candidates_in_multiple_segments.txt",
-  "data/test/session/scenario/usage_stats/"
-      "select_candidates_in_multiple_segments_and_expand_segment.txt",
-  "data/test/session/scenario/usage_stats/backspace_after_commit.txt",
-  "data/test/session/scenario/usage_stats/"
-      "backspace_after_commit_after_backspace.txt",
-  "data/test/session/scenario/usage_stats/multiple_backspace_after_commit.txt",
-  "data/test/session/scenario/usage_stats/zero_query_suggestion.txt",
-  "data/test/session/scenario/usage_stats/auto_partial_suggestion.txt",
-  "data/test/session/scenario/usage_stats/insert_space.txt",
-  "data/test/session/scenario/usage_stats/numpad_in_direct_input_mode.txt",
+  DATA_DIR "suggestion.txt",
+  DATA_DIR "switch_kana_type.txt",
+  DATA_DIR "zero_query_suggestion.txt",
+#undef DATA_DIR
 };
 INSTANTIATE_TEST_CASE_P(SessionHandlerUsageStatsScenarioParameters,
                         SessionHandlerScenarioTest,
@@ -340,7 +361,7 @@ TEST_P(SessionHandlerScenarioTest, TestImpl) {
       ASSERT_EQ(1, columns.size());
       ResetContext();
     } else if (command == "SEND_KEYS") {
-      ASSERT_EQ(columns.size(), 2);
+      ASSERT_EQ(2, columns.size());
       const string &keys = columns[1];
       KeyEvent key_event;
       for (size_t i = 0; i < keys.size(); ++i) {
@@ -350,7 +371,7 @@ TEST_P(SessionHandlerScenarioTest, TestImpl) {
             << "Failed at " << i << "th key";
       }
     } else if (command == "SEND_KANA_KEYS") {
-      ASSERT_GE(columns.size(), 3)
+      ASSERT_LE(3, columns.size())
           << "SEND_KEY requires more than or equal to two columns "
           << line_text;
       const string &keys = columns[1];
@@ -366,12 +387,12 @@ TEST_P(SessionHandlerScenarioTest, TestImpl) {
             << "Failed at " << i << "th " << line_text;
       }
     } else if (command == "SEND_KEY") {
-      ASSERT_EQ(columns.size(), 2);
+      ASSERT_EQ(2, columns.size());
       KeyEvent key_event;
       ASSERT_TRUE(KeyParser::ParseKey(columns[1], &key_event));
       ASSERT_TRUE(client_->SendKey(key_event, last_output_.get()));
     } else if (command == "SEND_KEY_WITH_OPTION") {
-      ASSERT_GE(columns.size(), 3);
+      ASSERT_LE(3, columns.size());
       KeyEvent key_event;
       ASSERT_TRUE(KeyParser::ParseKey(columns[1], &key_event));
       Input option;
@@ -380,28 +401,43 @@ TEST_P(SessionHandlerScenarioTest, TestImpl) {
       }
       ASSERT_TRUE(client_->SendKeyWithOption(key_event, option,
                                              last_output_.get()));
+    } else if (command == "TEST_SEND_KEY") {
+      ASSERT_EQ(2, columns.size());
+      KeyEvent key_event;
+      ASSERT_TRUE(KeyParser::ParseKey(columns[1], &key_event));
+      ASSERT_TRUE(client_->TestSendKey(key_event, last_output_.get()));
+    } else if (command == "TEST_SEND_KEY_WITH_OPTION") {
+      ASSERT_LE(3, columns.size());
+      KeyEvent key_event;
+      ASSERT_TRUE(KeyParser::ParseKey(columns[1], &key_event));
+      Input option;
+      for (size_t i = 2; i < columns.size(); ++i) {
+        ASSERT_TRUE(ParseProtobufFromString(columns[i], &option));
+      }
+      ASSERT_TRUE(client_->TestSendKeyWithOption(key_event, option,
+        last_output_.get()));
     } else if (command == "SELECT_CANDIDATE") {
-      ASSERT_EQ(columns.size(), 2);
+      ASSERT_EQ(2, columns.size());
       ASSERT_TRUE(client_->SelectCandidate(
           NumberUtil::SimpleAtoi(columns[1]), last_output_.get()));
     } else if (command == "SELECT_CANDIDATE_BY_VALUE") {
-      ASSERT_EQ(columns.size(), 2);
+      ASSERT_EQ(2, columns.size());
       uint32 id;
       ASSERT_TRUE(GetCandidateIdByValue(columns[1], *last_output_, &id));
       ASSERT_TRUE(client_->SelectCandidate(id, last_output_.get()));
     } else if (command == "SUBMIT_CANDIDATE") {
-      ASSERT_EQ(columns.size(), 2);
+      ASSERT_EQ(2, columns.size());
       ASSERT_TRUE(client_->SubmitCandidate(
           NumberUtil::SimpleAtoi(columns[1]), last_output_.get()));
     } else if (command == "SUBMIT_CANDIDATE_BY_VALUE") {
-      ASSERT_EQ(columns.size(), 2);
+      ASSERT_EQ(2, columns.size());
       uint32 id;
       ASSERT_TRUE(GetCandidateIdByValue(columns[1], *last_output_, &id));
       ASSERT_TRUE(client_->SubmitCandidate(id, last_output_.get()));
     } else if (command == "UNDO_OR_REWIND") {
       ASSERT_TRUE(client_->UndoOrRewind(last_output_.get()));
     } else if (command == "SWITCH_INPUT_MODE") {
-      ASSERT_EQ(columns.size(), 2);
+      ASSERT_EQ(2, columns.size());
       CompositionMode composition_mode;
       ASSERT_TRUE(CompositionMode_Parse(columns[1], &composition_mode))
           << "Unknown CompositionMode";
@@ -412,14 +448,22 @@ TEST_P(SessionHandlerScenarioTest, TestImpl) {
     } else if (command == "SET_MOBILE_REQUEST") {
       RequestForUnitTest::FillMobileRequest(request_.get());
       ASSERT_TRUE(client_->SetRequest(*request_, last_output_.get()));
+    } else if (command == "SET_REQUEST") {
+      ASSERT_EQ(3, columns.size());
+      ASSERT_TRUE(SetOrAddFieldValueFromString(columns[1], columns[2],
+                                               request_.get()));
+      ASSERT_TRUE(client_->SetRequest(*request_, last_output_.get()));
     } else if (command == "SET_CONFIG") {
-      ASSERT_EQ(columns.size(), 3);
+      ASSERT_EQ(3, columns.size());
       ASSERT_TRUE(SetOrAddFieldValueFromString(columns[1], columns[2],
                                                config_.get()));
       ASSERT_TRUE(ConfigHandler::SetConfig(*config_));
       ASSERT_TRUE(client_->Reload());
+    } else if (command == "SET_SELECTION_TEXT") {
+      ASSERT_EQ(2, columns.size());
+      client_->SetCallbackText(columns[1]);
     } else if (command == "UPDATE_MOBILE_KEYBOARD") {
-      ASSERT_EQ(columns.size(), 3);
+      ASSERT_EQ(3, columns.size());
       Request::SpecialRomanjiTable special_romanji_table;
       ASSERT_TRUE(Request::SpecialRomanjiTable_Parse(
           columns[1], &special_romanji_table))
@@ -441,7 +485,7 @@ TEST_P(SessionHandlerScenarioTest, TestImpl) {
       ASSERT_EQ(1, columns.size());
       ClearUsageStats();
     } else if (command == "EXPECT_CONSUMED") {
-      ASSERT_EQ(columns.size(), 2);
+      ASSERT_EQ(2, columns.size());
       ASSERT_TRUE(last_output_->has_consumed());
       EXPECT_EQ(columns[1] == "true", last_output_->consumed());
     } else if (command == "EXPECT_PREEDIT") {
@@ -452,9 +496,11 @@ TEST_P(SessionHandlerScenarioTest, TestImpl) {
       for (int i = 0; i < preedit.segment_size(); ++i) {
         preedit_string += preedit.segment(i).value();
       }
-      EXPECT_EQ(expected_preedit, preedit_string) << preedit.Utf8DebugString();
+      EXPECT_EQ(expected_preedit, preedit_string)
+          << "Expected preedit: " << expected_preedit << "\n"
+          << "Actual preedit: " <<preedit.Utf8DebugString();
     } else if (command == "EXPECT_PREEDIT_IN_DETAIL") {
-      ASSERT_GE(columns.size(), 1);
+      ASSERT_LE(1, columns.size());
       const mozc::commands::Preedit &preedit = last_output_->preedit();
       ASSERT_EQ(columns.size() - 1, preedit.segment_size());
       for (int i = 0; i < preedit.segment_size(); ++i) {
@@ -463,12 +509,12 @@ TEST_P(SessionHandlerScenarioTest, TestImpl) {
       }
     } else if (command == "EXPECT_PREEDIT_CURSOR_POS") {
       // Concat preedit segments and assert.
-      ASSERT_EQ(columns.size(), 2);
+      ASSERT_EQ(2, columns.size());
       const size_t &expected_pos = NumberUtil::SimpleAtoi(columns[1]);
       const mozc::commands::Preedit &preedit = last_output_->preedit();
       EXPECT_EQ(expected_pos, preedit.cursor()) << preedit.Utf8DebugString();
     } else if (command == "EXPECT_CANDIDATE") {
-      ASSERT_EQ(columns.size(), 3);
+      ASSERT_EQ(3, columns.size());
       uint32 candidate_id = 0;
       const bool has_result = GetCandidateIdByValue(columns[2], *last_output_,
                                                     &candidate_id);
@@ -487,23 +533,23 @@ TEST_P(SessionHandlerScenarioTest, TestImpl) {
             << last_output_->result().Utf8DebugString();
       }
     } else if (command == "EXPECT_IN_ALL_CANDIDATE_WORDS") {
-      ASSERT_EQ(columns.size(), 2);
+      ASSERT_EQ(2, columns.size());
       EXPECT_IN_ALL_CANDIDATE_WORDS(columns[1], *last_output_)
           << columns[1] << " is not found.\n"
           << last_output_->Utf8DebugString();
     } else if (command == "EXPECT_NOT_IN_ALL_CANDIDATE_WORDS") {
-      ASSERT_EQ(columns.size(), 2);
+      ASSERT_EQ(2, columns.size());
       EXPECT_NOT_IN_ALL_CANDIDATE_WORDS(columns[1], *last_output_);
     } else if (command == "EXPECT_HAS_CANDIDATES") {
       ASSERT_TRUE(last_output_->has_candidates());
     } else if (command == "EXPECT_NO_CANDIDATES") {
       ASSERT_FALSE(last_output_->has_candidates());
     } else if (command == "EXPECT_SEGMENTS_SIZE") {
-      ASSERT_EQ(columns.size(), 2);
+      ASSERT_EQ(2, columns.size());
       ASSERT_EQ(NumberUtil::SimpleAtoi(columns[1]),
                 last_output_->preedit().segment_size());
     } else if (command == "EXPECT_HIGHLIGHTED_SEGMENT_INDEX") {
-      ASSERT_EQ(columns.size(), 2);
+      ASSERT_EQ(2, columns.size());
       ASSERT_TRUE(last_output_->has_preedit());
       const mozc::commands::Preedit &preedit = last_output_->preedit();
       int index = -1;
@@ -516,7 +562,7 @@ TEST_P(SessionHandlerScenarioTest, TestImpl) {
       }
       ASSERT_EQ(NumberUtil::SimpleAtoi(columns[1]), index);
     } else if (command == "EXPECT_USAGE_STATS_COUNT") {
-      ASSERT_EQ(columns.size(), 3);
+      ASSERT_EQ(3, columns.size());
       const uint32 expected_value = NumberUtil::SimpleAtoi(columns[2]);
       if (expected_value == 0) {
         EXPECT_STATS_NOT_EXIST(columns[1]);
@@ -524,13 +570,13 @@ TEST_P(SessionHandlerScenarioTest, TestImpl) {
         EXPECT_COUNT_STATS(columns[1], expected_value);
       }
     } else if (command == "EXPECT_USAGE_STATS_INTEGER") {
-      ASSERT_EQ(columns.size(), 3);
+      ASSERT_EQ(3, columns.size());
       EXPECT_INTEGER_STATS(columns[1], NumberUtil::SimpleAtoi(columns[2]));
     } else if (command == "EXPECT_USAGE_STATS_BOOLEAN") {
-      ASSERT_EQ(columns.size(), 3);
+      ASSERT_EQ(3, columns.size());
       EXPECT_BOOLEAN_STATS(columns[1], columns[2] == "true");
     } else if (command == "EXPECT_USAGE_STATS_TIMING") {
-      ASSERT_EQ(columns.size(), 6);
+      ASSERT_EQ(6, columns.size());
       const uint64 expected_total = NumberUtil::SimpleAtoi(columns[2]);
       const uint32 expected_num = NumberUtil::SimpleAtoi(columns[3]);
       const uint32 expected_min = NumberUtil::SimpleAtoi(columns[4]);

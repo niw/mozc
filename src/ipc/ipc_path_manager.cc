@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -46,6 +46,9 @@
 
 #include <cstdlib>
 #include <map>
+#ifdef OS_WIN
+#include <memory>  // for std::unique_ptr
+#endif
 
 #include "base/base.h"
 #include "base/const.h"
@@ -64,6 +67,10 @@
 #include "ipc/ipc.h"
 #include "ipc/ipc.pb.h"
 
+#ifdef OS_WIN
+using std::unique_ptr;
+#endif  // OS_WIn
+
 namespace mozc {
 namespace {
 
@@ -78,17 +85,7 @@ string GetIPCKeyFileName(const string &name) {
 #else
   string basename = ".";    // hidden file
 #endif
-
-  basename.append(name);
-#ifdef MOZC_LANGUAGE_SUFFIX_FOR_LINUX
-  // In order to extend language support of Mozc on Linux, we use additional
-  // suffix except for Japanese so that multiple converter processes can
-  // coexist. Note that Mozc on ChromeOS does not use IPC so this kind of
-  // special treatment is not required.
-  basename.append(MOZC_LANGUAGE_SUFFIX_FOR_LINUX);
-#endif  // MOZC_LANGUAGE_SUFFIX_FOR_LINUX
-  basename.append(".ipc");   // this is the extension part.
-
+  basename += name + ".ipc";
   return FileUtil::JoinPath(SystemUtil::GetUserProfileDirectory(), basename);
 }
 
@@ -322,23 +319,6 @@ bool IPCPathManager::IsValidServer(uint32 pid,
     return false;
   }
 
-#ifdef OS_WIN
-  // OpenProcess API seems to be unavailable on Win8/AppContainer. So we
-  // temporarily disable the verification of the path name of the peer.
-  bool in_appcontainer = false;
-  if (!WinUtil::IsProcessInAppContainer(::GetCurrentProcess(),
-                                        &in_appcontainer)) {
-    return false;
-  }
-  if (in_appcontainer) {
-    // Bypass security check.
-    // TODO(yukawa): Establish alternative verification mechanism for Metro.
-    server_pid_ = pid;
-    server_path_.clear();
-    return true;
-  }
-#endif  // OS_WIN
-
   // compare path name
   if (pid == server_pid_) {
     return (server_path == server_path_);
@@ -512,7 +492,7 @@ bool IPCPathManager::LoadPathNameInternal() {
       return false;
     }
 
-    scoped_array<char> buf(new char[size]);
+    unique_ptr<char[]> buf(new char[size]);
 
     DWORD read_size = 0;
     if (!::ReadFile(handle.get(), buf.get(),

@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,7 @@ class ConverterInterface {
                                          Segments *segments) const = 0;
 
   // Start conversion with key.
-  // key is a request writtein in Hiragana sequence
+  // key is a request written in Hiragana sequence
   virtual bool StartConversion(Segments *segments,
                                const string &key) const = 0;
 
@@ -92,8 +92,9 @@ class ConverterInterface {
                                       const string &key) const = 0;
 
   // Finish conversion.
-  // Segments are cleared. Context is not clreared
-  virtual bool FinishConversion(Segments *segments) const = 0;
+  // Segments are cleared. Context is not cleared
+  virtual bool FinishConversion(const ConversionRequest &request,
+                                Segments *segments) const = 0;
 
   // Clear segments and keep the context
   virtual bool CancelConversion(Segments *segments) const = 0;
@@ -103,6 +104,10 @@ class ConverterInterface {
 
   // Revert last Finish operation
   virtual bool RevertConversion(Segments *segments) const = 0;
+
+  // Reconstruct history segments from given preceding text.
+  virtual bool ReconstructHistory(Segments *segments,
+                                  const string &preceding_text) const = 0;
 
   // Expand the bunsetsu-segment at "segment_index" by candidate_size
   // DEPRECATED: This method doesn't take any effect.

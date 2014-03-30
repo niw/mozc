@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -27,15 +27,16 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+#include "renderer/renderer_client.h"
+
 #include <string>
 
-#include "base/base.h"
 #include "base/logging.h"
 #include "base/number_util.h"
+#include "base/port.h"
 #include "base/util.h"
 #include "base/version.h"
 #include "ipc/ipc.h"
-#include "renderer/renderer_client.h"
 #include "renderer/renderer_command.pb.h"
 #include "renderer/renderer_interface.h"
 #include "testing/base/public/gunit.h"

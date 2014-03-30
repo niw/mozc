@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -42,23 +42,24 @@ namespace {
 class ChromeOsDataManagerTest : public DataManagerTestBase {
  protected:
   ChromeOsDataManagerTest()
-      : DataManagerTestBase(new ChromeOsDataManager,
-                            kLSize,
-                            kRSize,
-                            IsBoundaryInternal,
-                            "data/dictionary_chromeos/connection.txt",
-                            1,
-                            "data/dictionary_chromeos/dictionary00.txt,"
-                            "data/dictionary_chromeos/dictionary01.txt,"
-                            "data/dictionary_chromeos/dictionary02.txt,"
-                            "data/dictionary_chromeos/dictionary03.txt,"
-                            "data/dictionary_chromeos/dictionary04.txt,"
-                            "data/dictionary_chromeos/dictionary05.txt,"
-                            "data/dictionary_chromeos/dictionary06.txt,"
-                            "data/dictionary_chromeos/dictionary07.txt,"
-                            "data/dictionary_chromeos/dictionary08.txt,"
-                            "data/dictionary_chromeos/dictionary09.txt",
-                            "data/dictionary_chromeos/suggestion_filter.txt") {}
+      : DataManagerTestBase(
+            new ChromeOsDataManager,
+            kLSize,
+            kRSize,
+            IsBoundaryInternal,
+            "data_manager/chromeos/connection_single_column.txt",
+            1,
+            "data/dictionary_chromeos/dictionary00.txt,"
+            "data/dictionary_chromeos/dictionary01.txt,"
+            "data/dictionary_chromeos/dictionary02.txt,"
+            "data/dictionary_chromeos/dictionary03.txt,"
+            "data/dictionary_chromeos/dictionary04.txt,"
+            "data/dictionary_chromeos/dictionary05.txt,"
+            "data/dictionary_chromeos/dictionary06.txt,"
+            "data/dictionary_chromeos/dictionary07.txt,"
+            "data/dictionary_chromeos/dictionary08.txt,"
+            "data/dictionary_chromeos/dictionary09.txt",
+            "data/dictionary_chromeos/suggestion_filter.txt") {}
 };
 
 TEST_F(ChromeOsDataManagerTest, AllTests) {

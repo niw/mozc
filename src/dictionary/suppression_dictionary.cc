@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,6 @@
 
 #include "dictionary/suppression_dictionary.h"
 
-#include "base/base.h"
 #include "base/logging.h"
 #include "base/mutex.h"
 #include "converter/node.h"

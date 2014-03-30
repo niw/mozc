@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,8 +32,9 @@
 
 #include <windows.h>
 
+#include <memory>
+
 #include "base/port.h"
-#include "base/scoped_ptr.h"
 #include "win32/base/keyboard.h"
 
 namespace mozc {
@@ -60,7 +61,7 @@ class IndicatorVisibilityTracker {
 
  private:
   struct InternalState;
-  scoped_ptr<InternalState> state_;
+  std::unique_ptr<InternalState> state_;
   DISALLOW_COPY_AND_ASSIGN(IndicatorVisibilityTracker);
 };
 

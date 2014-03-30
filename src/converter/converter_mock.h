@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -59,6 +59,7 @@ class ConverterMock : public ConverterInterface {
   void SetCancelConversion(Segments *segments, bool result);
   void SetResetConversion(Segments *segments, bool result);
   void SetRevertConversion(Segments *segments, bool result);
+  void SetReconstructHistory(Segments *segments, bool result);
   void SetCommitSegmentValue(Segments *segments, bool result);
   void SetCommitPartialSuggestionSegmentValue(Segments *segments, bool result);
   void SetFocusSegmentValue(Segments *segments, bool result);
@@ -88,6 +89,7 @@ class ConverterMock : public ConverterInterface {
   void GetCancelConversion(Segments *segments);
   void GetResetConversion(Segments *segments);
   void GetRevertConversion(Segments *segments);
+  void GetReconstructHistory(Segments *segments);
   void GetCommitSegmentValue(Segments *segments, size_t *segment_index,
                              int *candidate_index);
   void GetCommitPartialSuggestionSegmentValue(Segments *segments,
@@ -128,10 +130,13 @@ class ConverterMock : public ConverterInterface {
                                         Segments *segments) const;
   bool StartPartialSuggestion(Segments *segments,
                               const string &key) const;
-  bool FinishConversion(Segments *segments) const;
+  bool FinishConversion(const ConversionRequest &request,
+                        Segments *segments) const;
   bool CancelConversion(Segments *segments) const;
   bool ResetConversion(Segments *segments) const;
   bool RevertConversion(Segments *segments) const;
+  bool ReconstructHistory(Segments *segments,
+                          const string &preceding_text) const;
   bool CommitSegmentValue(Segments *segments,
                           size_t segment_index,
                           int    candidate_index) const;
@@ -199,6 +204,7 @@ class ConverterMock : public ConverterInterface {
   mutable ConverterInput cancelconversion_input_;
   mutable ConverterInput resetconversion_input_;
   mutable ConverterInput revertconversion_input_;
+  mutable ConverterInput reconstructhistory_input_;
   mutable ConverterInput commitsegmentvalue_input_;
   mutable ConverterInput commitpartialsuggestionsegmentvalue_input_;
   mutable ConverterInput focussegmentvalue_input_;
@@ -222,6 +228,7 @@ class ConverterMock : public ConverterInterface {
   ConverterOutput cancelconversion_output_;
   ConverterOutput resetconversion_output_;
   ConverterOutput revertconversion_output_;
+  ConverterOutput reconstructhistory_output_;
   ConverterOutput commitsegmentvalue_output_;
   ConverterOutput commitpartialsuggestionsegmentvalue_output_;
   ConverterOutput focussegmentvalue_output_;

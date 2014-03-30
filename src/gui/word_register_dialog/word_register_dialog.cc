@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -36,13 +36,14 @@
 
 #include <QtGui/QtGui>
 #include <cstdlib>
+#ifdef OS_WIN
+#include <memory>  // for std::unique_ptr
+#endif  // OS_WIN
 #include <string>
 #include <vector>
 
-#include "base/base.h"
 #include "base/const.h"
 #include "base/logging.h"
-#include "base/scoped_ptr.h"
 #include "base/util.h"
 #include "client/client.h"
 #include "data_manager/user_pos_manager.h"
@@ -59,6 +60,9 @@ using mozc::user_dictionary::UserDictionary;
 using mozc::user_dictionary::UserDictionaryCommandStatus;
 using mozc::user_dictionary::UserDictionarySession;
 using mozc::user_dictionary::UserDictionaryStorage;
+#ifdef OS_WIN
+using std::unique_ptr;
+#endif  // OS_WIN
 
 namespace {
 const int kSessionTimeout = 100000;
@@ -74,7 +78,7 @@ QString GetEnv(const char *envname) {
   if (buffer_size == 0) {
     return "";
   }
-  scoped_array<wchar_t> buffer(new wchar_t[buffer_size]);
+  unique_ptr<wchar_t[]> buffer(new wchar_t[buffer_size]);
   const DWORD num_copied =
       ::GetEnvironmentVariable(wenvname.c_str(), buffer.get(), buffer_size);
   if (num_copied > 0) {
@@ -126,6 +130,14 @@ WordRegisterDialog::WordRegisterDialog()
     is_available_ = false;
     return;
   }
+
+#ifndef ENABLE_CLOUD_SYNC
+  if (session_->mutable_storage()
+      ->ConvertSyncDictionariesToNormalDictionaries()) {
+    LOG(INFO) << "Syncable dictionaries are converted to normal dictionaries";
+    session_->mutable_storage()->Save();
+  }
+#endif  // !ENABLE_CLOUD_SYNC
 
   // Initialize ComboBox
   vector<string> pos_set;

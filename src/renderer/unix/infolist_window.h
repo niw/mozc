@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -33,6 +33,8 @@
 #define MOZC_RENDERER_UNIX_INFOLIST_WINDOW_H_
 
 #include <gtk/gtk.h>
+
+#include <memory>
 
 #include "base/coordinates.h"
 #include "renderer/renderer_command.pb.h"
@@ -106,10 +108,10 @@ class InfolistWindow : public GtkWindowBase {
   FRIEND_TEST(InfolistWindowTest, GetRenderingRectsTest);
 
   commands::Candidates candidates_;
-  scoped_ptr<TextRendererInterface> text_renderer_;
-  scoped_ptr<RendererStyle> style_;
-  scoped_ptr<DrawToolInterface> draw_tool_;
-  scoped_ptr<CairoFactoryInterface> cairo_factory_;
+  std::unique_ptr<TextRendererInterface> text_renderer_;
+  std::unique_ptr<RendererStyle> style_;
+  std::unique_ptr<DrawToolInterface> draw_tool_;
+  std::unique_ptr<CairoFactoryInterface> cairo_factory_;
   DISALLOW_COPY_AND_ASSIGN(InfolistWindow);
 };
 

@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -30,7 +30,6 @@
 #ifndef MOZC_REWRITER_SINGLE_KANJI_REWRITER_H_
 #define MOZC_REWRITER_SINGLE_KANJI_REWRITER_H_
 
-#include "base/base.h"
 #include "rewriter/rewriter_interface.h"
 
 namespace mozc {

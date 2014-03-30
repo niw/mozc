@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,7 @@
 
 #include "unix/ibus/mozc_engine_property.h"
 
-#include "base/base.h"
+#include "base/port.h"
 #include "session/commands.pb.h"
 
 namespace mozc {
@@ -129,13 +129,10 @@ const MozcEngineProperty *kMozcEngineProperties =
 const MozcEngineProperty *kMozcEnginePropertyIMEOffState =
     &kMozcEngineProperties[0];
 const size_t kMozcEnginePropertiesSize = arraysize(kMozcEnginePropertiesArray);
-COMPILE_ASSERT(commands::NUM_OF_COMPOSITIONS == kMozcEnginePropertiesSize,
-               bad_number_of_props);
+static_assert(commands::NUM_OF_COMPOSITIONS == kMozcEnginePropertiesSize,
+              "commands::NUM_OF_COMPOSITIONS must be the property size.");
 const commands::CompositionMode kMozcEngineInitialCompositionMode =
     commands::HIRAGANA;
-
-const MozcEngineSwitchProperty *kMozcEngineSwitchProperties = NULL;
-const size_t kMozcEngineSwitchPropertiesSize = 0;
 
 const MozcEngineToolProperty *kMozcEngineToolProperties =
     &kMozcEngineToolPropertiesArray[0];

@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -31,7 +31,6 @@
 #define MOZC_GUI_DICTIONARY_TOOL_FIND_DIALOG_H_
 
 #include <QtGui/QDialog>
-#include "base/base.h"
 #include "gui/dictionary_tool/ui_find_dialog.h"
 
 class QTableWidget;

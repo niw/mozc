@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -44,20 +44,22 @@
 #endif  // OS_MACOSX
 #endif  // OS_WIN
 
-#include <cstdlib>
-#include <cstring>
-#include <sstream>
-#include <string>
 #ifdef OS_MACOSX
 #include <cerrno>
 #endif  // OS_MACOSX
+#include <cstdlib>
+#include <cstring>
+#ifdef OS_WIN
+#include <memory>
+#endif  // OS_WIN
+#include <sstream>
+#include <string>
 
 #include "base/const.h"
 #include "base/file_util.h"
 #include "base/logging.h"
 #include "base/mac_util.h"
 #include "base/number_util.h"
-#include "base/scoped_ptr.h"
 #include "base/singleton.h"
 #include "base/util.h"
 #include "base/win_util.h"
@@ -68,6 +70,10 @@
 #define sysconf mysysconf
 #include "base/android_util.h"
 #endif  // OS_ANDROID
+
+#ifdef OS_WIN
+using std::unique_ptr;
+#endif  // OS_WIN
 
 namespace mozc {
 
@@ -120,7 +126,7 @@ class LocalAppDataDirectoryCache {
   }
 
   static HRESULT TryGetLocalAppData(string *dir) {
-    if (dir == NULL) {
+    if (dir == nullptr) {
       return E_FAIL;
     }
     dir->clear();
@@ -144,7 +150,7 @@ class LocalAppDataDirectoryCache {
     // applications, to avoid user profiles from being roamed by indexers.
     wchar_t config[MAX_PATH] = {};
     const HRESULT result = ::SHGetFolderPathW(
-        NULL, CSIDL_LOCAL_APPDATA, NULL, SHGFP_TYPE_CURRENT, &config[0]);
+        nullptr, CSIDL_LOCAL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, &config[0]);
     if (FAILED(result)) {
       return result;
     }
@@ -168,7 +174,7 @@ class LocalAppDataDirectoryCache {
     // TODO(yukawa): Establish more reliable way to obtain the path.
     wchar_t config[MAX_PATH] = {};
     const HRESULT result = ::SHGetFolderPathW(
-        NULL, CSIDL_LOCAL_APPDATA, NULL, SHGFP_TYPE_CURRENT, &config[0]);
+        nullptr, CSIDL_LOCAL_APPDATA, nullptr, SHGFP_TYPE_CURRENT, &config[0]);
     if (FAILED(result)) {
       return result;
     }
@@ -186,7 +192,7 @@ class LocalAppDataDirectoryCache {
   }
 
   static HRESULT TryGetLocalAppDataLow(string *dir) {
-    if (dir == NULL) {
+    if (dir == nullptr) {
       return E_FAIL;
     }
     dir->clear();
@@ -201,7 +207,7 @@ class LocalAppDataDirectoryCache {
     // http://msdn.microsoft.com/en-us/library/bb762584(VS.85).aspx
     // GUID: {A520A1A4-1780-4FF6-BD18-167343C5AF16}
     const HMODULE hLib = WinUtil::LoadSystemLibrary(L"shell32.dll");
-    if (hLib == NULL) {
+    if (hLib == nullptr) {
       return E_NOTIMPL;
     }
 
@@ -209,23 +215,23 @@ class LocalAppDataDirectoryCache {
         const GUID &, DWORD, HANDLE, PWSTR *);
     FPSHGetKnownFolderPath func = reinterpret_cast<FPSHGetKnownFolderPath>
         (::GetProcAddress(hLib, "SHGetKnownFolderPath"));
-    if (func == NULL) {
+    if (func == nullptr) {
       ::FreeLibrary(hLib);
       return E_NOTIMPL;
     }
 
-    wchar_t *task_mem_buffer = NULL;
+    wchar_t *task_mem_buffer = nullptr;
     const HRESULT result =
-        (*func)(FOLDERID_LocalAppDataLow, 0, NULL, &task_mem_buffer);
+        (*func)(FOLDERID_LocalAppDataLow, 0, nullptr, &task_mem_buffer);
     if (FAILED(result)) {
-      if (task_mem_buffer != NULL) {
+      if (task_mem_buffer != nullptr) {
         ::CoTaskMemFree(task_mem_buffer);
       }
       ::FreeLibrary(hLib);
       return result;
     }
 
-    if (task_mem_buffer == NULL) {
+    if (task_mem_buffer == nullptr) {
       ::FreeLibrary(hLib);
       return E_UNEXPECTED;
     }
@@ -364,7 +370,7 @@ class ProgramFilesX86Cache {
   }
 
   static HRESULT TryProgramFilesPath(string *path) {
-    if (path == NULL) {
+    if (path == nullptr) {
       return E_FAIL;
     }
     path->clear();
@@ -376,14 +382,14 @@ class ProgramFilesX86Cache {
     // we should use CSIDL_PROGRAM_FILESX86 to find server, renderer, and other
     // binaries' path.
     const HRESULT result = ::SHGetFolderPathW(
-        NULL, CSIDL_PROGRAM_FILESX86, NULL,
+        nullptr, CSIDL_PROGRAM_FILESX86, nullptr,
         SHGFP_TYPE_CURRENT, program_files_path_buffer);
 #elif defined(_M_IX86)
     // In 32-bit processes (such as server, renderer, and other binaries),
     // CSIDL_PROGRAM_FILES always points 32-bit Program Files directory
     // even if they are running in 64-bit Windows.
     const HRESULT result = ::SHGetFolderPathW(
-        NULL, CSIDL_PROGRAM_FILES, NULL,
+        nullptr, CSIDL_PROGRAM_FILES, nullptr,
         SHGFP_TYPE_CURRENT, program_files_path_buffer);
 #else  // !_M_X64 && !_M_IX86
 #error "Unsupported CPU architecture"
@@ -422,8 +428,12 @@ string SystemUtil::GetServerDirectory() {
   return MacUtil::GetServerDirectory();
 
 #elif defined(OS_LINUX)
-  // TODO(mazda): Not to use hardcoded path.
-  return kMozcServerDirectory;
+#if defined(MOZC_SERVER_DIRECTORY)
+  return MOZC_SERVER_DIRECTORY;
+#else
+  return "/usr/lib/mozc";
+#endif  // MOZC_SERVER_DIRECTORY
+
 #endif  // OS_WIN, OS_MACOSX, OS_LINUX
 }
 
@@ -455,9 +465,11 @@ string SystemUtil::GetToolPath() {
 }
 
 string SystemUtil::GetDocumentDirectory() {
-#ifdef OS_MACOSX
+#if defined(OS_MACOSX)
   return GetServerDirectory();
-#else  // OS_MACOSX
+#elif defined(MOZC_DOCUMENT_DIRECTORY)
+  return MOZC_DOCUMENT_DIRECTORY;
+#else
   return FileUtil::JoinPath(GetServerDirectory(), "documents");
 #endif  // OS_MACOSX
 }
@@ -507,7 +519,7 @@ class UserSidImpl {
 };
 
 UserSidImpl::UserSidImpl() {
-  HANDLE htoken = NULL;
+  HANDLE htoken = nullptr;
   if (!::OpenProcessToken(::GetCurrentProcess(), TOKEN_QUERY, &htoken)) {
     sid_ = SystemUtil::GetUserNameAsString();
     LOG(ERROR) << "OpenProcessToken failed: " << ::GetLastError();
@@ -515,8 +527,8 @@ UserSidImpl::UserSidImpl() {
   }
 
   DWORD length = 0;
-  ::GetTokenInformation(htoken, TokenUser, NULL, 0, &length);
-  scoped_array<char> buf(new char[length]);
+  ::GetTokenInformation(htoken, TokenUser, nullptr, 0, &length);
+  unique_ptr<char[]> buf(new char[length]);
   PTOKEN_USER p_user = reinterpret_cast<PTOKEN_USER>(buf.get());
 
   if (length == 0 ||
@@ -556,14 +568,13 @@ string SystemUtil::GetUserSidAsString() {
 namespace {
 
 string GetObjectNameAsString(HANDLE handle) {
-  if (handle == NULL) {
+  if (handle == nullptr) {
     LOG(ERROR) << "Unknown handle";
     return "";
   }
 
   DWORD size = 0;
-  if (::GetUserObjectInformationA(handle, UOI_NAME,
-                                  NULL, 0, &size) ||
+  if (::GetUserObjectInformationA(handle, UOI_NAME, nullptr, 0, &size) ||
       ERROR_INSUFFICIENT_BUFFER != ::GetLastError()) {
     LOG(ERROR) << "GetUserObjectInformationA() failed: "
                << ::GetLastError();
@@ -575,7 +586,7 @@ string GetObjectNameAsString(HANDLE handle) {
     return "";
   }
 
-  scoped_array<char> buf(new char[size]);
+  unique_ptr<char[]> buf(new char[size]);
   DWORD return_size = 0;
   if (!::GetUserObjectInformationA(handle, UOI_NAME, buf.get(),
                                    size, &return_size)) {
@@ -595,15 +606,53 @@ string GetObjectNameAsString(HANDLE handle) {
   return result;
 }
 
-bool GetCurrentSessionId(DWORD *session_id) {
+bool GetCurrentSessionId(uint32 *session_id) {
   DCHECK(session_id);
   *session_id = 0;
-  if (!::ProcessIdToSessionId(::GetCurrentProcessId(),
-                              session_id)) {
+  DWORD id = 0;
+  if (!::ProcessIdToSessionId(::GetCurrentProcessId(), &id)) {
     LOG(ERROR) << "cannot get session id: " << ::GetLastError();
     return false;
   }
+  static_assert(sizeof(DWORD) == sizeof(uint32),
+                "DWORD and uint32 must be equivalent");
+  *session_id = static_cast<uint32>(id);
   return true;
+}
+
+// Here we use the input desktop instead of the desktop associated with the
+// current thread. One reason behind this is that some applications such as
+// Adobe Reader XI use multiple desktops in a process. Basically the input
+// desktop is most appropriate and important desktop for our use case.
+// See http://blogs.adobe.com/asset/2012/10/new-security-capabilities-in-adobe-reader-and-acrobat-xi-now-available.html
+string GetInputDesktopName() {
+  const HDESK desktop_handle =
+      ::OpenInputDesktop(0, FALSE, DESKTOP_READOBJECTS);
+  if (desktop_handle == nullptr) {
+    return "";
+  }
+  const string desktop_name = GetObjectNameAsString(desktop_handle);
+  ::CloseDesktop(desktop_handle);
+  return desktop_name;
+}
+
+string GetProcessWindowStationName() {
+  // We must not close the returned value of GetProcessWindowStation().
+  // http://msdn.microsoft.com/en-us/library/windows/desktop/ms683225.aspx
+  const HWINSTA window_station = ::GetProcessWindowStation();
+  if (window_station == nullptr) {
+    return "";
+  }
+
+  return GetObjectNameAsString(window_station);
+}
+
+string GetSessionIdString() {
+  uint32 session_id = 0;
+  if (!GetCurrentSessionId(&session_id)) {
+    return "";
+  }
+  return NumberUtil::SimpleItoa(session_id);
 }
 
 }  // namespace
@@ -621,21 +670,25 @@ string SystemUtil::GetDesktopNameAsString() {
   return "";
 
 #elif defined(OS_WIN)
-  DWORD session_id = 0;
-  if (!GetCurrentSessionId(&session_id)) {
+  const string &session_id = GetSessionIdString();
+  if (session_id.empty()) {
+    DLOG(ERROR) << "Failed to retrieve session id";
     return "";
   }
 
-  char id[64];
-  snprintf(id, sizeof(id), "%u", session_id);
+  const string &window_station_name = GetProcessWindowStationName();
+  if (window_station_name.empty()) {
+    DLOG(ERROR) << "Failed to retrieve window station name";
+    return "";
+  }
 
-  string result = id;
-  result += ".";
-  result += GetObjectNameAsString(::GetProcessWindowStation());
-  result += ".";
-  result += GetObjectNameAsString(::GetThreadDesktop(::GetCurrentThreadId()));
+  const string &desktop_name = GetInputDesktopName();
+  if (desktop_name.empty()) {
+    DLOG(ERROR) << "Failed to retrieve desktop name";
+    return "";
+  }
 
-  return result;
+  return (session_id + "." + window_station_name + "." + desktop_name);
 #endif  // OS_LINUX, OS_MACOSX, OS_WIN
 }
 
@@ -657,9 +710,8 @@ class IsWindowsVerXOrLaterCache {
       DWORDLONG conditional = 0;
       VER_SET_CONDITION(conditional, VER_MAJORVERSION, VER_GREATER_EQUAL);
       VER_SET_CONDITION(conditional, VER_MINORVERSION, VER_GREATER_EQUAL);
-      const BOOL result =
-        ::VerifyVersionInfo(&osvi, VER_MAJORVERSION | VER_MINORVERSION,
-                            conditional);
+      const BOOL result = ::VerifyVersionInfo(
+          &osvi, VER_MAJORVERSION | VER_MINORVERSION, conditional);
       if (result != FALSE) {
         succeeded_ = true;
         is_ver_x_or_later_ = true;
@@ -676,9 +728,8 @@ class IsWindowsVerXOrLaterCache {
       DWORDLONG conditional = 0;
       VER_SET_CONDITION(conditional, VER_MAJORVERSION, VER_LESS);
       VER_SET_CONDITION(conditional, VER_MINORVERSION, VER_LESS);
-      const BOOL result =
-        ::VerifyVersionInfo(&osvi, VER_MAJORVERSION | VER_MINORVERSION,
-                            conditional);
+      const BOOL result = ::VerifyVersionInfo(
+          &osvi, VER_MAJORVERSION | VER_MINORVERSION, conditional);
       if (result != FALSE) {
         succeeded_ = true;
         is_ver_x_or_later_ = false;
@@ -705,11 +756,12 @@ class IsWindowsVerXOrLaterCache {
 typedef IsWindowsVerXOrLaterCache<6, 0> IsWindowsVistaOrLaterCache;
 typedef IsWindowsVerXOrLaterCache<6, 1> IsWindows7OrLaterCache;
 typedef IsWindowsVerXOrLaterCache<6, 2> IsWindows8OrLaterCache;
+typedef IsWindowsVerXOrLaterCache<6, 3> IsWindows8_1OrLaterCache;
 
 // TODO(yukawa): Use API wrapper so that unit test can emulate any case.
 class SystemDirectoryCache {
  public:
-  SystemDirectoryCache() : system_dir_(NULL) {
+  SystemDirectoryCache() : system_dir_(nullptr) {
     const UINT copied_len_wo_null_if_success =
         ::GetSystemDirectory(path_buffer_, arraysize(path_buffer_));
     if (copied_len_wo_null_if_success >= arraysize(path_buffer_)) {
@@ -720,7 +772,7 @@ class SystemDirectoryCache {
     system_dir_ = path_buffer_;
   }
   const bool succeeded() const {
-    return system_dir_ != NULL;
+    return system_dir_ != nullptr;
   }
   const wchar_t *system_dir() const {
     return system_dir_;
@@ -740,6 +792,9 @@ bool SystemUtil::EnsureVitalImmutableDataIsAvailable() {
     return false;
   }
   if (!Singleton<IsWindows8OrLaterCache>::get()->succeeded()) {
+    return false;
+  }
+  if (!Singleton<IsWindows8_1OrLaterCache>::get()->succeeded()) {
     return false;
   }
   if (!Singleton<SystemDirectoryCache>::get()->succeeded()) {
@@ -905,7 +960,7 @@ bool SystemUtil::IsPlatformSupported() {
   // |OSVERSION| < Windows XP SP2: not supported
   return false;  // not support
 #else  // !OS_LINUX && !OS_MACOSX && !OS_WIN
-  COMPILE_ASSERT(false, unsupported_platform);
+#error "Unsupported platform".
 #endif  // OS_LINUX, OS_MACOSX, OS_WIN
 }
 
@@ -931,6 +986,15 @@ bool SystemUtil::IsWindows8OrLater() {
 #ifdef OS_WIN
   DCHECK(Singleton<IsWindows8OrLaterCache>::get()->succeeded());
   return Singleton<IsWindows8OrLaterCache>::get()->is_ver_x_or_later();
+#else
+  return false;
+#endif  // OS_WIN
+}
+
+bool SystemUtil::IsWindows8_1OrLater() {
+#ifdef OS_WIN
+  DCHECK(Singleton<IsWindows8_1OrLaterCache>::get()->succeeded());
+  return Singleton<IsWindows8_1OrLaterCache>::get()->is_ver_x_or_later();
 #else
   return false;
 #endif  // OS_WIN
@@ -990,8 +1054,8 @@ const wchar_t *SystemUtil::GetSystemDir() {
   return Singleton<SystemDirectoryCache>::get()->system_dir();
 }
 
-bool SystemUtil::GetFileVersion(const wstring &file_fullpath,
-                          int *major, int *minor, int *build, int *revision) {
+bool SystemUtil::GetFileVersion(const wstring &file_fullpath, int *major,
+                                int *minor, int *build, int *revision) {
   DCHECK(major);
   DCHECK(minor);
   DCHECK(build);
@@ -1016,7 +1080,7 @@ bool SystemUtil::GetFileVersion(const wstring &file_fullpath,
     return false;
   }
 
-  scoped_array<BYTE> version_buffer(new BYTE[version_size]);
+  unique_ptr<BYTE[]> version_buffer(new BYTE[version_size]);
 
   if (!::GetFileVersionInfoW(file_fullpath.c_str(), 0,
                              version_size, version_buffer.get())) {
@@ -1025,7 +1089,7 @@ bool SystemUtil::GetFileVersion(const wstring &file_fullpath,
     return false;
   }
 
-  VS_FIXEDFILEINFO *fixed_fileinfo = NULL;
+  VS_FIXEDFILEINFO *fixed_fileinfo = nullptr;
   UINT length = 0;
   if (!::VerQueryValueW(version_buffer.get(), L"\\",
                         reinterpret_cast<LPVOID *>(&fixed_fileinfo),
@@ -1056,13 +1120,13 @@ string SystemUtil::GetFileVersionString(const wstring &file_fullpath) {
 }
 
 string SystemUtil::GetMSCTFAsmCacheReadyEventName() {
-  DWORD session_id = 0;
-  if (!GetCurrentSessionId(&session_id)) {
+  const string &session_id = GetSessionIdString();
+  if (session_id.empty()) {
+    DLOG(ERROR) << "Failed to retrieve session id";
     return "";
   }
 
-  const string &desktop_name =
-      GetObjectNameAsString(::GetThreadDesktop(::GetCurrentThreadId()));
+  const string &desktop_name = GetInputDesktopName();
 
   if (desktop_name.empty()) {
     DLOG(ERROR) << "Failed to retrieve desktop name";
@@ -1070,8 +1134,7 @@ string SystemUtil::GetMSCTFAsmCacheReadyEventName() {
   }
 
   // Compose "Local\MSCTF.AsmCacheReady.<desktop name><session #>".
-  return ("Local\\MSCTF.AsmCacheReady." + desktop_name +
-          Util::StringPrintf("%u", session_id));
+  return ("Local\\MSCTF.AsmCacheReady." + desktop_name + session_id);
 }
 #endif  // OS_WIN
 
@@ -1083,8 +1146,10 @@ string SystemUtil::GetOSVersionString() {
   OSVERSIONINFOEX osvi = { 0 };
   osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOEX);
   if (GetVersionEx(reinterpret_cast<OSVERSIONINFO *>(&osvi))) {
-    ret += "." + NumberUtil::SimpleItoa(osvi.dwMajorVersion);
-    ret += "." + NumberUtil::SimpleItoa(osvi.dwMinorVersion);
+    ret += ".";
+    ret += NumberUtil::SimpleItoa(static_cast<uint32>(osvi.dwMajorVersion));
+    ret += ".";
+    ret += NumberUtil::SimpleItoa(static_cast<uint32>(osvi.dwMinorVersion));
     ret += "." + NumberUtil::SimpleItoa(osvi.wServicePackMajor);
     ret += "." + NumberUtil::SimpleItoa(osvi.wServicePackMinor);
   } else {
@@ -1169,8 +1234,10 @@ bool SystemUtil::IsLittleEndian() {
     unsigned char c[4];
     unsigned int i;
   } u;
-  COMPILE_ASSERT(sizeof(u.c) == sizeof(u.i), bad_sizeof_int);
-  COMPILE_ASSERT(sizeof(u) == sizeof(u.i), misaligned_union);
+  static_assert(sizeof(u.c) == sizeof(u.i),
+                "Expecting (unsigned) int is 32-bit integer.");
+  static_assert(sizeof(u) == sizeof(u.i),
+                "Checking alignment.");
   u.i = 0x12345678U;
   return u.c[0] == 0x78U;
 #else  // OS_WIN

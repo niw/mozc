@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -48,14 +48,14 @@
 #include "config/config_handler.h"
 #include "config/config.pb.h"
 #include "data_manager/packed/packed_data_manager.h"
+#include "dictionary/user_dictionary_util.h"
+#include "dictionary/user_pos.h"
 #include "engine/engine_factory.h"
-#include "engine/engine_interface.h"
 #include "net/http_client.h"
 #include "net/http_client_pepper.h"
 #include "net/jsoncpp.h"
 #include "net/json_util.h"
 #include "session/commands.pb.h"
-#include "session/japanese_session_factory.h"
 #include "session/session_handler.h"
 #include "session/session_usage_observer.h"
 #include "usage_stats/usage_stats.h"
@@ -172,13 +172,44 @@ class MozcSessionHandlerThread : public Thread {
     Util::SetRandomSeed(static_cast<uint32>(Util::GetTime()));
     RegisterPepperInstanceForHTTPClient(instance_);
     PepperFileUtil::Initialize(instance_, kFileIoFileSystemExpectedSize);
+#ifdef GOOGLE_JAPANESE_INPUT_BUILD
+    if (!LoadBigDictionary(&big_dictionary_version_)) {
+      LOG(ERROR) << "LoadBigDictionary error";
+      StartDownloadDictionary();
+      LoadDictionary();
+    } else if (big_dictionary_version_ !=
+                   Version::GetMozcNaclDictionaryVersion()) {
+      LOG(ERROR) << "LoadBigDictionary version miss match "
+                 << big_dictionary_version_ << " :"
+                 << Version::GetMozcNaclDictionaryVersion();
+      StartDownloadDictionary();
+    }
+#else  // GOOGLE_JAPANESE_INPUT_BUILD
     LoadDictionary();
+#endif  // GOOGLE_JAPANESE_INPUT_BUILD
+    user_pos_.reset(
+        new UserPOS(
+            packed::PackedDataManager::GetUserPosManager()->GetUserPOSData()));
 
     engine_.reset(mozc::EngineFactory::Create());
-    session_factory_.reset(new JapaneseSessionFactory(engine_.get()));
-    SessionFactoryManager::SetSessionFactory(session_factory_.get());
-    handler_.reset(new SessionHandler());
+    handler_.reset(new SessionHandler(engine_.get()));
 
+#ifdef GOOGLE_JAPANESE_INPUT_BUILD
+    usage_observer_.reset(new SessionUsageObserver());
+    handler_->AddObserver(usage_observer_.get());
+
+    // start usage stats timer
+    // send usage stats within 5 min later
+    // attempt to send every 5 min -- 2 hours.
+    Scheduler::AddJob(Scheduler::JobSetting(
+        "UsageStatsTimer",
+        usage_stats::UsageStatsUploader::kDefaultScheduleInterval,
+        usage_stats::UsageStatsUploader::kDefaultScheduleMaxInterval,
+        usage_stats::UsageStatsUploader::kDefaultSchedulerDelay,
+        usage_stats::UsageStatsUploader::kDefaultSchedulerRandomDelay,
+        &MozcSessionHandlerThread::SendUsageStats,
+        this));
+#endif  // GOOGLE_JAPANESE_INPUT_BUILD
 
     // Gets the current config.
     config::Config config;
@@ -189,6 +220,9 @@ class MozcSessionHandlerThread : public Thread {
     message["event"]["type"] = "InitializeDone";
     JsonUtil::ProtobufMessageToJsonValue(config, &message["event"]["config"]);
     message["event"]["version"] = Version::GetMozcVersion();
+#ifdef GOOGLE_JAPANESE_INPUT_BUILD
+    message["event"]["big_dictionary_version"] = big_dictionary_version_;
+#endif  // GOOGLE_JAPANESE_INPUT_BUILD
 
     pp::Module::Get()->core()->CallOnMainThread(
         0,
@@ -219,9 +253,20 @@ class MozcSessionHandlerThread : public Thread {
       }
       if (message->isMember("event") && (*message)["event"].isMember("type")) {
         response["event"] = Json::objectValue;
-        response["event"]["type"] = (*message)["event"]["type"].asString();
-        if ((*message)["event"]["type"].asString() == "SyncToFile") {
+        const string event_type = (*message)["event"]["type"].asString();
+        response["event"]["type"] = event_type;
+        if (event_type == "SyncToFile") {
           response["event"]["result"] = PepperFileUtil::SyncMmapToFile();
+        } else if (event_type == "GetVersionInfo") {
+          response["event"]["version"] = Version::GetMozcVersion();
+#ifdef GOOGLE_JAPANESE_INPUT_BUILD
+          response["event"]["big_dictionary_version"] = big_dictionary_version_;
+          response["event"]["big_dictionary_state"] = GetBigDictionaryState();
+#endif  // GOOGLE_JAPANESE_INPUT_BUILD
+        } else if (event_type == "GetPosList") {
+          GetPosList(&response);
+        } else if (event_type == "IsValidReading") {
+          IsValidReading((*message)["event"], &response);
         } else {
           response["event"]["error"] = "Unsupported event";
         }
@@ -240,6 +285,41 @@ class MozcSessionHandlerThread : public Thread {
   }
 
  private:
+#ifdef GOOGLE_JAPANESE_INPUT_BUILD
+  // Loads the big dictionary
+  // Returns true and sets the dictionary version if successful.
+  bool LoadBigDictionary(string *version) {
+    string buffer;
+    // The big dictionary data is in the user's HTML5 file system.
+    if (!PepperFileUtil::ReadBinaryFile("/zipped_data_google", &buffer)) {
+      LOG(ERROR) << "PepperFileUtil::ReadBinaryFile error";
+      return false;
+    }
+    scoped_ptr<mozc::packed::PackedDataManager>
+        data_manager(new mozc::packed::PackedDataManager());
+    if (!data_manager->InitWithZippedData(buffer)) {
+      LOG(ERROR) << "InitWithZippedData error";
+      return false;
+    }
+    *version = data_manager->GetDictionaryVersion();
+    mozc::packed::RegisterPackedDataManager(data_manager.release());
+    return true;
+  }
+
+  // Starts downloading the big dictionary.
+  void StartDownloadDictionary() {
+    downloader_.reset(new chrome::nacl::DictionaryDownloader(
+        Version::GetMozcNaclDictionaryUrl(),
+        "/zipped_data_google"));
+    downloader_->SetOption(10 * 60 * 1000,  // 10 minutes start delay
+                           20 * 60 * 1000,  // + [0-20] minutes random delay
+                           30 * 60 * 1000,  // retry_interval 30 min
+                           4,  // retry interval [30, 60, 120, 240, 240, 240...]
+                           10);  // 10 retries
+    downloader_->StartDownload();
+  }
+#endif  // GOOGLE_JAPANESE_INPUT_BUILD
+
   // Loads the dictionary.
   void LoadDictionary() {
     string output;
@@ -247,19 +327,85 @@ class MozcSessionHandlerThread : public Thread {
     option.timeout = 200000;
     option.max_data_size = 100 * 1024 * 1024;  // 100MB
     // System dictionary data is in the user's Extensions directory.
-    string data_file_name = "./zipped_data_oss";
+#ifdef GOOGLE_JAPANESE_INPUT_BUILD
+    const string data_file_name = "./zipped_data_chromeos";
+#else  // GOOGLE_JAPANESE_INPUT_BUILD
+    const string data_file_name = "./zipped_data_oss";
+#endif  // GOOGLE_JAPANESE_INPUT_BUILD
     CHECK(HTTPClient::Get(data_file_name, option, &output));
     scoped_ptr<mozc::packed::PackedDataManager>
         data_manager(new mozc::packed::PackedDataManager());
     CHECK(data_manager->InitWithZippedData(output));
     mozc::packed::RegisterPackedDataManager(data_manager.release());
   }
+
+#ifdef GOOGLE_JAPANESE_INPUT_BUILD
+  // Returns BigDictionaryState
+  //   0x00: Correct version BigDictionary is found.
+  //   0x1-: BigDictionary is not found.
+  //   0x2-: BigDictionary version miss match.
+  //   0x-*: Status of the downloader.
+  int GetBigDictionaryState() {
+    if (big_dictionary_version_ == Version::GetMozcVersion()) {
+      return 0;
+    }
+    int status = 0;
+    if (big_dictionary_version_.empty()) {
+      status = 0x10;
+    } else {
+      status = 0x20;
+    }
+    if (downloader_.get()) {
+      status += downloader_->GetStatus();
+    }
+    return status;
+  }
+
+  static bool SendUsageStats(void *data) {
+    MozcSessionHandlerThread *self =
+        static_cast<MozcSessionHandlerThread *>(data);
+    usage_stats::UsageStats::SetInteger("BigDictionaryState",
+                                        self->GetBigDictionaryState());
+    return usage_stats::UsageStatsUploader::Send(NULL);
+  }
+#endif  // GOOGLE_JAPANESE_INPUT_BUILD
+
+  void GetPosList(Json::Value *response) {
+    (*response)["event"]["posList"] = Json::Value(Json::arrayValue);
+    Json::Value *pos_list = &(*response)["event"]["posList"];
+    vector<string> tmp_pos_vec;
+    user_pos_->GetPOSList(&tmp_pos_vec);
+    for (int i = 0; i < tmp_pos_vec.size(); ++i) {
+      (*pos_list)[i] = Json::Value(Json::objectValue);
+      const user_dictionary::UserDictionary::PosType pos_type =
+          UserDictionaryUtil::ToPosType(tmp_pos_vec[i].c_str());
+      (*pos_list)[i]["type"] =
+          Json::Value(user_dictionary::UserDictionary::PosType_Name(pos_type));
+      (*pos_list)[i]["name"] = Json::Value(tmp_pos_vec[i]);
+    }
+  }
+
+  void IsValidReading(const Json::Value &event, Json::Value *response) {
+    if (!event.isMember("data")) {
+      (*response)["event"]["result"] = false;
+      return;
+    }
+    (*response)["event"]["data"] = event["data"].asString();
+    (*response)["event"]["result"] =
+        UserDictionaryUtil::IsValidReading(event["data"].asString());
+  }
+
   pp::Instance *instance_;
   BlockingQueue<Json::Value *> *message_queue_;
   pp::CompletionCallbackFactory<MozcSessionHandlerThread> factory_;
   scoped_ptr<EngineInterface> engine_;
   scoped_ptr<SessionHandlerInterface> handler_;
-  scoped_ptr<JapaneseSessionFactory> session_factory_;
+  scoped_ptr<const UserPOSInterface> user_pos_;
+#ifdef GOOGLE_JAPANESE_INPUT_BUILD
+  scoped_ptr<SessionUsageObserver> usage_observer_;
+  scoped_ptr<chrome::nacl::DictionaryDownloader> downloader_;
+  string big_dictionary_version_;
+#endif  // GOOGLE_JAPANESE_INPUT_BUILD
   DISALLOW_COPY_AND_ASSIGN(MozcSessionHandlerThread);
 };
 

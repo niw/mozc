@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -33,7 +33,6 @@
 #include <utility>
 #include <vector>
 
-#include "base/base.h"
 #include "base/config_file_stream.h"
 #include "base/file_util.h"
 #include "base/logging.h"
@@ -120,7 +119,8 @@ UserBoundaryHistoryRewriter::UserBoundaryHistoryRewriter(
 
 UserBoundaryHistoryRewriter::~UserBoundaryHistoryRewriter() {}
 
-void UserBoundaryHistoryRewriter::Finish(Segments *segments) {
+void UserBoundaryHistoryRewriter::Finish(const ConversionRequest &request,
+                                         Segments *segments) {
   if (segments->request_type() != Segments::CONVERSION) {
     return;
   }
@@ -147,10 +147,7 @@ void UserBoundaryHistoryRewriter::Finish(Segments *segments) {
   }
 
   if (segments->resized()) {
-    // |ResizeOrInsert| does NOT call Converter::ResizeSegment since we pass
-    // INSERT as an argument, so we can use dummy ConversionRequest.
-    const ConversionRequest default_request;
-    ResizeOrInsert(segments, default_request, INSERT);
+    ResizeOrInsert(segments, request, INSERT);
 #ifdef OS_ANDROID
     // TODO(hidehiko): UsageStats requires some functionalities, e.g. network,
     // which are not needed for mozc's main features.

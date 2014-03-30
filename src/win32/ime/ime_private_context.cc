@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -31,15 +31,14 @@
 
 #include "base/run_level.h"
 #include "client/client_interface.h"
-#include "config/config_handler.h"
 #include "session/commands.pb.h"
+#include "win32/base/config_snapshot.h"
 #include "win32/base/deleter.h"
 #include "win32/base/indicator_visibility_tracker.h"
 #include "win32/base/input_state.h"
 #include "win32/base/surrogate_pair_observer.h"
 #include "win32/ime/ime_core.h"
 #include "win32/ime/ime_scoped_context.h"
-#include "win32/ime/ime_trace.h"
 #include "win32/ime/ime_ui_visibility_tracker.h"
 
 namespace mozc {
@@ -63,7 +62,6 @@ static HIMCC InitializeHIMCC(HIMCC himcc, DWORD size) {
 }  // namespace
 
 bool PrivateContext::Initialize() {
-  FUNCTION_ENTER();
   magic_number = kMagicNumber;
   thread_id = ::GetCurrentThreadId();
 
@@ -111,7 +109,6 @@ bool PrivateContext::Uninitialize() {
 bool PrivateContext::Validate() const {
   if (magic_number != kMagicNumber) {
     // This object has not been initialized, or unknown data structure.
-    FUNCTION_TRACE(L"Not initialized");
     return false;
   }
   // As revealed in b/3195434, HIMC behaves as if it is *NOT* bound to a
@@ -163,19 +160,18 @@ bool PrivateContextUtil::EnsurePrivateContextIsInitialized(
     return false;
   }
 
-  // Try to retrieve the config's kana input mode and reflect it into the
-  // current kana lock state.
-  const mozc::config::Config &config =
-      mozc::config::ConfigHandler::GetConfig();
-  if (config.preedit_method() == mozc::config::Config::KANA) {
-    private_context_allocator->ime_behavior->prefer_kana_input = true;
-  }
+  // Try to reflect the current config to the IME behavior.
+  const auto &snapshot =
+      ConfigSnapshot::Get(private_context_allocator->client);
+  auto *behavior = private_context_allocator->ime_behavior;
+  behavior->prefer_kana_input = snapshot.use_kana_input;
+  behavior->use_romaji_key_to_toggle_input_style =
+      snapshot.use_keyboard_to_change_preedit_method;
+  behavior->use_mode_indicator = snapshot.use_mode_indicator;
+  behavior->direct_mode_keys = snapshot.direct_mode_keys;
 
-  if (config.use_keyboard_to_change_preedit_method()) {
-    private_context_allocator->ime_behavior->
-        use_romaji_key_to_toggle_input_style = true;
-  }
   return true;
 }
+
 }  // namespace win32
 }  // namespace mozc

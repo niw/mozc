@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -217,6 +217,7 @@ Composer::~Composer() {}
 void Composer::Reset() {
   EditErase();
   ResetInputMode();
+  SetOutputMode(transliteration::HIRAGANA);
   source_text_.assign("");
   typing_corrector_.Reset();
 }
@@ -414,7 +415,9 @@ void Composer::InsertCharacterPreedit(const string &input) {
   while (begin < end) {
     const size_t mblen = Util::OneCharLen(input.c_str() + begin);
     const string character(input, begin, mblen);
-    InsertCharacterKeyAndPreedit(character, character);
+    if (!InsertCharacterKeyAndPreedit(character, character)) {
+      return;
+    }
     begin += mblen;
   }
   DCHECK_EQ(begin, end);
@@ -442,13 +445,14 @@ bool Composer::InsertCharacterKeyAndPreeditInternal(const string &key,
   return true;
 }
 
-void Composer::InsertCharacterKeyAndPreedit(const string &key,
+bool Composer::InsertCharacterKeyAndPreedit(const string &key,
                                             const string &preedit) {
   if (!InsertCharacterKeyAndPreeditInternal(key, preedit)) {
-    return;
+    return false;
   }
   const ProbableKeyEvents empty_events;
   typing_corrector_.InsertCharacter(key, empty_events);
+  return true;
 }
 
 void Composer::InsertCharacterKeyAndPreeditForProbableKeyEvents(
@@ -459,41 +463,6 @@ void Composer::InsertCharacterKeyAndPreeditForProbableKeyEvents(
     return;
   }
   typing_corrector_.InsertCharacter(key, probable_key_events);
-}
-
-void Composer::InsertCharacterPreeditAt(size_t pos, const string &input) {
-  InsertCharacterKeyAndPreeditAt(pos, input, input);
-}
-
-void Composer::InsertCharacterKeyAndPreeditAt(size_t pos,
-                                              const string &key,
-                                              const string &preedit) {
-  if (!EnableInsert()) {
-    return;
-  }
-  const size_t position_before_insertion = position_;
-  const size_t length_before_insertion = composition_->GetLength();
-  const size_t insertion_length = Util::CharsLen(preedit);
-
-  composition_->SetInputMode(Transliterators::CONVERSION_STRING);
-
-  CompositionInput input;
-  input.set_raw(key);
-  input.set_conversion(preedit);
-  input.set_is_new_input(true);
-  composition_->InsertInput(pos, input);
-
-  DCHECK_EQ(insertion_length,
-            composition_->GetLength() - length_before_insertion);
-
-  composition_->SetInputMode(GetTransliterator(input_mode_));
-
-  position_ = position_before_insertion;
-  if (position_before_insertion >= pos) {
-    position_ += insertion_length;
-  }
-  is_new_input_ = false;
-  typing_corrector_.Invalidate();
 }
 
 bool Composer::InsertCharacterKeyEvent(const commands::KeyEvent &key) {
@@ -877,12 +846,17 @@ void Composer::GetTransliteratedText(
   Util::SubString(full_base, t13n_start, t13n_size, result);
 }
 
-void Composer::GetRawText(
+void Composer::GetRawString(string *raw_string) const {
+  GetRawSubString(0, GetLength(), raw_string);
+}
+
+void Composer::GetRawSubString(
     const size_t position,
     const size_t size,
-    string *result) const {
-  DCHECK(result);
-  GetTransliteratedText(Transliterators::RAW_STRING, position, size, result);
+    string *raw_sub_string) const {
+  DCHECK(raw_sub_string);
+  GetTransliteratedText(Transliterators::RAW_STRING, position, size,
+                        raw_sub_string);
 }
 
 void Composer::GetTransliterations(
@@ -1193,7 +1167,7 @@ bool Composer::TransformCharactersForNumbers(string *query) {
 
     if (append_char.empty()) {
       // Append one character.
-      iter.GetUtf8().AppendToString(&transformed_query);
+      Util::UCS4ToUTF8Append(iter.Get(), &transformed_query);
     } else {
       // Append the transformed character.
       transformed_query.append(append_char);

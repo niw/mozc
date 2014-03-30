@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -169,14 +169,14 @@ TEST_F(UnicodeRewriterTest, UnicodeConvertionTest) {
   }
 
   // Mozc accepts Japanese characters
-  for (size_t i = 0; i < ARRAYSIZE_UNSAFE(kUcs4Utf8Data); ++i) {
+  for (size_t i = 0; i < arraysize(kUcs4Utf8Data); ++i) {
     InitSegments(kUcs4Utf8Data[i].ucs4, kUcs4Utf8Data[i].ucs4, &segments);
     EXPECT_TRUE(rewriter.Rewrite(request, &segments));
     EXPECT_TRUE(ContainCandidate(segments, kUcs4Utf8Data[i].utf8));
   }
 
   // Mozc does not accept other characters
-  for (size_t i = 0; i < ARRAYSIZE_UNSAFE(kMozcUnsupportedUtf8); ++i) {
+  for (size_t i = 0; i < arraysize(kMozcUnsupportedUtf8); ++i) {
     InitSegments(kMozcUnsupportedUtf8[i], kMozcUnsupportedUtf8[i], &segments);
     EXPECT_FALSE(rewriter.Rewrite(request, &segments));
   }

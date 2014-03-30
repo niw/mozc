@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -58,7 +58,7 @@ class VariantsRewriter : public RewriterInterface {
   virtual int capability(const ConversionRequest &request) const;
   virtual bool Rewrite(const ConversionRequest &request,
                        Segments *segments) const;
-  virtual void Finish(Segments *segments);
+  virtual void Finish(const ConversionRequest &request, Segments *segments);
   virtual void Clear();
 
   // Used by UserSegmentHistoryRewriter.

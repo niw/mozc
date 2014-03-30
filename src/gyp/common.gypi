@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -34,11 +34,12 @@
 # http://src.chromium.org/viewvc/chrome/trunk/src/build/common.gypi
 {
   'variables': {
-    # Top directory of third party libraries.
-    'third_party_dir%': '<(DEPTH)/third_party',
 
-    # Top directory of third party libraries for Windows.
-    'third_party_dir_win%': '<(DEPTH)/third_party',
+    # Top directory of third party libraries.
+    'third_party_dir': '<(DEPTH)/third_party',
+
+    # Top directory of additional third party libraries.
+    'additional_third_party_dir': '<(DEPTH)/third_party',
 
     # Set this to true when building with Clang.
     'clang%': 0,
@@ -48,66 +49,23 @@
     # <(DEPTH) will be expanded to a relative path for each gyp file.
     'clang_bin_dir%': '<(abs_depth)/third_party/llvm-build/Release+Asserts/bin',
 
-    # This variable need to be set to 1 when you build Mozc for Chromium OS.
-    'chromeos%': 0,
-
     # Versioning stuff for Mac.
-    'mac_sdk%': '10.5',
+    'mac_sdk%': '10.8',
     'mac_deployment_target%': '10.5',
-
-    # warning_cflags will be shared with Mac and Linux.
-    'warning_cflags': [
-      '-Wall',
-      '-Werror',
-      '-Wno-char-subscripts',
-      '-Wno-sign-compare',
-      '-Wno-deprecated-declarations',
-      '-Wwrite-strings',
-    ],
-    # gcc_cflags will be shared with Mac and Linux except for NaCl.
-    'gcc_cflags': [
-      '-fmessage-length=0',
-      '-fno-omit-frame-pointer',
-      '-fno-strict-aliasing',
-      '-funsigned-char',
-      '-include base/namespace.h',
-      '-fstack-protector',
-      '--param=ssp-buffer-size=4',
-      '-pipe',
-      '-pthread',
-    ],
-    # cflags for NaCl.
-    # -fno-omit-frame-pointer flag does not work correctly.
-    #   http://code.google.com/p/chromium/issues/detail?id=122623
-    'nacl_cflags': [
-      '-fmessage-length=0',
-      '-fno-strict-aliasing',
-      '-funsigned-char',
-      '-include base/namespace.h',
-      '-pipe',
-      '-pthread',
-    ],
-    # Libraries for GNU/Linux environment.
-    'linux_ldflags': [
-      '-pthread',
-    ],
 
     # 'conditions' is put inside of 'variables' so that we can use
     # another 'conditions' in this gyp element level later. Note that
     # you can have only one 'conditions' in a gyp element.
     'variables': {
       'target_compiler': '',
+      'extra_warning_cflags': '',
       'conditions': [
+        ['warn_as_error!=0', {
+          'extra_warning_cflags': '-Werror',
+        }],
         ['OS=="win"', {
-          # Variable 'MSVS_VERSION' is available on Windows only.
-          'conditions': [
-            ['MSVS_VERSION=="2010"', {
-              'target_compiler': 'msvs2010',
-            }],
-            ['MSVS_VERSION=="2012"', {
-              'target_compiler': 'msvs2012',
-            }],
-          ],
+          # Variable 'MSVS_VERSION' is available only on Windows.
+          'target_compiler': 'msvs<(MSVS_VERSION)',
         }],
       ],
     },
@@ -115,6 +73,52 @@
     # The target compiler such as 'msvs2010' or 'msvs2012'.
     # This value is currently used only on Windows.
     'target_compiler': '<(target_compiler)',
+
+    # warning_cflags will be shared with Mac and Linux.
+    'warning_cflags': [
+      '-Wall',
+      '-Wno-char-subscripts',
+      '-Wno-sign-compare',
+      '-Wno-deprecated-declarations',
+      '-Wwrite-strings',
+      '<@(extra_warning_cflags)',
+    ],
+
+    # gcc_cflags will be shared with Mac and Linux
+    'gcc_cflags': [
+      '-fmessage-length=0',
+      '-fno-strict-aliasing',
+      '-funsigned-char',
+      '-include base/namespace.h',
+      '-pipe',
+      '-pthread',
+    ],
+    # linux_cflags will be used in Linux except for NaCl.
+    'linux_cflags': [
+      '<@(gcc_cflags)',
+      '-fno-omit-frame-pointer',
+      '-fstack-protector',
+      '--param=ssp-buffer-size=4',
+    ],
+    # nacl_cflags will be used for NaCl.
+    # -fno-omit-frame-pointer flag does not work correctly.
+    #   http://code.google.com/p/chromium/issues/detail?id=122623
+    'nacl_cflags': [
+      '<@(gcc_cflags)',
+    ],
+    # mac_cflags will be used in Mac.
+    # Xcode 4.5 which we are currently using does not support ssp-buffer-size.
+    # TODO(horo): When we can use Xcode 4.6 which supports ssp-buffer-size,
+    # set ssp-buffer-size in Mac.
+    'mac_cflags': [
+      '<@(gcc_cflags)',
+      '-fno-omit-frame-pointer',
+      '-fstack-protector',
+    ],
+    # Libraries for GNU/Linux environment.
+    'linux_ldflags': [
+      '-pthread',
+    ],
 
     # Extra defines
     'additional_defines%': [],
@@ -125,16 +129,19 @@
     'msvs_libs_x64%': [],
 
     # enable_unittest represents if gtest-based unittest is available or not.
-    # This flag is valid on all the platforms except for NaCl.
-    # TODO(yukawa): Support NaCl environment.
     'enable_unittest%': '1',
 
     'conditions': [
-      # enable_gtk_renderer represents if mozc_renderer is supported on Linux
-      # or not.
-      ['target_platform=="Linux" and language=="japanese"', {
+      ['OS=="mac"', {
+        'clang': 1,
+        'clang_bin_dir': '/Applications/Xcode.app/Contents/Developer/Toolchains'
+                         '/XcodeDefault.xctoolchain/usr/bin/',
+      }],
+      ['target_platform=="Linux"', {
+        # enable_gtk_renderer represents if mozc_renderer is supported on Linux
+        # or not.
         'enable_gtk_renderer%': 1,
-      }, { # else
+      }, {  # else
         'enable_gtk_renderer%': 0,
       }],
     ],
@@ -180,11 +187,19 @@
     # (ex. 'out' for Linux), but there is no variable defined for the top
     # level source directory, hence we create the directory in the top
     # level source directory.
-    'mozc_build_tools_dir': '<(DEPTH)/mozc_build_tools/<(OS)',
+    'mozc_build_tools_dir': '<(abs_depth)/mozc_build_tools/<(OS)',
     'proto_out_dir': '<(SHARED_INTERMEDIATE_DIR)/proto_out',
     'branding%': 'Mozc',
     # use_qt is 'YES' only if you want to use GUI binaries.
     'use_qt%': 'YES',
+
+    # server_dir represents the directory where mozc_server is
+    # installed. This option is only for Linux.
+    'server_dir%': '/usr/lib/mozc',
+
+    # Represents the directory where the source code of protobuf is
+    # extracted. This value is ignored when 'use_libprotobuf' is 1.
+    'protobuf_root': '<(additional_third_party_dir)/protobuf',
 
     # use_libprotobuf represents if protobuf library is used or not.
     # This option is only for Linux.
@@ -211,20 +226,17 @@
     # a flag whether the current build is dev-channel or not.
     'channel_dev%': '0',
 
-    # enable_cloud_sync represents if cloud sync feature is enabled or not.
-    'enable_cloud_sync%': 0,
-
     # enable_cloud_handwriting represents if cloud handwriting feature is
     # enabled or not.
     'enable_cloud_handwriting%': 0,
 
-    # enable_webservice_infolist represents if webservice infolist feature is
-    # enabled or not.
-    'enable_webservice_infolist%': 0,
-
     # enable_http_client represents if http client feature is enabled or not.
     'enable_http_client%': 0,
 
+    # enable ambiguous search (a.k.a. KATSUKOU-conversion).
+    'enable_ambiguous_search%': 0,
+    # enable typing correction.
+    'enable_typing_correction%': 0,
 
     # The pkg-config command to get the cflags/ldflags for Linux
     # builds.  We make it customizable to allow building in a special
@@ -274,20 +286,6 @@
           ['channel_dev==1', {
             'defines': ['CHANNEL_DEV'],
           }],
-          ['not(OS=="linux" and use_libprotobuf!=0)', {
-            'include_dirs': [
-              '../protobuf/files/src',
-            ],
-          }],
-          # In order to extend language support of Mozc on Linux, we use
-          # additional suffix except for Japanese so that multiple
-          # converter processes can coexist. Note that Mozc on ChromeOS does
-          # not use IPC so this kind of special treatment is not required.
-          ['language!="japanese" and target_platform=="Linux"', {
-            'defines': [
-              'MOZC_LANGUAGE_SUFFIX_FOR_LINUX="_<(language)"',
-            ],
-          }],
           ['OS=="linux"', {
             'ldflags': [
               '<@(linux_ldflags)',
@@ -305,14 +303,8 @@
           ['use_packed_dictionary==1', {
             'defines': ['MOZC_USE_PACKED_DICTIONARY'],
           }],
-          ['enable_cloud_sync==1', {
-            'defines': ['ENABLE_CLOUD_SYNC'],
-          }],
           ['enable_cloud_handwriting==1', {
             'defines': ['ENABLE_CLOUD_HANDWRITING'],
-          }],
-          ['enable_webservice_infolist==1', {
-            'defines': ['ENABLE_WEBSERVICE_INFOLIST'],
           }],
           ['enable_http_client==1', {
             # TODO(peria): Considers of moving the definition and control of
@@ -328,14 +320,26 @@
           ['target_platform=="Android"', {
             'defines': ['NO_USAGE_REWRITER'],
           }],
-          ['enable_history_deletion==1', {
-            'defines': ['MOZC_ENABLE_HISTORY_DELETION'],
+          ['enable_mode_indicator==1', {
+            'defines': ['MOZC_ENABLE_MODE_INDICATOR'],
           }],
         ],
       },
       'x86_Base': {
         'abstract': 1,
         'msvs_settings': {
+          'VCCLCompilerTool': {
+            'conditions': [
+              ['target_compiler!="msvs2010"', {
+                # Windows 7 and prior still support CPUs that lack of SSE/SSE2.
+                # So we explicitly disable them. We can change this setting to
+                # /arch:SSE2 once Windows 7 is unsupported in Mozc.
+                # Note that Visual C++ 2010 does not have /arch:IA32 and
+                # does not use these enhanced instruction set by default.
+                'AdditionalOptions': '/arch:IA32',
+              }],
+            ],
+          },
           'VCLibrarianTool': {
             'AdditionalLibraryDirectories': [
               '<@(msvs_libs_x86)',
@@ -499,24 +503,16 @@
           'IGNORE_HELP_FLAG',
           'IGNORE_INVALID_FLAG'
         ],
-        'conditions': [
-          ['target_compiler=="msvs2010" or target_compiler=="msvs2012"', {
-            'msvs_settings': {
-              'VCCLCompilerTool': {
-                'WholeProgramOptimization': 'true',
-              },
-              'VCLibrarianTool': {
-                'LinkTimeCodeGeneration': 'true',
-              },
-              'VCLinkerTool': {
-                # 1 = 'LinkTimeCodeGenerationOptionUse'
-                'LinkTimeCodeGeneration': '1',
-              },
-            },
-          }],
-        ],
         'msvs_settings': {
+          'VCCLCompilerTool': {
+            'WholeProgramOptimization': 'true',
+          },
+          'VCLibrarianTool': {
+            'LinkTimeCodeGeneration': 'true',
+          },
           'VCLinkerTool': {
+            # 1 = 'LinkTimeCodeGenerationOptionUse'
+            'LinkTimeCodeGeneration': '1',
             # /PDBALTPATH is documented in Visual C++ 2010
             # http://msdn.microsoft.com/en-us/library/dd998269(VS.100).aspx
             'AdditionalOptions': ['/PDBALTPATH:%_PDB%'],
@@ -528,11 +524,6 @@
         'defines': [
           'OS_ANDROID',
           'MOZC_ANDROID_APPLICATION_ID="<(android_application_id)"',
-          # For Protobuf
-          'GOOGLE_PROTOBUF_NO_RTTI',
-        ],
-        'include_dirs!': [
-          '<(third_party_dir)/breakpad/src',
         ],
         'ldflags!': [  # Remove all libraries for GNU/Linux.
           '<@(linux_ldflags)',
@@ -541,16 +532,9 @@
           '-llog',
         ],
         'conditions': [
-          # For GTEST
-          # TODO(team): Move below flags to global setting as much as possible.
-          ['enable_unittest==1', {
-            'defines+': [
-              'GTEST_HAS_CLONE=0',
-              'GTEST_HAS_GLOBAL_WSTRING=0',
-              'GTEST_HAS_POSIX_RE=0',
-              'GTEST_HAS_STD_WSTRING=0',
-              'GTEST_OS_LINUX=1',
-              'GTEST_OS_LINUX_ANDROID=1',
+          ['android_arch=="arm"', {
+            'cflags': [
+              '-mthumb',  # Force thumb interaction set for smaller file size.
             ],
           }],
         ],
@@ -591,6 +575,9 @@
         ['target_platform=="Android"', {
           'Debug_Android': {
             'inherit_from': ['Common_Base', 'Android_Base', 'Debug_Base'],
+            # We won't debug target's .so file so remove debug symbol.
+            # If the symbol is required, remove following line.
+            'cflags!': ['-g'],
           },
           'Release_Android': {
             'inherit_from': ['Common_Base', 'Android_Base', 'Optimize_Base', 'Release_Base'],
@@ -604,23 +591,9 @@
     ],
     'include_dirs': [
       '<(DEPTH)',
-      '<(third_party_dir)/breakpad/src',
       '<(SHARED_INTERMEDIATE_DIR)',
-      '<(SHARED_INTERMEDIATE_DIR)/proto_out',
     ],
     'conditions': [
-      # For GTEST
-      ['enable_unittest==1', {
-        'defines+': [
-          'GTEST_HAS_TR1_TUPLE=1',
-          'GTEST_HAS_RTTI=0',  # Android NDKr7 requires this.
-                               # TODO(team): Remove when it becomes unnecessary.
-        ],
-        'include_dirs+': [
-          '<(third_party_dir)/gmock/include',
-          '<(third_party_dir)/gtest/include',
-        ],
-      }],
       ['OS=="win"', {
         'defines': [
           'COMPILER_MSVC',
@@ -639,7 +612,6 @@
           '_MIDL_USE_GUIDDEF_',
           '_STL_MSVC',
           '_UNICODE',
-          '_VARIADIC_MAX=10',  # for gtest/gmock on VC++ 2012
           '_WIN32',
           '_WIN32_WINDOWS=0x0501',
           '_WIN32_WINNT=0x0501',
@@ -647,19 +619,14 @@
         ],
         'include_dirs': [
           '<@(msvs_includes)',
-          '<(third_party_dir_win)/wtl/files/include',
+          '<(additional_third_party_dir)/wtl/files/include',
           # Add atl_wrapper dir into the 'include_dirs' so that we can
           # include the header file as <atlbase_mozc.h>, which
           # is more lintian-friendly than "atlbase_mozc.h".
           # See b/5101916 for the background information.
           '<(DEPTH)/win32/atl_wrapper',
         ],
-        # We don't have cygwin in our tree, but we need to have
-        # setup_env.bat in the directory specified in 'msvs_cygwin_dirs'
-        # for GYP to be happy.
-        'msvs_cygwin_dirs': [
-          '<(third_party_dir)/cygwin',
-        ],
+        'msvs_cygwin_shell': 0,
         'msvs_disabled_warnings': ['<@(msvc_disabled_warnings)'],  # /wdXXXX
         'msvs_settings': {
           'VCCLCompilerTool': {
@@ -674,12 +641,7 @@
             'SuppressStartupBanner': 'true',       # /nologo
             'TreatWChar_tAsBuiltInType': 'false',  # /Zc:wchar_t-
             'WarningLevel': '3',                   # /W3
-            'conditions': [
-              ['target_compiler=="msvs2010" or target_compiler=="msvs2012"', {
-                'AdditionalOptions': '/MP',    # /MP
-                'OmitFramePointers': 'false',  # /Oy- (for Visual C++ 2010)
-              }],
-            ],
+            'OmitFramePointers': 'false',          # /Oy-
           },
           'VCLinkerTool': {
             'AdditionalDependencies': [
@@ -723,7 +685,6 @@
       ['OS=="linux"', {
         'defines': [
           'OS_LINUX',
-          'MOZC_SERVER_DIRECTORY="<@(server_dir)"',
         ],
         'cflags': [
           '<@(warning_cflags)',
@@ -736,33 +697,40 @@
           '-Wno-deprecated',
         ],
         'conditions': [
-          ['target_platform=="ChromeOS"', {
-            'defines': [
-              'OS_CHROMEOS',
-            ],
-          }],
           ['clang==1', {
             'cflags': [
-              '-Wno-unnamed-type-template-args',
-              '-Wno-covered-switch-default',
               '-Wtype-limits',
+            ],
+            'cflags_cc': [
+              '-Wno-covered-switch-default',
+              '-Wno-unnamed-type-template-args',
+              '-Wno-c++11-narrowing',
+              '-std=gnu++0x',
+            ],
+          }],
+          ['clang==0 and target_platform!="Windows"', {
+            'cflags_cc': [
+              '-std=gnu++0x',
             ],
           }],
           ['target_platform!="NaCl"', {
             'cflags': [
-              '<@(gcc_cflags)',
+              '<@(linux_cflags)',
             ],
           }],
           ['target_platform=="NaCl"', {
             'target_conditions' : [
               ['_toolset=="host"', {
                 'cflags': [
-                  '<@(gcc_cflags)',
+                  '<@(linux_cflags)',
                 ],
               }],
               ['_toolset=="target"', {
                 'cflags': [
                   '<@(nacl_cflags)',
+                ],
+                'cflags_cc': [
+                  '-std=gnu++0x',
                 ],
                 'ldflags!': [  # Remove all libraries for GNU/Linux.
                   '<@(linux_ldflags)',
@@ -797,7 +765,7 @@
           'GCC_ENABLE_CPP_EXCEPTIONS': 'NO',  # -fno-exceptions
           'GCC_SYMBOLS_PRIVATE_EXTERN': 'NO',  # No -fvisibility=hidden
           'OTHER_CFLAGS': [
-            '<@(gcc_cflags)',
+            '<@(mac_cflags)',
           ],
           'WARNING_CFLAGS': ['<@(warning_cflags)'],
           'MACOSX_DEPLOYMENT_TARGET': '<(mac_deployment_target)',
@@ -809,9 +777,13 @@
               'LDPLUSPLUS': '<(clang_bin_dir)/clang++',
               'CLANG_WARN_CXX0X_EXTENSIONS': 'NO',
               'GCC_VERSION': 'com.apple.compilers.llvm.clang.1_0',
-              'WARNING_CFLAGS+': [
-                '-Wno-unnamed-type-template-args',
+              'WARNING_CFLAGS': [
+                '-Wno-c++11-narrowing',
                 '-Wno-covered-switch-default',
+                '-Wno-unnamed-type-template-args',
+              ],
+              'OTHER_CPLUSPLUSFLAGS': [
+                '$(inherited)', '-std=gnu++11',
               ],
             }],
           ],
@@ -854,6 +826,40 @@
         ['NM.target', '<(pnacl_bin_dir)/pnacl-nm'],
         ['RANLIB.target', '<(pnacl_bin_dir)/pnacl-ranlib'],
         ['STRIP.target', '<(pnacl_bin_dir)/pnacl-strip'],
+      ],
+    }],
+    ['target_platform=="Android"', {
+      'variables': {
+        'ndk_bin_dir%':
+            '<(mozc_build_tools_dir)/ndk-standalone-toolchain/<(android_arch)/bin',
+      },
+      'conditions': [
+        ['android_arch=="arm"', {
+          'variables': {
+            'toolchain_prefix': 'arm-linux-androideabi',
+          },
+        }],
+        ['android_arch=="x86"', {
+          'variables': {
+            'toolchain_prefix': 'i686-linux-android',
+          },
+        }],
+        ['android_arch=="mips"', {
+          'variables': {
+            'toolchain_prefix': 'mipsel-linux-android',
+          },
+        }],
+      ],
+      'make_global_settings': [
+        ['AR.target', '<(ndk_bin_dir)/<(toolchain_prefix)-ar'],
+        ['AS.target', '<(ndk_bin_dir)/<(toolchain_prefix)-as'],
+        ['CC.target', '<(ndk_bin_dir)/<(toolchain_prefix)-gcc'],
+        ['CXX.target', '<(ndk_bin_dir)/<(toolchain_prefix)-g++'],
+        ['LD.target', '<(ndk_bin_dir)/<(toolchain_prefix)-ld'],
+        ['LINK.target', '<(ndk_bin_dir)/<(toolchain_prefix)-g++'],
+        ['NM.target', '<(ndk_bin_dir)/<(toolchain_prefix)-nm'],
+        ['RANLIB.target', '<(ndk_bin_dir)/<(toolchain_prefix)-ranlib'],
+        ['STRIP.target', '<(ndk_bin_dir)/<(toolchain_prefix)-strip'],
       ],
     }],
   ],

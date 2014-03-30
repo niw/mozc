@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -82,7 +82,7 @@ class TypingModel {
   size_t GetIndex(const StringPiece key) const;
 
   // Radix table, needed by GetIndex.
-  scoped_array<unsigned char> character_to_radix_table_;
+  scoped_ptr<unsigned char[]> character_to_radix_table_;
   const size_t characters_size_;
   const uint8 *cost_table_;
   const size_t cost_table_size_;

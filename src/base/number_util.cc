@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -156,18 +156,33 @@ bool IsDecimalNumber(StringPiece str) {
   return true;
 }
 
-const int kInt32BufferSize = 12;  // "-2147483648\0"
-
 const char kAsciiZero = '0';
 const char kAsciiOne = '1';
 const char kAsciiNine = '9';
 
+template <typename T>
+string SimpleItoaImpl(T number) {
+  stringstream ss;
+  ss << number;
+  return ss.str();
+}
+
 }  // namespace
 
 string NumberUtil::SimpleItoa(int32 number) {
-  char buffer[kInt32BufferSize];
-  const int length = snprintf(buffer, kInt32BufferSize, "%d", number);
-  return string(buffer, length);
+  return SimpleItoaImpl(number);
+}
+
+string NumberUtil::SimpleItoa(uint32 number) {
+  return SimpleItoaImpl(number);
+}
+
+string NumberUtil::SimpleItoa(int64 number) {
+  return SimpleItoaImpl(number);
+}
+
+string NumberUtil::SimpleItoa(uint64 number) {
+  return SimpleItoaImpl(number);
 }
 
 int NumberUtil::SimpleAtoi(StringPiece str) {
@@ -699,6 +714,38 @@ bool SafeStrToUInt64WithBase(StringPiece str, int base, uint64 *value) {
 }
 
 }  // namespace
+
+bool NumberUtil::SafeStrToInt32(StringPiece str, int32 *value) {
+  int64 tmp;
+  if (!SafeStrToInt64(str, &tmp)) {
+    return false;
+  }
+  *value = tmp;
+  return static_cast<int64>(*value) == tmp;
+}
+
+bool NumberUtil::SafeStrToInt64(StringPiece str, int64 *value) {
+  const StringPiece stripped_str = SkipWhiteSpace(str);
+  if (stripped_str.empty()) {
+    return false;
+  }
+  uint64 tmp;
+  if (stripped_str[0] == '-') {
+    StringPiece opposite_str = StringPiece(stripped_str,
+                                           1,
+                                           stripped_str.size() - 1);
+    if (!SafeStrToUInt64WithBase(opposite_str, 10, &tmp)) {
+      return false;
+    }
+    *value = -static_cast<int64>(tmp);
+    return *value <= 0;
+  }
+  if (!SafeStrToUInt64WithBase(str, 10, &tmp)) {
+    return false;
+  }
+  *value = tmp;
+  return *value >= 0;
+}
 
 bool NumberUtil::SafeStrToUInt32(StringPiece str, uint32 *value) {
   uint64 tmp;

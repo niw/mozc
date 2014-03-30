@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -63,12 +63,28 @@
         '../rewriter/rewriter_base.gyp:install_gen_usage_rewriter_dictionary_main',
       ],
       'conditions': [
-        ['language=="pinyin"', {
+        ['target_platform=="Android"', {
           'dependencies': [
-            '../languages/pinyin/pinyin.gyp:'
-            'install_gen_pinyin_english_dictionary_data_main',
-          ]
+            ':make_standalone_toolchain',
+          ],
         }],
+      ],
+    },
+    {
+      'target_name': 'make_standalone_toolchain',
+      'toolsets': ['host'],
+      'type': 'none',
+      'actions': [
+        {
+          'action_name': 'make_standalone_toolchain',
+          'inputs': ['build_tools.gyp'],
+          'outputs': ['dummy_make_standalone_toolchain'],
+          'action': [
+            '<(android_ndk_home)/build/tools/make-standalone-toolchain.sh',
+            '--arch=<(android_arch)',
+            '--install-dir=<(mozc_build_tools_dir)/ndk-standalone-toolchain/<(android_arch)',
+          ],
+        },
       ],
     },
   ],

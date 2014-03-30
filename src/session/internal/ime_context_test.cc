@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,6 @@
 #include <string>
 
 #include "base/scoped_ptr.h"
-#include "base/testing_util.h"
 #include "composer/composer.h"
 #include "composer/table.h"
 #include "converter/converter_interface.h"
@@ -42,6 +41,7 @@
 #include "session/session_converter.h"
 #include "testing/base/public/googletest.h"
 #include "testing/base/public/gunit.h"
+#include "testing/base/public/testing_util.h"
 
 namespace mozc {
 namespace session {

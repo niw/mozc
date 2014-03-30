@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -37,8 +37,8 @@
 
 #include <string>
 
-#include "base/base.h"
 #include "base/const.h"
+#include "base/cpu_stats.h"
 #include "base/logging.h"
 #include "base/mutex.h"
 #include "base/singleton.h"
@@ -69,7 +69,7 @@ FPSetFileCompletionNotificationModes
 #define FILE_SKIP_SET_EVENT_ON_HANDLE 0x2
 #endif  // FILE_SKIP_SET_EVENT_ON_HANDLE
 
-static once_t g_once = MOZC_ONCE_INIT;
+once_t g_once = MOZC_ONCE_INIT;
 
 void InitAPIsForVistaAndLater() {
   // We have to load the function pointer dynamically
@@ -93,6 +93,12 @@ void InitAPIsForVistaAndLater() {
   g_set_file_completion_notification_modes =
       reinterpret_cast<FPSetFileCompletionNotificationModes>
       (::GetProcAddress(lib, "SetFileCompletionNotificationModes"));
+}
+
+size_t GetNumberOfProcessors() {
+  // thread-safety is not required.
+  static size_t num = CPUStats().GetNumberOfProcessors();
+  return max(num, 1);
 }
 
 // Least significant bit of OVERLAPPED::hEvent can be used for special
@@ -759,25 +765,29 @@ void IPCClient::Init(const string &name, const string &server_path) {
     wstring wserver_address;
     Util::UTF8ToWide(server_address.c_str(), &wserver_address);
 
-    const HANDLE handle = ::CreateFile(wserver_address.c_str(),
-                                       GENERIC_READ | GENERIC_WRITE,
-                                       0, nullptr, OPEN_EXISTING,
-                                       FILE_FLAG_OVERLAPPED |
-                                       SECURITY_SQOS_PRESENT |
-                                       SECURITY_IDENTIFICATION |
-                                       SECURITY_EFFECTIVE_ONLY,
-                                       nullptr);
+    if (GetNumberOfProcessors() == 1) {
+      // When the code is running in single processor environment, sometimes
+      // IPC server has not finished the clean-up tasks for the previous IPC
+      // session here. So we intentionally call WaitNamedPipe API so that IPC
+      // server has a chance to complete clean-up tasks if necessary.
+      // NOTE: We cannot set 0 for the wait time because 0 has a special meaning
+      // as |NMPWAIT_USE_DEFAULT_WAIT|.
+      const DWORD kMinWaitTimeForWaitNamedPipe = 1;
+      ::WaitNamedPipe(wserver_address.c_str(), kMinWaitTimeForWaitNamedPipe);
+    }
+
+    ScopedHandle new_handle(::CreateFile(wserver_address.c_str(),
+                                         GENERIC_READ | GENERIC_WRITE,
+                                         0, nullptr, OPEN_EXISTING,
+                                         FILE_FLAG_OVERLAPPED |
+                                         SECURITY_SQOS_PRESENT |
+                                         SECURITY_IDENTIFICATION |
+                                         SECURITY_EFFECTIVE_ONLY,
+                                         nullptr));
     const DWORD create_file_error = ::GetLastError();
-    if (INVALID_HANDLE_VALUE != handle) {
-      DWORD mode = PIPE_READMODE_MESSAGE;
-      if (::SetNamedPipeHandleState(handle, &mode, nullptr, nullptr) == FALSE) {
-        const DWORD set_namedpipe_handle_state_error = ::GetLastError();
-        LOG(ERROR) << "SetNamedPipeHandleState failed. error: "
-                   << set_namedpipe_handle_state_error;
-        last_ipc_error_ = IPC_UNKNOWN_ERROR;
-        return;
-      }
-      pipe_handle_.reset(handle);
+    // ScopedHandle returns nullptr even when it received INVALID_HANDLE_VALUE.
+    if (new_handle.get() != nullptr) {
+      pipe_handle_.reset(new_handle.take());
       MaybeDisableFileCompletionNotification(pipe_handle_.get());
       if (!manager->IsValidServer(GetServerProcessIdImpl(pipe_handle_.get()),
                                   server_path)) {

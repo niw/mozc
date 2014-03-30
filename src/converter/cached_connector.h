@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -58,8 +58,8 @@ class CachedConnector : public ConnectorInterface {
   // Cache data need to be mutable as they are modified in const methods. For
   // the performance, we are assuming the cache is an array, not vector.
   mutable bool cache_initialized_;
-  mutable scoped_array<int> cache_key_;
-  mutable scoped_array<int> cache_value_;
+  mutable scoped_ptr<int[]> cache_key_;
+  mutable scoped_ptr<int[]> cache_value_;
   const int cache_size_;
   const int hash_mask_;
 

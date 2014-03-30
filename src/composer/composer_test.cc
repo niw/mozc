@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -161,6 +161,11 @@ TEST_F(ComposerTest, Reset) {
   composer_->InsertCharacter("mozuku");
 
   composer_->SetInputMode(transliteration::HALF_ASCII);
+
+  EXPECT_EQ(transliteration::HIRAGANA, composer_->GetOutputMode());
+  composer_->SetOutputMode(transliteration::HALF_ASCII);
+  EXPECT_EQ(transliteration::HALF_ASCII, composer_->GetOutputMode());
+
   composer_->SetInputFieldType(commands::Context::PASSWORD);
   composer_->Reset();
 
@@ -169,6 +174,8 @@ TEST_F(ComposerTest, Reset) {
   EXPECT_EQ(transliteration::HALF_ASCII, composer_->GetInputMode());
   EXPECT_EQ(commands::Context::PASSWORD,
             composer_->GetInputFieldType());
+  // The output mode should be reset.
+  EXPECT_EQ(transliteration::HIRAGANA, composer_->GetOutputMode());
 }
 
 TEST_F(ComposerTest, ResetInputMode) {
@@ -243,63 +250,6 @@ TEST_F(ComposerTest, BackSpace) {
   result.clear();
   composer_->GetQueryForConversion(&result);
   EXPECT_EQ("ab", result);
-}
-
-TEST_F(ComposerTest, InsertCharacterPreeditAt) {
-  // "あ"
-  table_->AddRule("a", "\xe3\x81\x82", "");
-  // "い"
-  table_->AddRule("i", "\xe3\x81\x84", "");
-  // "う"
-  table_->AddRule("u", "\xe3\x81\x86", "");
-  // "く"
-  table_->AddRule("ku", "\xE3\x81\x8F", "");
-
-  composer_->InsertCharacter("au");
-  string output;
-
-  const transliteration::TransliterationType input_mode =
-      composer_->GetInputMode();
-
-  composer_->InsertCharacterPreeditAt(0, "a");
-  EXPECT_EQ(3, composer_->GetLength());
-  EXPECT_EQ(3, composer_->GetCursor());
-  composer_->GetStringForPreedit(&output);
-  // "aあう"
-  EXPECT_EQ("a\xE3\x81\x82\xE3\x81\x86", output);
-  // Input mode of composer must not be changed
-  EXPECT_EQ(input_mode, composer_->GetInputMode());
-
-  composer_->MoveCursorLeft();
-  // "い"
-  composer_->InsertCharacterPreeditAt(2, "\xE3\x81\x84");
-  EXPECT_EQ(4, composer_->GetLength());
-  EXPECT_EQ(3, composer_->GetCursor());
-  composer_->GetStringForPreedit(&output);
-  // "aあいう"
-  EXPECT_EQ("a\xE3\x81\x82\xE3\x81\x84\xE3\x81\x86", output);
-  EXPECT_EQ(input_mode, composer_->GetInputMode());
-
-  composer_->MoveCursorLeft();
-  composer_->InsertCharacterPreeditAt(3, "ku");
-  EXPECT_EQ(6, composer_->GetLength());
-  EXPECT_EQ(2, composer_->GetCursor());
-  composer_->GetStringForPreedit(&output);
-  // "aあいkuう"
-  EXPECT_EQ("a\xE3\x81\x82\xE3\x81\x84ku\xE3\x81\x86", output);
-  EXPECT_EQ(input_mode, composer_->GetInputMode());
-
-  composer_->InsertCharacterPreeditAt(0, "1");
-  composer_->GetStringForPreedit(&output);
-  // "1aあいkuう"
-  EXPECT_EQ("1a\xE3\x81\x82\xE3\x81\x84ku\xE3\x81\x86", output);
-  EXPECT_EQ(input_mode, composer_->GetInputMode());
-
-  // Check the actual input mode of composition
-  composer_->InsertCharacter("a");
-  composer_->GetStringForPreedit(&output);
-  // "1aああいkuう"
-  EXPECT_EQ("1a\xE3\x81\x82\xE3\x81\x82\xE3\x81\x84ku\xE3\x81\x86", output);
 }
 
 TEST_F(ComposerTest, OutputMode) {
@@ -855,7 +805,7 @@ TEST_F(ComposerTest, GetStringFunctions_InputFieldType) {
 
   composer_->SetInputMode(transliteration::HIRAGANA);
   for (size_t test_data_index = 0;
-       test_data_index < ARRAYSIZE_UNSAFE(test_data_list);
+       test_data_index < arraysize(test_data_list);
        ++test_data_index) {
     const TestData &test_data = test_data_list[test_data_index];
     composer_->SetInputFieldType(test_data.field_type_);
@@ -3098,7 +3048,7 @@ TEST_F(ComposerTest, ShouldCommitHead) {
       TestData("ABCDEFGHI", commands::Context::TEL, true, 9),
   };
 
-  for (size_t i = 0; i < ARRAYSIZE_UNSAFE(test_data_list); ++i) {
+  for (size_t i = 0; i < arraysize(test_data_list); ++i) {
     const TestData &test_data = test_data_list[i];
     SCOPED_TRACE(test_data.input_text);
     SCOPED_TRACE(test_data.field_type);
@@ -3524,6 +3474,35 @@ TEST_F(TypingCorrectionTest, GetTypeCorrectedQueriesForPrediction) {
                                                    ProbableKeyEvents());
     EXPECT_TRUE(IsTypingCorrectorClearedOrInvalidated(*composer_));
   }
+}
+
+TEST_F(ComposerTest, GetRawString) {
+  // "さ"
+  table_->AddRule("sa", "\xE3\x81\x95", "");
+  // "し"
+  table_->AddRule("shi", "\xE3\x81\x97", "");
+  // "み"
+  table_->AddRule("mi", "\xE3\x81\xBF", "");
+
+  composer_->SetOutputMode(transliteration::HIRAGANA);
+
+  composer_->InsertCharacter("sashimi");
+
+  string output;
+  composer_->GetStringForPreedit(&output);
+  // "さしみ"
+  EXPECT_EQ("\xE3\x81\x95\xE3\x81\x97\xE3\x81\xBF", output);
+
+  string raw_string;
+  composer_->GetRawString(&raw_string);
+  EXPECT_EQ("sashimi", raw_string);
+
+  string raw_sub_string;
+  composer_->GetRawSubString(0, 2, &raw_sub_string);
+  EXPECT_EQ("sashi", raw_sub_string);
+
+  composer_->GetRawSubString(1, 1, &raw_sub_string);
+  EXPECT_EQ("shi", raw_sub_string);
 }
 
 }  // namespace composer

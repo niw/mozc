@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -27,8 +27,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 // OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-#ifndef IME_MOZC_CLIENT_CLIENT_MOCK_H_
-#define IME_MOZC_CLIENT_CLIENT_MOCK_H_
+#ifndef MOZC_CLIENT_CLIENT_MOCK_H_
+#define MOZC_CLIENT_CLIENT_MOCK_H_
 
 #include <map>
 #include <string>
@@ -76,11 +76,6 @@ class ClientMock : public client::ClientInterface {
   bool LaunchTool(const string &mode, const string &extra_arg);
   bool LaunchToolWithProtoBuf(const commands::Output &output);
   bool OpenBrowser(const string &url);
-  bool StartCloudSync();
-  bool ClearCloudSync();
-  bool GetCloudSyncStatus(commands::CloudSyncStatus *cloud_sync_status);
-  void set_output_GetCloudSyncStatus(
-      const commands::CloudSyncStatus &cloud_sync_status);
 
   void ClearFunctionCounter();
   void SetBoolFunctionReturn(string func_name, bool value);
@@ -111,9 +106,7 @@ class ClientMock : public client::ClientInterface {
   map<string, commands::Output> outputs_;
 
   config::Config called_config_;
-
-  commands::CloudSyncStatus cloud_sync_status_;
 };
-}  // namespace ibus
+}  // namespace client
 }  // namespace mozc
-#endif  // IME_MOZC_CLIENT_CLIENT_MOCK_H_
+#endif  // MOZC_CLIENT_CLIENT_MOCK_H_

@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -29,6 +29,10 @@
 
 #ifndef MOZC_BASE_FILE_UTIL_H_
 #define MOZC_BASE_FILE_UTIL_H_
+
+#ifdef OS_WIN
+#include <windows.h>
+#endif  // OS_WIN
 
 #include <string>
 
@@ -71,7 +75,16 @@ class FileUtil {
   // Returns true if the directory exists.
   static bool DirectoryExists(const string &filename);
 
+#ifdef OS_WIN
+  // Adds file attributes to the file to hide it.
+  // FILE_ATTRIBUTE_NORMAL will be removed.
+  static bool HideFile(const string &filename);
+  static bool HideFileWithExtraAttributes(const string &filename,
+                                          DWORD extra_attributes);
+#endif  // OS_WIN
+
   // Copies a file to another file, using mmap internally.
+  // The destination file will be overwritten if exists.
   // Returns true if the file is copied successfully.
   static bool CopyFile(const string &from, const string &to);
 

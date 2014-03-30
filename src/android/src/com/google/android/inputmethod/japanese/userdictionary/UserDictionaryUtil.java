@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -451,7 +451,7 @@ class UserDictionaryUtil {
   }
 
   /**
-   * Returns a new instance for Dictioanry Name Dialog.
+   * Returns a new instance for Dictionary Name Dialog.
    */
   static DictionaryNameDialog createDictionaryNameDialog(
       Context context, int titleResourceId, DictionaryNameDialogListener listener,

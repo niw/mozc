@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -149,7 +149,8 @@ TEST_F(ConverterMockTest, SetFinishConversion) {
   Segments output, expect;
   SetSegments(&expect, "FinishConversion");
   GetMock()->SetFinishConversion(&expect, true);
-  EXPECT_TRUE(converter->FinishConversion(&output));
+  const ConversionRequest default_request;
+  EXPECT_TRUE(converter->FinishConversion(default_request, &output));
   EXPECT_EQ(expect.DebugString(), output.DebugString());
 }
 
@@ -350,7 +351,8 @@ TEST_F(ConverterMockTest, GetFinishConversion) {
   Segments input;
   SetSegments(&input, "FinishConversion");
   const string input_str = input.DebugString();
-  converter->FinishConversion(&input);
+  ConversionRequest default_request;
+  converter->FinishConversion(default_request, &input);
 
   Segments last_segment;
   GetMock()->GetFinishConversion(&last_segment);

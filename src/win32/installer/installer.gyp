@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -172,6 +172,7 @@
                 '--version_file', '../../mozc_version.txt',
                 '--input', 'mozc_version_template.wxi',
                 '--output', '<(mozc_version_file)',
+                '--branding', '<(branding)',
               ],
               'message': '<(mozc_version_file)',
             },
@@ -311,9 +312,6 @@
           'actions': [
             {
               'action_name': 'mozc_installers_win_versioning',
-              'variables': {
-                'python_command': 'python',
-              },
               'inputs': [
                 '../../mozc_version.txt',
                 '../../build_tools/versioning_files.py',
@@ -326,12 +324,37 @@
                 '<(PRODUCT_DIR)/mozc_installers_win_versioning_dummy',
               ],
               'action': [
-                '<(python_command)',
+                'python',
                 '../../build_tools/versioning_files.py',
                 '--version_file', '../../mozc_version.txt',
                 '--configuration', '<(CONFIGURATION_NAME)',
                 '<(mozc_32bit_msi)',
                 '<(mozc_64bit_msi)',
+              ],
+            },
+          ],
+          'dependencies': [
+            'mozc_installers_win',
+          ],
+        },
+        {
+          'target_name': 'mozc_installers_win_size_check',
+          'type': 'none',
+          'actions': [
+            {
+              'action_name': 'mozc_installers_win_size_check',
+              'inputs': [
+                '<(mozc_32bit_msi)',
+                '<(mozc_64bit_msi)',
+              ],
+              'outputs': [
+                '<(PRODUCT_DIR)/mozc_installers_win_size_check_dummy',
+              ],
+              'action': [
+                'python',
+                '../../build_tools/binary_size_checker.py',
+                '--target_filename',
+                '<(mozc_32bit_msi),<(mozc_64bit_msi)',
               ],
             },
           ],

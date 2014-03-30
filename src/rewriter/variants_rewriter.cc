@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,6 @@
 #include <string>
 #include <vector>
 
-#include "base/base.h"
 #include "base/logging.h"
 #include "base/number_util.h"
 #include "base/util.h"
@@ -434,7 +433,8 @@ bool VariantsRewriter::RewriteSegment(RewriteType type, Segment *seg) const {
   return modified;
 }
 
-void VariantsRewriter::Finish(Segments *segments) {
+void VariantsRewriter::Finish(const ConversionRequest &request,
+                              Segments *segments) {
   if (segments->request_type() != Segments::CONVERSION) {
     return;
   }

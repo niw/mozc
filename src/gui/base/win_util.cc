@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -60,7 +60,6 @@
 #include <QtGui/QPaintEngine>
 #include <QtGui/QWidget>
 
-#include "base/base.h"
 #ifdef OS_WIN
 #include "base/const.h"
 #endif  // OS_WIN

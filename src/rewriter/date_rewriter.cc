@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -43,7 +43,6 @@
 #include <string>
 #include <vector>
 
-#include "base/base.h"
 #include "base/logging.h"
 #include "base/number_util.h"
 #include "base/util.h"
@@ -2343,8 +2342,10 @@ const bool GetFourDigits(const composer::Composer &composer,
 
   // 3. Raw input
   string raw;
-  // Note that given segment is the only segment in the Segments.
-  composer.GetRawText(0, Util::CharsLen(segment.key()), &raw);
+  // Note that only one segment is in the Segments, but sometimes like
+  // on partial conversion, segment.key() is different from the size of
+  // the whole composition.
+  composer.GetRawSubString(0, Util::CharsLen(segment.key()), &raw);
   if (IsFourDigits(raw)) {
     *output = raw;
     return true;

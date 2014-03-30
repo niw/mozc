@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,7 @@ public class MozcPictureDrawable extends PictureDrawable {
       return;
     }
     Rect bounds = getBounds();
-    canvas.save();
+    int saveCount = canvas.save();
     try {
       canvas.clipRect(bounds);
       canvas.translate(bounds.left, bounds.top);
@@ -60,7 +60,7 @@ public class MozcPictureDrawable extends PictureDrawable {
       canvas.scale(scaleX, scaleY);
       canvas.drawPicture(picture);
     } finally {
-      canvas.restore();
+      canvas.restoreToCount(saveCount);
     }
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,25 +32,28 @@
 
 #include <Windows.h>
 
+#include <memory>
+
 #include "base/port.h"
-#include "base/scoped_ptr.h"
 
 namespace mozc {
 namespace win32 {
-
-class IndicatorVisibilityTracker;
-
 namespace tsf {
+
+class TipInputModeManager;
 
 class TipThreadContext {
  public:
   TipThreadContext();
   ~TipThreadContext();
 
-  IndicatorVisibilityTracker *GetIndicatorVisibilityTracker();
+  TipInputModeManager *GetInputModeManager();
+  int32 GetFocusRevision() const;
+  void IncrementFocusRevision();
 
  private:
-  scoped_ptr<IndicatorVisibilityTracker> indicator_visibility_tracker_;
+  class InternalState;
+  std::unique_ptr<InternalState> state_;
 
   DISALLOW_COPY_AND_ASSIGN(TipThreadContext);
 };

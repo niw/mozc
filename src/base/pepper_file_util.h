@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -93,6 +93,7 @@ class PepperFileUtil {
   static bool DeleteFile(const string &filename);
 
   // Renames a file.
+  // This method first deletes the "to" file if it exists, and tries to rename.
   static bool RenameFile(const string &from, const string &to);
 
   // Registers Mmap object.

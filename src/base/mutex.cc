@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -39,7 +39,7 @@
 #include <libkern/OSAtomic.h>
 #endif  // OS_MACOSX
 
-#include "base/base.h"
+#include "base/port.h"
 #include "base/util.h"
 #include "base/win_util.h"
 
@@ -102,14 +102,17 @@ namespace {
 
 template <typename T>
 CRITICAL_SECTION *AsCriticalSection(T* opaque_buffer) {
-  COMPILE_ASSERT(sizeof(T) >= sizeof(CRITICAL_SECTION),
-                 opaque_buffer_size_check);
+  static_assert(sizeof(T) >= sizeof(CRITICAL_SECTION),
+                "The opaque buffer must have sufficient space to store a "
+                "CRITICAL_SECTION structure");
   return reinterpret_cast<CRITICAL_SECTION *>(opaque_buffer);
 }
 
 template <typename T>
 SRWLOCK *AsSRWLock(T* opaque_buffer) {
-  COMPILE_ASSERT(sizeof(T) >= sizeof(SRWLOCK), opaque_buffer_size_check);
+  static_assert(sizeof(T) >= sizeof(SRWLOCK),
+                "The opaque buffer must have sufficient space to store a "
+                "SRWLOCK structure");
   return reinterpret_cast<SRWLOCK *>(opaque_buffer);
 }
 
@@ -217,6 +220,10 @@ void Mutex::Lock() {
   ::EnterCriticalSection(AsCriticalSection(&opaque_buffer_));
 }
 
+bool Mutex::TryLock() {
+  return ::TryEnterCriticalSection(AsCriticalSection(&opaque_buffer_));
+}
+
 void Mutex::Unlock() {
   ::LeaveCriticalSection(AsCriticalSection(&opaque_buffer_));
 }
@@ -277,8 +284,9 @@ namespace {
 
 template <typename T>
 pthread_mutex_t *AsPthreadMutexT(T* opaque_buffer) {
-  COMPILE_ASSERT(sizeof(T) >= sizeof(pthread_mutex_t),
-                 opaque_buffer_size_check);
+  static_assert(sizeof(T) >= sizeof(pthread_mutex_t),
+                "The opaque buffer must have sufficient space to store a "
+                "pthread_mutex_t structure");
   return reinterpret_cast<pthread_mutex_t *>(opaque_buffer);
 }
 
@@ -314,6 +322,10 @@ void Mutex::Lock() {
   pthread_mutex_lock(AsPthreadMutexT(&opaque_buffer_));
 }
 
+bool Mutex::TryLock() {
+  return pthread_mutex_trylock(AsPthreadMutexT(&opaque_buffer_)) == 0;
+}
+
 void Mutex::Unlock() {
   pthread_mutex_unlock(AsPthreadMutexT(&opaque_buffer_));
 }
@@ -330,8 +342,9 @@ namespace {
 
 template <typename T>
 pthread_rwlock_t *AsPthreadRWLockT(T* opaque_buffer) {
-  COMPILE_ASSERT(sizeof(T) >= sizeof(pthread_rwlock_t),
-                 opaque_buffer_size_check);
+  static_assert(sizeof(T) >= sizeof(pthread_rwlock_t),
+                "The opaque buffer must have sufficient space to store a "
+                "pthread_rwlock_t structure");
   return reinterpret_cast<pthread_rwlock_t *>(opaque_buffer);
 }
 

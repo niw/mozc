@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -288,6 +288,7 @@ void SetTestDataForConversion(commands::Output *output) {
     commands::Status *status = output->mutable_status();
     status->set_activated(true);
     status->set_mode(commands::HIRAGANA);
+    status->set_comeback_mode(commands::HIRAGANA);
   }
   {
     commands::CandidateList *candidate_list =

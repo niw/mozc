@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -116,7 +116,8 @@ class KeyParserData {
     keycode_map_["home"] = KeyEvent::HOME;
     keycode_map_["end"] = KeyEvent::END;
     keycode_map_["space"] = KeyEvent::SPACE;
-    keycode_map_["ascii"] = KeyEvent::ASCII;
+    keycode_map_["ascii"] = KeyEvent::TEXT_INPUT;    // deprecated
+    keycode_map_["textinput"] = KeyEvent::TEXT_INPUT;
     keycode_map_["tab"] = KeyEvent::TAB;
     keycode_map_["pageup"] = KeyEvent::PAGE_UP;
     keycode_map_["pagedown"] = KeyEvent::PAGE_DOWN;
@@ -170,6 +171,10 @@ class KeyParserData {
     keycode_map_["divide"] = KeyEvent::DIVIDE;
     keycode_map_["equals"] = KeyEvent::EQUALS;
     keycode_map_["comma"] = KeyEvent::COMMA;
+    keycode_map_["clear"] = KeyEvent::CLEAR;
+
+    // Meant to be used for any other special keys.
+    keycode_map_["undefinedkey"] = KeyEvent::UNDEFINED_KEY;
   }
 
   SpecialKeysMap keycode_map_;
@@ -206,10 +211,10 @@ bool KeyParser::ParseKeyVector(const vector<string> &keys,
 
   for (size_t i = 0; i < keys.size(); ++i) {
     if (Util::CharsLen(keys[i]) == 1) {
-      const char *begin = keys[i].c_str();
-      size_t mblen = 0;
-      uint16 key_code = Util::UTF8ToUCS2(begin, begin + keys[i].size(), &mblen);
-      key_event->set_key_code(key_code);
+      char32 key_code = 0;
+      if (Util::SplitFirstChar32(keys[i], &key_code, NULL)) {
+        key_event->set_key_code(key_code);
+      }
     } else {
       string key = keys[i];
       Util::LowerString(&key);

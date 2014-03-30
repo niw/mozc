@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -258,23 +258,15 @@ class KeyCheckDictionary : public DictionaryInterface {
     return LookupPredictive(str, size, allocator);
   }
 
-  virtual Node *LookupPrefix(const char *str, int size,
-                             NodeAllocatorInterface *allocator) const {
+  virtual void LookupPrefix(
+      StringPiece key,
+      bool use_kana_modifier_insensitive_looukp,
+      Callback *callback) const {
     // No check
-    return NULL;
   }
 
-  virtual Node *LookupPrefixWithLimit(const char *str, int size,
-                                      const Limit &limit,
-                                      NodeAllocatorInterface *allocator) const {
+  virtual void LookupExact(StringPiece key, Callback *callback) const {
     // No check
-    return NULL;
-  }
-
-  virtual Node *LookupExact(const char *str, int size,
-                            NodeAllocatorInterface *allocator) const {
-    // No check
-    return NULL;
   }
 
   virtual Node *LookupReverse(const char *str, int size,
@@ -569,6 +561,44 @@ TEST_F(ImmutableConverterTest, AutoPartialSuggestionDefault) {
   ConversionRequest conversion_request(NULL, &request);
 
   EXPECT_FALSE(AutoPartialSuggestionTestHelper(conversion_request));
+}
+
+TEST_F(ImmutableConverterTest, AutoPartialSuggestionForSingleSegment) {
+  const commands::Request request;
+  ConversionRequest conversion_request(NULL, &request);
+  conversion_request.set_create_partial_candidates(true);
+
+  scoped_ptr<MockDataAndImmutableConverter> data_and_converter(
+      new MockDataAndImmutableConverter);
+  const string kRequestKeys[] = {
+      // "たかまち"
+      "\xE3\x81\x9F\xE3\x81\x8B\xE3\x81\xBE\xE3\x81\xA1",
+      // "なのは"
+      "\xE3\x81\xAA\xE3\x81\xAE\xE3\x81\xAF",
+      // "まほうしょうじょ"
+      "\xE3\x81\xBE\xE3\x81\xBB\xE3\x81\x86\xE3\x81\x97"
+      "\xE3\x82\x87\xE3\x81\x86\xE3\x81\x98\xE3\x82\x87",
+  };
+  for (size_t testcase = 0; testcase < arraysize(kRequestKeys); ++testcase) {
+    Segments segments;
+    segments.set_request_type(Segments::PREDICTION);
+    segments.set_max_prediction_candidates_size(10);
+    Segment *segment = segments.add_segment();
+    segment->set_key(kRequestKeys[testcase]);
+    EXPECT_TRUE(data_and_converter->GetConverter()->
+                    ConvertForRequest(conversion_request, &segments));
+    EXPECT_EQ(1, segments.conversion_segments_size());
+    EXPECT_LT(0, segments.segment(0).candidates_size());
+    const string &segment_key = segments.segment(0).key();
+    for (size_t i = 0; i < segments.segment(0).candidates_size(); ++i) {
+      const Segment::Candidate &cand = segments.segment(0).candidate(i);
+      if (cand.attributes & Segment::Candidate::PARTIALLY_KEY_CONSUMED) {
+        EXPECT_LT(cand.key.size(), segment_key.size()) << cand.DebugString();
+      } else {
+        EXPECT_GE(cand.key.size(), segment_key.size()) << cand.DebugString();
+      }
+    }
+  }
 }
 
 }  // namespace mozc

@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -50,7 +50,6 @@
       ],
       'dependencies': [
         '../base/base.gyp:base',
-        '../base/base.gyp:crash_report_handler',
         '../engine/engine.gyp:engine_factory',
         '../session/session.gyp:session',
         'mozc_server_lib',
@@ -95,7 +94,7 @@
           'msvs_settings': {
             'VCManifestTool': {
               'AdditionalManifestFiles': 'mozc_server.exe.manifest',
-              'EmbedManifest': 'false',
+              'EmbedManifest': 'true',
             },
             'VCLinkerTool': {
               'DelayLoadDLLs': [
@@ -114,6 +113,7 @@
         'mozc_server.cc',
       ],
       'dependencies': [
+        '../base/base.gyp:crash_report_handler',
         '../session/session.gyp:session_server',
         '../usage_stats/usage_stats_base.gyp:usage_stats',
       ],
@@ -127,7 +127,7 @@
       'dependencies': [
         '../base/base.gyp:base',
         '../engine/engine.gyp:engine_factory',
-        '../session/session.gyp:session',
+        '../session/session.gyp:session_handler',
         '../session/session.gyp:session_server',
         '../session/session.gyp:random_keyevents_generator',
       ],
@@ -212,7 +212,7 @@
           'msvs_settings': {
             'VCManifestTool': {
               'AdditionalManifestFiles': 'mozc_cache_service.exe.manifest',
-              'EmbedManifest': 'false',
+              'EmbedManifest': 'true',
             },
             'VCLinkerTool': {
               'AdditionalDependencies': [

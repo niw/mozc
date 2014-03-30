@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -123,7 +123,8 @@ int RunCharacterPalette(int argc, char *argv[]) {
 }
 
 int RunHandWriting(int argc, char *argv[]) {
-  mozc::handwriting::ZinniaHandwriting zinnia_handwriting;
+  mozc::handwriting::ZinniaHandwriting zinnia_handwriting(
+      mozc::handwriting::ZinniaHandwriting::GetModelFileName());
   mozc::handwriting::HandwritingManager::SetHandwritingModule(
       &zinnia_handwriting);
   return RunCharacterPad(argc, argv, HAND_WRITING);

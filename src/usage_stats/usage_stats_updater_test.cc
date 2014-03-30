@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -109,21 +109,15 @@ TEST_F(UsageStatsUpdaterTest, UpdaterTest) {
     "ConfigYenSignCharacter",
     "ConfigUseJapaneseLayout",
     "IMEActivationKeyCustomized",
-    "ConfigUseConfigSync",
-    "ConfigUseUserDictionarySync",
-    "ConfigUseHistorySync",
-    "ConfigUseLearningPreferenceSync",
-    "ConfigUseContactListSync",
-    "ConfigUseCloudSync",
     "ConfigAllowCloudHandwriting",
     "ConfigUseLocalUsageDictionary",
-    "ConfigUseWebUsageDictionary",
-    "WebServiceEntrySize",
+    "ConfigUseModeIndicator",
 
     // Other stats
     "TotalPhysicalMemory",
 #ifdef OS_WIN
     "WindowsX64",
+    "PerUserInputSettingsEnabled",
     "CuasEnabled",
     "MsctfVerMajor",
     "MsctfVerMinor",

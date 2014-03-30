@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -195,7 +195,7 @@ public class KeyboardLayoutPreference extends Preference {
       new OnSharedPreferenceChangeListener() {
         @Override
         public void onSharedPreferenceChanged(SharedPreferences sharedPreferences, String key) {
-          if (key.equals("pref_skin_type_key")) {
+          if (key.equals(PreferenceUtil.PREF_SKIN_TYPE)) {
             updateSkinType();
           }
         }
@@ -323,8 +323,9 @@ public class KeyboardLayoutPreference extends Preference {
   }
 
   void updateSkinType() {
-    SkinType skinType = ClientSidePreference.getEnum(
-        getSharedPreferences(), "pref_skin_type_key", SkinType.class, SkinType.ORANGE_LIGHTGRAY);
+    SkinType skinType = PreferenceUtil.getEnum(
+        getSharedPreferences(),
+        PreferenceUtil.PREF_SKIN_TYPE, SkinType.class, SkinType.ORANGE_LIGHTGRAY);
     imageAdapter.setSkinType(skinType);
   }
 }

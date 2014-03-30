@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -32,9 +32,6 @@
   'actions': [
     {
       'action_name': 'postbuild',
-      'variables': {
-        'python_command': 'python',
-      },
       'inputs': [
         '<(target_file)',
       ],
@@ -42,11 +39,10 @@
         '<(target_file).postbuild',
       ],
       'action': [
-        '<(python_command)',
+        'python',
         'postbuilds_win.py',
         '--targetpath', '<@(_inputs)',
       ],
-      'msvs_cygwin_shell': 0,
       'message': 'postbuild for <@(_inputs)',
     },
   ],

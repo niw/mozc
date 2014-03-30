@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -42,9 +42,8 @@ import java.lang.annotation.Target;
  * If the API Level of the runtime environment is under the value,
  * the test case is skipped.
  *
- * Note that only MozcTestRunner takes care about this annotation.
- * {@code android.annotation.TargetApi} can replace this, but it is supported since API level 16,
- * and unfortunately our min API level is 7.
+ * {@code android.annotation.TargetApi} has similar role but its retention policy is CLASS,
+ * which cannot be accessed on runtime.
  *
  */
 @Target({ElementType.TYPE, ElementType.METHOD, ElementType.CONSTRUCTOR})

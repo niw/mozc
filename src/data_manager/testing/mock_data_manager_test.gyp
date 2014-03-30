@@ -1,4 +1,4 @@
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -44,6 +44,7 @@
       'dependencies': [
         '../../testing/testing.gyp:gtest_main',
         '../data_manager_test.gyp:data_manager_test_base',
+        'install_test_connection_txt',
         'mock_data_manager.gyp:mock_data_manager',
         'mock_data_manager.gyp:gen_mock_segmenter_inl_header#host',
       ],
@@ -53,10 +54,24 @@
       'copies': [
         {
           'destination': '<(mozc_data_dir)/data/test/dictionary/',
-          'files': [ '../../data/test/dictionary/connection.txt',
-                     '../../data/test/dictionary/dictionary.txt',
+          'files': [ '../../data/test/dictionary/dictionary.txt',
                      '../../data/test/dictionary/suggestion_filter.txt', ],
         },
+      ],
+    },
+    {
+      'target_name': 'install_test_connection_txt',
+      'type': 'none',
+      'dependencies': [
+        'mock_data_manager.gyp:gen_connection_single_column_txt_for_mock#host',
+      ],
+      'copies': [
+        {
+          'destination': '<(mozc_data_dir)/data/test/dictionary/',
+          'files': [
+            '<(gen_out_dir)/connection_single_column.txt',
+          ],
+        }
       ],
     },
   ],

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
- Copyright 2010-2013, Google Inc.
+ Copyright 2010-2014, Google Inc.
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -45,12 +45,14 @@
   </string-array>
 
   <string-array name="pref_emoji_provider_type_entries">
+    <item>@string/pref_emoji_provider_type_none</item>
     <item>@string/pref_emoji_provider_type_docomo</item>
     <item>@string/pref_emoji_provider_type_kddi</item>
     <item>@string/pref_emoji_provider_type_softbank</item>
   </string-array>
 
   <string-array name="pref_emoji_provider_type_values">
+    <item>NONE</item>
     <item>DOCOMO</item>
     <item>KDDI</item>
     <item>SOFTBANK</item>

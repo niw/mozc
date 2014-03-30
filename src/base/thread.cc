@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -36,7 +36,6 @@
 #include <pthread.h>
 #endif  // OS_WIN
 
-#include "base/base.h"
 #include "base/logging.h"
 
 namespace mozc {
@@ -115,10 +114,7 @@ void Thread::Terminate() {
 
 struct ThreadInternalState {
  public:
-  ThreadInternalState()
-    : handle_(NULL),
-      is_running_(false),
-      joinable_(true) {}
+  ThreadInternalState() : is_running_(false), joinable_(true) {}
 
   // As pthread_t is an opaque object, we use (pthread_t *)NULL to
   // indicate that no thread is attached to this object.

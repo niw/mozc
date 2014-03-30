@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -66,14 +66,6 @@ void ConversionRequest::set_composer(const composer::Composer *c) {
   composer_ = c;
 }
 
-const string &ConversionRequest::preceding_text() const {
-  return preceding_text_;
-}
-
-void ConversionRequest::set_preceding_text(const string &preceding_text) {
-  preceding_text_ = preceding_text;
-}
-
 const commands::Request &ConversionRequest::request() const {
   DCHECK(request_);
   return *request_;
@@ -122,7 +114,6 @@ bool ConversionRequest::IsKanaModifierInsensitiveConversion() const {
 void ConversionRequest::CopyFrom(const ConversionRequest &request) {
   composer_ = request.composer_;
   request_ = request.request_;
-  preceding_text_ = request.preceding_text_;
   use_actual_converter_for_realtime_conversion_ =
       request.use_actual_converter_for_realtime_conversion_;
   composer_key_selection_ = request.composer_key_selection_;

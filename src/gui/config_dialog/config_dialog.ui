@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
- Copyright 2010-2013, Google Inc.
+ Copyright 2010-2014, Google Inc.
  All rights reserved.
 
  Redistribution and use in source and binary forms, with or without
@@ -624,20 +624,6 @@
          </property>
         </widget>
        </item>
-       <item row="0" column="2">
-        <widget class="QCheckBox" name="webUsageDictionaryCheckBox">
-         <property name="text">
-          <string>Web extention</string>
-         </property>
-        </widget>
-       </item>
-       <item row="0" column="3">
-        <widget class="QPushButton" name="editWebServiceEntryButton">
-         <property name="text">
-          <string>Customize...</string>
-         </property>
-        </widget>
-       </item>
        <item row="0" column="1">
         <spacer name="horizontalSpacer_5">
          <property name="orientation">
@@ -832,6 +818,16 @@
          </property>
          <property name="text">
           <string>Always use Ja keyboard layout for Japanese input</string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="0" colspan="7">
+        <widget class="QCheckBox" name="useModeIndicator">
+         <property name="enabled">
+          <bool>true</bool>
+         </property>
+         <property name="text">
+          <string>Show input mode indicator near the cursor</string>
          </property>
         </widget>
        </item>
@@ -1246,152 +1242,11 @@
      <attribute name="title">
       <string>Cloud</string>
      </attribute>
-     <widget class="QWidget" name="syncHeaderLayoutWidget">
-      <property name="geometry">
-       <rect>
-        <x>20</x>
-        <y>10</y>
-        <width>461</width>
-        <height>21</height>
-       </rect>
-      </property>
-      <layout class="QHBoxLayout" name="horizontalLayout_17">
-       <item>
-        <widget class="QLabel" name="label_5">
-         <property name="text">
-          <string>Sync</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="Line" name="line_5">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="MinimumExpanding" vsizetype="Fixed">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
-        </widget>
-       </item>
-      </layout>
-     </widget>
-     <widget class="QWidget" name="syncButtonsLayoutWidget">
-      <property name="geometry">
-       <rect>
-        <x>30</x>
-        <y>110</y>
-        <width>441</width>
-        <height>32</height>
-       </rect>
-      </property>
-      <layout class="QHBoxLayout" name="horizontalLayout_3">
-       <item>
-        <widget class="QPushButton" name="syncToggleButton">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-         <property name="text">
-          <string>Start Sync</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="syncCustomizationButton">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-         <property name="text">
-          <string>Customize...</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <spacer name="horizontalSpacer_3">
-         <property name="orientation">
-          <enum>Qt::Horizontal</enum>
-         </property>
-         <property name="sizeHint" stdset="0">
-          <size>
-           <width>40</width>
-           <height>20</height>
-          </size>
-         </property>
-        </spacer>
-       </item>
-      </layout>
-     </widget>
-     <widget class="QLabel" name="syncStatusLabel">
-      <property name="geometry">
-       <rect>
-        <x>30</x>
-        <y>90</y>
-        <width>401</width>
-        <height>20</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>latest sync</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="removeAllDescriptionLabel">
-      <property name="geometry">
-       <rect>
-        <x>30</x>
-        <y>150</y>
-        <width>431</width>
-        <height>51</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>Clear all sync data in Google servers. To delete data completely, make sure there is no other machine which is running sync and stop sync on this machine after clearing the data.</string>
-      </property>
-      <property name="wordWrap">
-       <bool>true</bool>
-      </property>
-     </widget>
-     <widget class="QPushButton" name="clearSyncButton">
-      <property name="geometry">
-       <rect>
-        <x>30</x>
-        <y>205</y>
-        <width>111</width>
-        <height>31</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>Remove all</string>
-      </property>
-     </widget>
-     <widget class="QLabel" name="syncDescriptionLabel">
-      <property name="geometry">
-       <rect>
-        <x>29</x>
-        <y>40</y>
-        <width>441</width>
-        <height>41</height>
-       </rect>
-      </property>
-      <property name="text">
-       <string>Mozc can securely syncs your settings and a user sync-dictionary among different machines</string>
-      </property>
-      <property name="wordWrap">
-       <bool>true</bool>
-      </property>
-     </widget>
      <widget class="QCheckBox" name="cloudHandwritingCheckBox">
       <property name="geometry">
        <rect>
         <x>30</x>
-        <y>300</y>
+        <y>50</y>
         <width>441</width>
         <height>21</height>
        </rect>
@@ -1404,7 +1259,7 @@
       <property name="geometry">
        <rect>
         <x>20</x>
-        <y>270</y>
+        <y>10</y>
         <width>461</width>
         <height>21</height>
        </rect>
@@ -1413,7 +1268,7 @@
        <item>
         <widget class="QLabel" name="label_8">
          <property name="text">
-          <string>Other Cloud based feature</string>
+          <string>Cloud handwriting recognition</string>
          </property>
         </widget>
        </item>
@@ -2004,8 +1859,6 @@
   <tabstop>clearUserHistoryButton</tabstop>
   <tabstop>editUserDictionaryButton</tabstop>
   <tabstop>localUsageDictionaryCheckBox</tabstop>
-  <tabstop>webUsageDictionaryCheckBox</tabstop>
-  <tabstop>editWebServiceEntryButton</tabstop>
   <tabstop>singleKanjiConversionCheckBox</tabstop>
   <tabstop>symbolConversionCheckBox</tabstop>
   <tabstop>emoticonConversionCheckBox</tabstop>
@@ -2035,9 +1888,6 @@
   <tabstop>presentationModeCheckBox</tabstop>
   <tabstop>usageStatsCheckBox</tabstop>
   <tabstop>launchAdministrationDialogButtonForUsageStats</tabstop>
-  <tabstop>syncToggleButton</tabstop>
-  <tabstop>syncCustomizationButton</tabstop>
-  <tabstop>clearSyncButton</tabstop>
   <tabstop>cloudHandwritingCheckBox</tabstop>
   <tabstop>checkDefaultCheckBox</tabstop>
   <tabstop>IMEHotKeyDisabledCheckBox</tabstop>

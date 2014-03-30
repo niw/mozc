@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -42,6 +42,11 @@ int main(int argc, char **argv) {
   InitGoogle(argv[0], &argc, &argv, false);
   mozc::InitTestFlags();
   testing::InitGoogleTest(&argc, argv);
+
+#ifdef OS_WINDOWS
+  _CrtSetReportMode(_CRT_ASSERT, _CRTDBG_MODE_FILE | _CRTDBG_MODE_DEBUG);
+  _CrtSetReportFile(_CRT_ASSERT, _CRTDBG_FILE_STDERR);
+#endif  // OS_WINDOWS
 
   // Without this flag, ::RaiseException makes the job stuck.
   // See b/2805521 for details.

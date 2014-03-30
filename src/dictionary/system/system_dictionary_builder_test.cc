@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -36,9 +36,9 @@
 #include <string>
 #include <vector>
 
-#include "base/base.h"
 #include "base/file_stream.h"
 #include "base/file_util.h"
+#include "base/flags.h"
 #include "base/logging.h"
 #include "data_manager/user_pos_manager.h"
 #include "dictionary/dictionary_token.h"

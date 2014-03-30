@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -252,16 +252,17 @@ bool EmojiRewriter::Rewrite(const ConversionRequest &request,
   return RewriteCandidates(available_emoji_carrier, segments);
 }
 
-void EmojiRewriter::Finish(Segments *segments) {
+void EmojiRewriter::Finish(const ConversionRequest &request,
+                           Segments *segments) {
   if (!mozc::config::ConfigHandler::GetConfig().use_emoji_conversion()) {
     return;
   }
 
   // Update usage stats
-  for (size_t i = 0; i < segments->segments_size(); ++i) {
-    const Segment &segment = segments->segment(i);
+  for (size_t i = 0; i < segments->conversion_segments_size(); ++i) {
+    const Segment &segment = segments->conversion_segment(i);
     // Ignores segments which are not converted or not committed.
-    if (segment.candidates_size() <= 0 ||
+    if (segment.candidates_size() == 0 ||
         segment.segment_type() != Segment::FIXED_VALUE) {
       continue;
     }

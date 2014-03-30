@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -35,9 +35,9 @@
 #include <string>
 #include <vector>
 
+#include "base/port.h"
+#include "base/scoped_ptr.h"
 #include "session/session_converter_interface.h"
-// for FRIEND_TEST()
-#include "testing/base/public/gunit_prod.h"
 
 namespace mozc {
 namespace commands {
@@ -130,7 +130,8 @@ class SessionConverter : public SessionConverterInterface {
   virtual void Reset();
 
   // Fixes the conversion with the current status.
-  virtual void Commit(const commands::Context &context);
+  virtual void Commit(const composer::Composer &composer,
+                      const commands::Context &context);
 
   // Fixes the suggestion candidate. Stores the number of characters in the key
   // of the committed candidate to committed_key_size.
@@ -179,7 +180,8 @@ class SessionConverter : public SessionConverterInterface {
   // so Commit() method is called instead. In this case, the caller
   // should not delete any characters.
   // c.f. CommitSuggestionInternal
-  virtual void CommitFirstSegment(const commands::Context &context,
+  virtual void CommitFirstSegment(const composer::Composer &composer,
+                                  const commands::Context &context,
                                   size_t *consumed_key_size);
 
   // Commits the preedit string represented by Composer.
@@ -233,14 +235,11 @@ class SessionConverter : public SessionConverterInterface {
   virtual void FillOutput(const composer::Composer &composer,
                           commands::Output *output) const;
 
-  // Fills context information
-  virtual void FillContext(commands::Context *context) const;
-
-  // Removes tail part of history segments
-  virtual void RemoveTailOfHistorySegments(size_t num_of_characters);
-
   // Sets setting by the request;
   virtual void SetRequest(const commands::Request *request);
+
+  // Set setting by the context.
+  virtual void OnStartComposition(const commands::Context &context);
 
   // Fills segments with the conversion preferences.
   static void SetConversionPreferences(
@@ -326,12 +325,6 @@ class SessionConverter : public SessionConverterInterface {
 
   bool IsEmptySegment(const Segment &segment) const;
 
-  // Propagetes config proto to |output|.
-  // Renderer might need to refer mozc config saved in |output|.
-  // In order to reduce IPC latency, we only propagete config only
-  // when it is really required.
-  void PropagateConfigToRenderer(commands::Output *output) const;
-
   // Handles selected_indices for usage stats.
   void InitializeSelectedCandidateIndices();
   void UpdateSelectedCandidateIndex();
@@ -368,6 +361,11 @@ class SessionConverter : public SessionConverterInterface {
 
   // Selected index data of each segments for usage stats.
   vector<int> selected_candidate_indices_;
+
+  // Revision number of client context with which the converter determines when
+  // the history segments should be invalidated. See the implemenation of
+  // OnStartComposition for details.
+  int32 client_revision_;
 
   DISALLOW_COPY_AND_ASSIGN(SessionConverter);
 };

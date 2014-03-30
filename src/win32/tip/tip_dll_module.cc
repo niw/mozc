@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
 #include "win32/base/tsf_registrar.h"
 #include "win32/tip/tip_class_factory.h"
 #include "win32/tip/tip_ui_handler.h"
+#include "win32/tip/tip_text_service.h"
 
 namespace {
 
@@ -49,6 +50,7 @@ using mozc::config::StatsConfigUtil;
 using mozc::once_t;
 using mozc::win32::TsfProfile;
 using mozc::win32::TsfRegistrar;
+using mozc::win32::tsf::TipTextServiceFactory;
 using mozc::win32::tsf::TipUiHandler;
 
 // True if the boot mode is safe mode.
@@ -73,18 +75,11 @@ void TipBuildGlobalObjects() {
   }
 }
 
-// Release the global resources attached to this module.
-void TipFreeGlobalObjects() {
-  // Free all singleton instances
-  SingletonFinalizer::Finalize();
-
+void TipShutdownCrashReportHandler() {
   if (CrashReportHandler::IsInitialized()) {
     // Uninitialize the breakpad.
     CrashReportHandler::Uninitialize();
   }
-
-  // We intentionaly call google::protobuf::ShutdownProtobufLibrary from
-  // DllProcessDetachImpl rather than here.  See b/2126375 for details.
 }
 
 class ModuleImpl {
@@ -99,7 +94,19 @@ class ModuleImpl {
   static LONG Release() {
     if (::InterlockedDecrement(&ref_count_) == 0) {
       if (!in_unit_test_) {
-        CallOnce(&g_uninitialize_once, TipFreeGlobalObjects);
+        // |ref_count_| is now decremented to be 0. So our DLL is likely to be
+        // unloaded soon. Here is the good point to release global resources
+        // that should not be unloaded in DllMain due to the loader lock.
+        // However, it should also be noted that there is a chance that
+        // AddRef() is called again and the application continues to use Mozc
+        // client DLL. Actually we can observe this situation inside
+        // "Visual Studio 2012 Remote Debugging Monitor" running on Windows 8.
+        // Thus we must not shut down libraries that cannot be designed to be
+        // re-initializable. For instance, we must not call following
+        // functions here.
+        // - SingletonFinalizer::Finalize()               // see b/10233768
+        // - google::protobuf::ShutdownProtobufLibrary()  // see b/2126375
+        CallOnce(&g_uninitialize_once, TipShutdownCrashReportHandler);
       }
     }
     return ref_count_;
@@ -118,12 +125,14 @@ class ModuleImpl {
         return FALSE;
     }
     CrashReportHandler::SetCriticalSection(&critical_section_for_breakpad_);
+    TipTextServiceFactory::OnDllProcessAttach(instance, static_loading);
     TipUiHandler::OnDllProcessAttach(instance, static_loading);
     return TRUE;
   }
 
   static BOOL OnDllProcessDetach(HINSTANCE instance, bool process_shutdown) {
     TipUiHandler::OnDllProcessDetach(instance, process_shutdown);
+    TipTextServiceFactory::OnDllProcessDetach(instance, process_shutdown);
     if (!g_in_safe_mode && !process_shutdown) {
       // It is our responsibility to make sure that our code never touch
       // protobuf library after google::protobuf::ShutdownProtobufLibrary is

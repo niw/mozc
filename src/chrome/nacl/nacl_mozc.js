@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -30,7 +30,10 @@
 /**
  * @fileoverview This file contains NaclMozc class implementation.
  *
- * TODO(horo): Write tests of nacl_mozc.js.
+ * NaclMozc class provides Japanese input method for Chrome OS. The main logic
+ * of Japanese conversion is written in C++ and is executed in NaCl environment.
+ * This class communicate with the NaCl module using JSON message and provides
+ * Japanese input method using IME extension API (chrome.input.ime).
  *
  */
 
@@ -38,250 +41,13 @@
 
 /**
  * Namespace for this extension.
+ * @suppress {duplicate}
  */
 var mozc = window.mozc || {};
 
 /**
- * Special key mapping table.
- * @const
- * @type {!Object.<string, string>}
- * @private
- */
-mozc.SPECIAL_KEY_MAP_ = {
-  'Backspace': 'BACKSPACE',
-  'Tab': 'TAB',
-  'Enter': 'ENTER',
-  'Esc': 'ESCAPE',
-  ' ': 'SPACE',
-  'PageUp': 'PAGE_UP',
-  'PageDown': 'PAGE_DOWN',
-  'End': 'END',
-  'Home': 'HOME',
-  'Left': 'LEFT',
-  'Up': 'UP',
-  'Right': 'RIGHT',
-  'Down': 'DOWN',
-  'Insert': 'INSERT',
-  'Delete': 'DEL',
-  'HistoryBack': 'F1',
-  'HistoryForward': 'F2',
-  'BrowserRefresh': 'F3',
-  'ChromeOSFullscreen': 'F4',
-  'ChromeOSSwitchWindow': 'F5',
-  'BrightnessDown': 'F6',
-  'BrightnessUp': 'F7',
-  'AudioVolumeMute': 'F8',
-  'AudioVolumeDown': 'F9',
-  'AudioVolumeUp': 'F10'
-};
-
-/**
- * Kana key mapping table for JP keyboard.
- * @const
- * @type {!Object.<string, Array.<string>>}
- * @private
- */
-mozc.KANA_MAP_JP_ = {
-  '1': ['\u306C', '\u306C'],  // 'ぬ', 'ぬ'
-  '!': ['\u306C', '\u306C'],  // 'ぬ', 'ぬ'
-  '2': ['\u3075', '\u3075'],  // 'ふ', 'ふ'
-  '"': ['\u3075', '\u3075'],  // 'ふ', 'ふ'
-  '3': ['\u3042', '\u3041'],  // 'あ', 'ぁ'
-  '#': ['\u3042', '\u3041'],  // 'あ', 'ぁ'
-  '4': ['\u3046', '\u3045'],  // 'う', 'ぅ'
-  '$': ['\u3046', '\u3045'],  // 'う', 'ぅ'
-  '5': ['\u3048', '\u3047'],  // 'え', 'ぇ'
-  '%': ['\u3048', '\u3047'],  // 'え', 'ぇ'
-  '6': ['\u304A', '\u3049'],  // 'お', 'ぉ'
-  '&': ['\u304A', '\u3049'],  // 'お', 'ぉ'
-  '7': ['\u3084', '\u3083'],  // 'や', 'ゃ'
-  '\'': ['\u3084', '\u3083'],  // 'や', 'ゃ'
-  '8': ['\u3086', '\u3085'],  // 'ゆ', 'ゅ'
-  '(': ['\u3086', '\u3085'],  // 'ゆ', 'ゅ'
-  '9': ['\u3088', '\u3087'],  // 'よ', 'ょ'
-  ')': ['\u3088', '\u3087'],  // 'よ', 'ょ'
-  '0': ['\u308F', '\u3092'],  // 'わ', 'を'
-  '-': ['\u307B', '\u307B'],  // 'ほ', 'ほ'
-  '=': ['\u307B', '\u307B'],  // 'ほ', 'ほ'
-  '^': ['\u3078', '\u3078'],  // 'へ', 'へ'
-  '~': ['\u3078', '\u3078'],  // 'へ', 'へ'
-  'q': ['\u305F', '\u305F'],  // 'た', 'た'
-  'Q': ['\u305F', '\u305F'],  // 'た', 'た'
-  'w': ['\u3066', '\u3066'],  // 'て', 'て'
-  'W': ['\u3066', '\u3066'],  // 'て', 'て'
-  'e': ['\u3044', '\u3043'],  // 'い', 'ぃ'
-  'E': ['\u3044', '\u3043'],  // 'い', 'ぃ'
-  'r': ['\u3059', '\u3059'],  // 'す', 'す'
-  'R': ['\u3059', '\u3059'],  // 'す', 'す'
-  't': ['\u304B', '\u304B'],  // 'か', 'か'
-  'T': ['\u304B', '\u304B'],  // 'か', 'か'
-  'y': ['\u3093', '\u3093'],  // 'ん', 'ん'
-  'Y': ['\u3093', '\u3093'],  // 'ん', 'ん'
-  'u': ['\u306A', '\u306A'],  // 'な', 'な'
-  'U': ['\u306A', '\u306A'],  // 'な', 'な'
-  'i': ['\u306B', '\u306B'],  // 'に', 'に'
-  'I': ['\u306B', '\u306B'],  // 'に', 'に'
-  'o': ['\u3089', '\u3089'],  // 'ら', 'ら'
-  'O': ['\u3089', '\u3089'],  // 'ら', 'ら'
-  'p': ['\u305B', '\u305B'],  // 'せ', 'せ'
-  'P': ['\u305B', '\u305B'],  // 'せ', 'せ'
-  '@': ['\u309B', '\u309B'],  // '゛', '゛'
-  '`': ['\u309B', '\u309B'],  // '゛', '゛'
-  '[': ['\u309C', '\u300C'],  // '゜', '「'
-  '{': ['\u309C', '\u300C'],  // '゜', '「'
-  'a': ['\u3061', '\u3061'],  // 'ち', 'ち'
-  'A': ['\u3061', '\u3061'],  // 'ち', 'ち'
-  's': ['\u3068', '\u3068'],  // 'と', 'と'
-  'S': ['\u3068', '\u3068'],  // 'と', 'と'
-  'd': ['\u3057', '\u3057'],  // 'し', 'し'
-  'D': ['\u3057', '\u3057'],  // 'し', 'し'
-  'f': ['\u306F', '\u306F'],  // 'は', 'は'
-  'F': ['\u306F', '\u306F'],  // 'は', 'は'
-  'g': ['\u304D', '\u304D'],  // 'き', 'き'
-  'G': ['\u304D', '\u304D'],  // 'き', 'き'
-  'h': ['\u304F', '\u304F'],  // 'く', 'く'
-  'H': ['\u304F', '\u304F'],  // 'く', 'く'
-  'j': ['\u307E', '\u307E'],  // 'ま', 'ま'
-  'J': ['\u307E', '\u307E'],  // 'ま', 'ま'
-  'k': ['\u306E', '\u306E'],  // 'の', 'の'
-  'K': ['\u306E', '\u306E'],  // 'の', 'の'
-  'l': ['\u308A', '\u308A'],  // 'り', 'り'
-  'L': ['\u308A', '\u308A'],  // 'り', 'り'
-  ';': ['\u308C', '\u308C'],  // 'れ', 'れ'
-  '+': ['\u308C', '\u308C'],  // 'れ', 'れ'
-  ':': ['\u3051', '\u3051'],  // 'け', 'け'
-  '*': ['\u3051', '\u3051'],  // 'け', 'け'
-  ']': ['\u3080', '\u300D'],  // 'む', '」'
-  '}': ['\u3080', '\u300D'],  // 'む', '」'
-  'z': ['\u3064', '\u3063'],  // 'つ', 'っ'
-  'Z': ['\u3064', '\u3063'],  // 'つ', 'っ'
-  'x': ['\u3055', '\u3055'],  // 'さ', 'さ'
-  'X': ['\u3055', '\u3055'],  // 'さ', 'さ'
-  'c': ['\u305D', '\u305D'],  // 'そ', 'そ'
-  'C': ['\u305D', '\u305D'],  // 'そ', 'そ'
-  'v': ['\u3072', '\u3072'],  // 'ひ', 'ひ'
-  'V': ['\u3072', '\u3072'],  // 'ひ', 'ひ'
-  'b': ['\u3053', '\u3053'],  // 'こ', 'こ'
-  'B': ['\u3053', '\u3053'],  // 'こ', 'こ'
-  'n': ['\u307F', '\u307F'],  // 'み', 'み'
-  'N': ['\u307F', '\u307F'],  // 'み', 'み'
-  'm': ['\u3082', '\u3082'],  // 'も', 'も'
-  'M': ['\u3082', '\u3082'],  // 'も', 'も'
-  ',': ['\u306D', '\u3001'],  // 'ね', '、'
-  '<': ['\u306D', '\u3001'],  // 'ね', '、'
-  '.': ['\u308B', '\u3002'],  // 'る', '。'
-  '>': ['\u308B', '\u3002'],  // 'る', '。'
-  '/': ['\u3081', '\u30FB'],  // 'め', '・'
-  '?': ['\u3081', '\u30FB']  // 'め', '・'
-};
-
-/**
- * Kana key mapping table for US keyboard.
- * @const
- * @type {!Object.<string, Array.<string>>}
- * @private
- */
-mozc.KANA_MAP_US_ = {
-  '`': ['\u308D', '\u308D'],  // 'ろ', 'ろ'
-  '~': ['\u308D', '\u308D'],  // 'ろ', 'ろ'
-  '1': ['\u306C', '\u306C'],  // 'ぬ', 'ぬ'
-  '!': ['\u306C', '\u306C'],  // 'ぬ', 'ぬ'
-  '2': ['\u3075', '\u3075'],  // 'ふ', 'ふ'
-  '@': ['\u3075', '\u3075'],  // 'ふ', 'ふ'
-  '3': ['\u3042', '\u3041'],  // 'あ', 'ぁ'
-  '#': ['\u3042', '\u3041'],  // 'あ', 'ぁ'
-  '4': ['\u3046', '\u3045'],  // 'う', 'ぅ'
-  '$': ['\u3046', '\u3045'],  // 'う', 'ぅ'
-  '5': ['\u3048', '\u3047'],  // 'え', 'ぇ'
-  '%': ['\u3048', '\u3047'],  // 'え', 'ぇ'
-  '6': ['\u304A', '\u3049'],  // 'お', 'ぉ'
-  '^': ['\u304A', '\u3049'],  // 'お', 'ぉ'
-  '7': ['\u3084', '\u3083'],  // 'や', 'ゃ'
-  '&': ['\u3084', '\u3083'],  // 'や', 'ゃ'
-  '8': ['\u3086', '\u3085'],  // 'ゆ', 'ゅ'
-  '*': ['\u3086', '\u3085'],  // 'ゆ', 'ゅ'
-  '9': ['\u3088', '\u3087'],  // 'よ', 'ょ'
-  '(': ['\u3088', '\u3087'],  // 'よ', 'ょ'
-  '0': ['\u308F', '\u3092'],  // 'わ', 'を'
-  ')': ['\u308F', '\u3092'],  // 'わ', 'を'
-  '-': ['\u307B', '\u30FC'],  // 'ほ', 'ー'
-  '_': ['\u307B', '\u30FC'],  // 'ほ', 'ー'
-  '=': ['\u3078', '\u3078'],  // 'へ', 'へ'
-  '+': ['\u3078', '\u3078'],  // 'へ', 'へ'
-  'q': ['\u305F', '\u305F'],  // 'た', 'た'
-  'Q': ['\u305F', '\u305F'],  // 'た', 'た'
-  'w': ['\u3066', '\u3066'],  // 'て', 'て'
-  'W': ['\u3066', '\u3066'],  // 'て', 'て'
-  'e': ['\u3044', '\u3043'],  // 'い', 'ぃ'
-  'E': ['\u3044', '\u3043'],  // 'い', 'ぃ'
-  'r': ['\u3059', '\u3059'],  // 'す', 'す'
-  'R': ['\u3059', '\u3059'],  // 'す', 'す'
-  't': ['\u304B', '\u304B'],  // 'か', 'か'
-  'T': ['\u304B', '\u304B'],  // 'か', 'か'
-  'y': ['\u3093', '\u3093'],  // 'ん', 'ん'
-  'Y': ['\u3093', '\u3093'],  // 'ん', 'ん'
-  'u': ['\u306A', '\u306A'],  // 'な', 'な'
-  'U': ['\u306A', '\u306A'],  // 'な', 'な'
-  'i': ['\u306B', '\u306B'],  // 'に', 'に'
-  'I': ['\u306B', '\u306B'],  // 'に', 'に'
-  'o': ['\u3089', '\u3089'],  // 'ら', 'ら'
-  'O': ['\u3089', '\u3089'],  // 'ら', 'ら'
-  'p': ['\u305B', '\u305B'],  // 'せ', 'せ'
-  'P': ['\u305B', '\u305B'],  // 'せ', 'せ'
-  '[': ['\u309B', '\u309B'],  // '゛', '゛'
-  '{': ['\u309B', '\u309B'],  // '゛', '゛'
-  ']': ['\u309C', '\u300C'],  // '゜', '「'
-  '}': ['\u309C', '\u300C'],  // '゜', '「'
-  '\\': ['\u3080', '\u300D'],  // 'む', '」'
-  '|': ['\u3080', '\u300D'],  // 'む', '」'
-  'a': ['\u3061', '\u3061'],  // 'ち', 'ち'
-  'A': ['\u3061', '\u3061'],  // 'ち', 'ち'
-  's': ['\u3068', '\u3068'],  // 'と', 'と'
-  'S': ['\u3068', '\u3068'],  // 'と', 'と'
-  'd': ['\u3057', '\u3057'],  // 'し', 'し'
-  'D': ['\u3057', '\u3057'],  // 'し', 'し'
-  'f': ['\u306F', '\u306F'],  // 'は', 'は'
-  'F': ['\u306F', '\u306F'],  // 'は', 'は'
-  'g': ['\u304D', '\u304D'],  // 'き', 'き'
-  'G': ['\u304D', '\u304D'],  // 'き', 'き'
-  'h': ['\u304F', '\u304F'],  // 'く', 'く'
-  'H': ['\u304F', '\u304F'],  // 'く', 'く'
-  'j': ['\u307E', '\u307E'],  // 'ま', 'ま'
-  'J': ['\u307E', '\u307E'],  // 'ま', 'ま'
-  'k': ['\u306E', '\u306E'],  // 'の', 'の'
-  'K': ['\u306E', '\u306E'],  // 'の', 'の'
-  'l': ['\u308A', '\u308A'],  // 'り', 'り'
-  'L': ['\u308A', '\u308A'],  // 'り', 'り'
-  ';': ['\u308C', '\u308C'],  // 'れ', 'れ'
-  ':': ['\u308C', '\u308C'],  // 'れ', 'れ'
-  '\'': ['\u3051', '\u3051'],  // 'け', 'け'
-  '\"': ['\u3051', '\u3051'],  // 'け', 'け'
-  'z': ['\u3064', '\u3063'],  // 'つ', 'っ'
-  'Z': ['\u3064', '\u3063'],  // 'つ', 'っ'
-  'x': ['\u3055', '\u3055'],  // 'さ', 'さ'
-  'X': ['\u3055', '\u3055'],  // 'さ', 'さ'
-  'c': ['\u305D', '\u305D'],  // 'そ', 'そ'
-  'C': ['\u305D', '\u305D'],  // 'そ', 'そ'
-  'v': ['\u3072', '\u3072'],  // 'ひ', 'ひ'
-  'V': ['\u3072', '\u3072'],  // 'ひ', 'ひ'
-  'b': ['\u3053', '\u3053'],  // 'こ', 'こ'
-  'B': ['\u3053', '\u3053'],  // 'こ', 'こ'
-  'n': ['\u307F', '\u307F'],  // 'み', 'み'
-  'N': ['\u307F', '\u307F'],  // 'み', 'み'
-  'm': ['\u3082', '\u3082'],  // 'も', 'も'
-  'M': ['\u3082', '\u3082'],  // 'も', 'も'
-  ',': ['\u306D', '\u3001'],  // 'ね', '、'
-  '<': ['\u306D', '\u3001'],  // 'ね', '、'
-  '.': ['\u308B', '\u3002'],  // 'る', '。'
-  '>': ['\u308B', '\u3002'],  // 'る', '。'
-  '/': ['\u3081', '\u30FB'],  // 'め', '・'
-  '?': ['\u3081', '\u30FB']  // 'め', '・'
-};
-
-/**
  * The candidate window size.
- * @type {number}
- * @private
+ * @private {number}
  */
 mozc.CANDIDATE_WINDOW_PAGE_SIZE_ = 9;
 
@@ -289,8 +55,9 @@ mozc.CANDIDATE_WINDOW_PAGE_SIZE_ = 9;
  * Enum of preedit method.
  * This is same as mozc.commands.Output.PreeditMethod in command.proto.
  * @enum {string}
+ * @private
  */
-mozc.PreeditMethod = {
+mozc.PreeditMethod_ = {
   ROMAN: 'ROMAN',
   KANA: 'KANA'
 };
@@ -299,8 +66,9 @@ mozc.PreeditMethod = {
  * Enum of composition mode.
  * This is same as mozc.commands.CompositionMode in command.proto.
  * @enum {string}
+ * @private
  */
-mozc.CompositionMode = {
+mozc.CompositionMode_ = {
   DIRECT: 'DIRECT',
   HIRAGANA: 'HIRAGANA',
   FULL_KATAKANA: 'FULL_KATAKANA',
@@ -312,8 +80,9 @@ mozc.CompositionMode = {
 /**
  * Enum of menu item IDs.
  * @enum {string}
+ * @private
  */
-mozc.MenuItemId = {
+mozc.MenuItemId_ = {
   MENU_COMPOSITION_HIRAGANA: 'MENU_COMPOSITION_HIRAGANA',
   MENU_COMPOSITION_FULL_KATAKANA: 'MENU_COMPOSITION_FULL_KATAKANA',
   MENU_COMPOSITION_FULL_ASCII: 'MENU_COMPOSITION_FULL_ASCII',
@@ -325,148 +94,164 @@ mozc.MenuItemId = {
 /**
  * Composition menu table.
  * @const
- * @type {Array.<!Object.<string, string>>}
- * @private
+ * @private {!Array.<{menu: mozc.MenuItemId_,
+ *                    mode: mozc.CompositionMode_,
+ *                    labelId: string}>}
  */
 mozc.COMPOSITION_MENU_TABLE_ = [
   {
-    menu: mozc.MenuItemId.MENU_COMPOSITION_HIRAGANA,
-    mode: mozc.CompositionMode.HIRAGANA,
-    label: chrome.i18n.getMessage('compositionModeHiragana')
+    menu: mozc.MenuItemId_.MENU_COMPOSITION_HIRAGANA,
+    mode: mozc.CompositionMode_.HIRAGANA,
+    labelId: 'compositionModeHiragana'
   },
   {
-    menu: mozc.MenuItemId.MENU_COMPOSITION_FULL_KATAKANA,
-    mode: mozc.CompositionMode.FULL_KATAKANA,
-    label: chrome.i18n.getMessage('compositionModeFullKatakana')
+    menu: mozc.MenuItemId_.MENU_COMPOSITION_FULL_KATAKANA,
+    mode: mozc.CompositionMode_.FULL_KATAKANA,
+    labelId: 'compositionModeFullKatakana'
   },
   {
-    menu: mozc.MenuItemId.MENU_COMPOSITION_FULL_ASCII,
-    mode: mozc.CompositionMode.FULL_ASCII,
-    label: chrome.i18n.getMessage('compositionModeFullAscii')
+    menu: mozc.MenuItemId_.MENU_COMPOSITION_FULL_ASCII,
+    mode: mozc.CompositionMode_.FULL_ASCII,
+    labelId: 'compositionModeFullAscii'
   },
   {
-    menu: mozc.MenuItemId.MENU_COMPOSITION_HALF_KATAKANA,
-    mode: mozc.CompositionMode.HALF_KATAKANA,
-    label: chrome.i18n.getMessage('compositionModeHalfKatakana')
+    menu: mozc.MenuItemId_.MENU_COMPOSITION_HALF_KATAKANA,
+    mode: mozc.CompositionMode_.HALF_KATAKANA,
+    labelId: 'compositionModeHalfKatakana'
   },
   {
-    menu: mozc.MenuItemId.MENU_COMPOSITION_HALF_ASCII,
-    mode: mozc.CompositionMode.HALF_ASCII,
-    label: chrome.i18n.getMessage('compositionModeHalfAscii')
+    menu: mozc.MenuItemId_.MENU_COMPOSITION_HALF_ASCII,
+    mode: mozc.CompositionMode_.HALF_ASCII,
+    labelId: 'compositionModeHalfAscii'
   },
   {
-    menu: mozc.MenuItemId.MENU_COMPOSITION_DIRECT,
-    mode: mozc.CompositionMode.DIRECT,
-    label: chrome.i18n.getMessage('compositionModeDirect')
+    menu: mozc.MenuItemId_.MENU_COMPOSITION_DIRECT,
+    mode: mozc.CompositionMode_.DIRECT,
+    labelId: 'compositionModeDirect'
   }
 ];
 
 
 /**
  * NaclMozc with IME extension API.
- * @constructor
  * @param {!HTMLElement} naclModule DOM Element of NaCl module.
+ * @constructor
+ * @struct
+ * @const
  */
 mozc.NaclMozc = function(naclModule) {
   /**
    * Context information which is provided by Chrome.
-   * @type {InputContext}
-   * @private
+   * @private {InputContext}
    */
   this.context_ = null;
 
   /**
-   * Session id of Mozc's session.
-   * @type {number}
-   * @private
+   * Session id of Mozc's session. This id is handled as uint64 in NaCl. But
+   * JavaScript can't handle uint64. So we handle it as string in JavaScript.
+   * @private {string}
    */
-  this.sessionID_ = 0;
+  this.sessionID_ = '';
 
   /**
    * The list of candidates.
    * This data structure is same as the 2nd argument of
    * chrome.input.ime.setCandidates().
-   * @type {!Array.<!Object>}
-   * @private
+   * @private {!Array.<{candidate: string,
+   *                    id: number,
+   *                    label: string,
+   *                    annotation: string,
+   *                    usage: {title: string, body: string}}>}
    */
   this.candidates_ = [];
 
   /**
    * The candidate window properties.
-   * @type {!Object.<string, *>}
-   * @private
+   * @private {!Object.<string, *>}
    */
   this.candidateWindowProperties_ = {};
 
   /**
    * Array of callback functions.
    * Callbacks are added in postMessage_ and removed in onModuleMessage_.
-   * @type {!Array.<!Function|undefined>}
-   * @private
+   * @private {!Array.<function(!mozc.Command)|function(!mozc.Event)|undefined>}
    */
   this.naclMessageCallbacks_ = [];
 
   /**
    * Array of callback functions which will be called when NaCl Mozc will be
    *     initialized.
-   * @type {!Array.<!Function|undefined>}
-   * @private
+   * @private {!Array.<function()|undefined>}
    */
   this.initializationCallbacks_ = [];
 
   /**
    * Keyboard layout. 'us' and 'jp' are supported.
-   * @type {string}
-   * @private
+   * @private {string}
    */
   this.keyboardLayout_ = 'us';
 
   /**
    * Preedit method.
-   * @type {mozc.PreeditMethod}
-   * @private
+   * @private {mozc.PreeditMethod_}
    */
-  this.preeditMethod_ = mozc.PreeditMethod.ROMAN;
+  this.preeditMethod_ = mozc.PreeditMethod_.ROMAN;
 
   /**
    * Composition mode.
-   * @type {mozc.CompositionMode}
-   * @private
+   * @private {mozc.CompositionMode_}
    */
-  this.compositionMode_ = mozc.CompositionMode.HIRAGANA;
+  this.compositionMode_ = mozc.CompositionMode_.HIRAGANA;
 
   /**
    * Whether the NaCl module has been initialized or not.
-   * @type {boolean}
-   * @private
+   * @private {boolean}
    */
   this.isNaclInitialized_ = false;
 
   /**
    * Whether the JavaScript side code is handling an event or not.
-   * @type {boolean}
-   * @private
+   * @private {boolean}
    */
   this.isHandlingEvent_ = false;
 
   /**
    * Array of waiting event handlers.
-   * @type {!Array.<!Function>}
-   * @private
+   * @private {!Array.<function()>}
    */
   this.waitingEventHandlers_ = [];
 
   /**
    * Engine id which is passed from IME Extension API.
-   * @type {string}
-   * @private
+   * @private {string}
    */
   this.engine_id_ = '';
 
   /**
+   * Key event translator.
+   * @private {!mozc.KeyTranslator}
+   */
+  this.keyTranslator_ = new mozc.KeyTranslator();
+
+  /**
+   * callbackCommand_ stores the callback message which is recieved from NaCl
+   * module. This callback will be cancelled when the user presses the
+   * subsequent key. In the current implementation, if the subsequent key event
+   * also makes callback, the second callback will be called in the timimg of
+   * the first callback.
+   * @private {!mozc.Callback}
+   */
+  this.callbackCommand_ = /** @type {!mozc.Callback} */ ({});
+
+  /**
+   * The surrounding information.
+   * @private {Object.<{text: string, focus: number, anchor: number}>}
+   */
+  this.surroundingInfo_ = null;
+
+  /**
    * DOM Element of NaCl module.
-   * @type {!HTMLElement}
-   * @private
+   * @private {!HTMLElement}
    */
   this.naclModule_ = naclModule;
   this.naclModule_.addEventListener(
@@ -495,11 +280,20 @@ mozc.NaclMozc = function(naclModule) {
       this.wrapAsyncHandler_(this.onCandidateClicked_));
   chrome.input.ime.onMenuItemActivated.addListener(
       this.wrapAsyncHandler_(this.onMenuItemActivated_));
+  // chrome.input.ime.onSurroundingTextChanged is available from ChromeOS 27.
+  if (chrome.input.ime.onSurroundingTextChanged) {
+    chrome.input.ime.onSurroundingTextChanged.addListener(
+        this.wrapAsyncHandler_(this.onSurroundingTextChanged_));
+  }
+  // chrome.input.ime.onReset is available from ChromeOS 29.
+  if (chrome.input.ime.onReset) {
+    chrome.input.ime.onReset.addListener(this.wrapAsyncHandler_(this.onReset_));
+  }
 };
 
 /**
  * Calls the callback when NaCl Mozc is initialized
- * @param {!Function} callback Function to be called when NaCl Mozc is
+ * @param {function()} callback Function to be called when NaCl Mozc is
  *     initialized.
  */
 mozc.NaclMozc.prototype.callWhenInitialized = function(callback) {
@@ -511,63 +305,97 @@ mozc.NaclMozc.prototype.callWhenInitialized = function(callback) {
 };
 
 /**
+ * Creates a mozc.Command object with the specified input type.
+ * @param {string} type Input type of mozc.Command object.
+ * @return {!mozc.Command} Created mozc.Command.
+ * @private
+ */
+mozc.NaclMozc.prototype.createMozcCommand_ = function(type) {
+  return /** @type {!mozc.Command} */ ({'input': {'type': type}, 'output': {}});
+};
+
+/**
+ * Creates a mozc.Event object with the specified type.
+ * @param {string} type Type of mozc.Event object.
+ * @return {!mozc.Event} Created mozc.Event.
+ * @private
+ */
+mozc.NaclMozc.prototype.createMozcEvent_ = function(type) {
+  return /** @type {!mozc.Event} */ ({'type': type});
+};
+
+/**
+ * Creates a mozc.SessionCommand object with the specified type.
+ * @param {string} type Type of mozc.SessionCommand object.
+ * @return {!mozc.SessionCommand} Created mozc.SessionCommand.
+ * @private
+ */
+mozc.NaclMozc.prototype.createMozcSessionCommand_ = function(type) {
+  return /** @type {!mozc.SessionCommand} */ ({'type': type});
+};
+
+/**
  * Sends RELOAD command to NaCl module.
- * @param {!function(Object)=} opt_callback Function to be called with results
- *     from NaCl module.
+ * @param {function(!mozc.Command)=} opt_callback Function to be called with
+ *     results from NaCl module.
  */
 mozc.NaclMozc.prototype.sendReload = function(opt_callback) {
-  this.postMozcCommand_(
-      {'input': {'type': 'RELOAD'}},
-      opt_callback ?
-          (function(callback, response) {
-            callback(response);
-          }).bind(this, opt_callback) :
-          undefined);
+  this.postMozcCommand_(this.createMozcCommand_('RELOAD'), opt_callback);
 };
 
 /**
  * Sends GET_CONFIG command to NaCl module.
- * @param {!function(Object)=} opt_callback Function to be called with results
- *     from NaCl module.
+ * @param {function(!mozc.Command)=} opt_callback Function to be called with
+ *     results from NaCl module.
  */
 mozc.NaclMozc.prototype.getConfig = function(opt_callback) {
-  this.postMozcCommand_(
-      {'input': {'type': 'GET_CONFIG'}},
-      opt_callback ?
-          (function(callback, response) {
-            callback(response);
-          }).bind(this, opt_callback) :
-          undefined);
+  this.postMozcCommand_(this.createMozcCommand_('GET_CONFIG'), opt_callback);
 };
 
 /**
  * Sets config and sends SET_CONFIG command to NaCl module.
- * @param {!Object} config Config object to be set to.
- * @param {!function(Object)=} opt_callback Function to be called with results
- *     from NaCl module.
+ * @param {!Object.<string,*>} config Config object to be set to.
+ * @param {function(!mozc.Command)=} opt_callback Function to be called with
+ *     results from NaCl module.
  */
 mozc.NaclMozc.prototype.setConfig = function(config, opt_callback) {
   if (config['preedit_method']) {
-    this.setPreeditMethod(config['preedit_method']);
+    this.setPreeditMethod(
+        /** @type {mozc.PreeditMethod_} */ (config['preedit_method']));
   }
-  this.postMozcCommand_(
-      {'input': {'type': 'SET_CONFIG', 'config': config}},
-      opt_callback ?
-          (function(callback, response) {
-            callback(response);
-          }).bind(this, opt_callback) :
-          undefined);
+  var mozcCommand = this.createMozcCommand_('SET_CONFIG');
+  mozcCommand.input.config = config;
+  this.postMozcCommand_(mozcCommand, opt_callback);
+};
+
+/**
+ * Sends CLEAR_USER_HISTORY command to NaCl module.
+ * @param {function(!mozc.Command)=} opt_callback Function to be called with
+ *     results from NaCl module.
+ */
+mozc.NaclMozc.prototype.clearUserHistory = function(opt_callback) {
+  this.postMozcCommand_(this.createMozcCommand_('CLEAR_USER_HISTORY'),
+                        opt_callback);
+};
+
+/**
+ * Sends CLEAR_USER_PREDICTION command to NaCl module.
+ * @param {function(!mozc.Command)=} opt_callback Function to be called with
+ *     results from NaCl module.
+ */
+mozc.NaclMozc.prototype.clearUserPrediction = function(opt_callback) {
+  this.postMozcCommand_(this.createMozcCommand_('CLEAR_USER_PREDICTION'),
+                        opt_callback);
 };
 
 /**
  * Sets preedit method
- * @param {string} newMethod The new preedit method to be set to. 'KANA' and
- *     'ROMAN' are supported.
+ * @param {mozc.PreeditMethod_} newMethod The new preedit method to be set to.
  */
 mozc.NaclMozc.prototype.setPreeditMethod = function(newMethod) {
-  for (var key in mozc.PreeditMethod) {
-    if (newMethod == mozc.PreeditMethod[key]) {
-      this.preeditMethod_ = mozc.PreeditMethod[key];
+  for (var key in mozc.PreeditMethod_) {
+    if (newMethod == mozc.PreeditMethod_[key]) {
+      this.preeditMethod_ = mozc.PreeditMethod_[key];
       return;
     }
   }
@@ -576,24 +404,92 @@ mozc.NaclMozc.prototype.setPreeditMethod = function(newMethod) {
 
 /**
  * Sends SEND_USER_DICTIONARY_COMMAND command to NaCl module.
- * @param {!Object} command User dictionary command object to be sent.
- * @param {!function(Object)=} opt_callback Function to be called with results
- *     from NaCl module.
+ * @param {!mozc.UserDictionaryCommand} command User dictionary command object
+ *    to be sent.
+ * @param {function(!mozc.UserDictionaryCommandStatus)=} opt_callback Function
+ *     to be called with results from NaCl module.
  */
 mozc.NaclMozc.prototype.sendUserDictionaryCommand = function(command,
                                                              opt_callback) {
+  var mozcCommand = this.createMozcCommand_('SEND_USER_DICTIONARY_COMMAND');
+  mozcCommand.input.user_dictionary_command = command;
   this.postMozcCommand_(
-    {
-      'input': {
-        'type': 'SEND_USER_DICTIONARY_COMMAND',
-        'user_dictionary_command': command
-      }
-    },
-    opt_callback ?
-        (function(callback, response) {
-          callback(response['output']['user_dictionary_command_status']);
-        }).bind(this, opt_callback) :
-        undefined);
+      mozcCommand,
+      opt_callback ?
+          /**
+          * @this {!mozc.NaclMozc}
+          * @param {function(!mozc.UserDictionaryCommandStatus)} callback
+          * @param {!mozc.Command} response
+          */
+          (function(callback, response) {
+            if (response.output.user_dictionary_command_status == undefined) {
+              console.log('sendUserDictionaryCommand error');
+              return;
+            }
+            callback(response.output.user_dictionary_command_status);
+          }).bind(this, opt_callback) :
+          undefined);
+};
+
+/**
+ * Gets the version information of NaCl Mozc module.
+ * @param {function(!mozc.Event)} callback Function to be called with results
+ *     from NaCl module.
+ */
+mozc.NaclMozc.prototype.getVersionInfo = function(callback) {
+  this.postNaclMozcEvent_(this.createMozcEvent_('GetVersionInfo'), callback);
+};
+
+/**
+ * Gets POS list from NaCl Mozc module.
+ * @param {function(!mozc.Event)} callback Function to be called with results
+ *     from NaCl module.
+ */
+mozc.NaclMozc.prototype.getPosList = function(callback) {
+  this.postNaclMozcEvent_(this.createMozcEvent_('GetPosList'), callback);
+};
+
+/**
+ * Check if all characters in the given string is a legitimate character
+ * for reading.
+ * @param {string} text The string to check.
+ * @param {function(!mozc.Event)} callback Function to be called with results
+ *     from NaCl module.
+ */
+mozc.NaclMozc.prototype.isValidReading = function(text, callback) {
+  var event = this.createMozcEvent_('IsValidReading');
+  event.data = text;
+  this.postNaclMozcEvent_(event, callback);
+};
+
+/**
+ * Sends callback command to NaCl module.
+ * @param {function(!mozc.Command)=} opt_callback Function to be called with
+ *     results from NaCl module.
+ * @private
+ */
+mozc.NaclMozc.prototype.sendCallbackCommand_ = function(opt_callback) {
+  if (!this.sessionID_) {
+    console.error('Session has not been created.');
+    return;
+  }
+  if (!this.callbackCommand_.session_command) {
+    return;
+  }
+  var command = this.callbackCommand_.session_command;
+  if (command.type == 'CONVERT_REVERSE' && this.surroundingInfo_) {
+    if (this.surroundingInfo_.focus < this.surroundingInfo_.anchor) {
+      command.text = this.surroundingInfo_.text.substring(
+                         this.surroundingInfo_.focus,
+                         this.surroundingInfo_.anchor);
+    } else {
+      command.text = this.surroundingInfo_.text.substring(
+                         this.surroundingInfo_.anchor,
+                         this.surroundingInfo_.focus);
+    }
+  }
+  this.callbackCommand_ = /** @type {!mozc.Callback} */ ({});
+  this.postMozcSessionCommand_(command, opt_callback);
 };
 
 /**
@@ -603,14 +499,18 @@ mozc.NaclMozc.prototype.sendUserDictionaryCommand = function(command,
  * @private
  */
 mozc.NaclMozc.prototype.wrapAsyncHandler_ = function(handler) {
-  return (function(handler) {
-    this.waitingEventHandlers_.push(
-        Function.prototype.apply.bind(
-            handler,
-            this,
-            Array.prototype.slice.call(arguments, 1)));
-    this.executeWatingEventHandlers_();
-  }).bind(this, handler);
+  return (/**
+          * @this {!mozc.NaclMozc}
+          * @param {!Function} handler
+          */
+          (function(handler) {
+            this.waitingEventHandlers_.push(
+                Function.prototype.apply.bind(
+                    handler,
+                    this,
+                    Array.prototype.slice.call(arguments, 1)));
+            this.executeWatingEventHandlers_();
+          })).bind(this, handler);
 };
 
 /**
@@ -645,9 +545,9 @@ mozc.NaclMozc.prototype.hasNaclMessageCallback_ = function() {
 
 /**
  * Posts a message to NaCl module.
- * @param {!Object} message Message object to be posted to NaCl module.
- * @param {!function(Object)=} opt_callback Function to be called with results
- *     from NaCl module.
+ * @param {!mozc.Message} message Message object to be posted to NaCl module.
+ * @param {!(function(!mozc.Command)|function(!mozc.Event))=} opt_callback
+ *     Function to be called with results from NaCl module.
  * @private
  */
 mozc.NaclMozc.prototype.postMessage_ = function(message, opt_callback) {
@@ -657,101 +557,159 @@ mozc.NaclMozc.prototype.postMessage_ = function(message, opt_callback) {
   }
   var callbackId = 0;
   while (callbackId in this.naclMessageCallbacks_) {
-    ++callbackId;
+    callbackId++;
   }
   this.naclMessageCallbacks_[callbackId] = opt_callback;
-  message['id'] = callbackId;
+  message.id = callbackId;
   this.naclModule_['postMessage'](JSON.stringify(message));
 };
 
 /**
  * Posts a message which wraps the Mozc command to NaCl module.
- * @param {!Object} command Command object to be posted to NaCl module.
- * @param {!function(Object)=} opt_callback Function to be called with results
- *     from NaCl module.
+ * @param {!mozc.Command} command Command object to be posted to NaCl module.
+ * @param {function(!mozc.Command)=} opt_callback Function to be called with
+ *     results from NaCl module.
  * @private
  */
 mozc.NaclMozc.prototype.postMozcCommand_ = function(command, opt_callback) {
-  this.postMessage_({'cmd': command}, opt_callback);
+  this.postMessage_(
+      /** @type {!mozc.Message} */ ({'cmd': command}),
+      opt_callback);
 };
 
 /**
  * Posts an event which is spesific to NaCl Mozc such as 'SyncToFile'.
- * @param {!Object} event Event object to be posted to NaCl module.
- * @param {!function(Object)=} opt_callback Function to be called with results
- *     from NaCl module.
+ * @param {!mozc.Event} event Event object to be posted to NaCl module.
+ * @param {function(!mozc.Event)=} opt_callback Function to be called with
+ *     results from NaCl module.
  * @private
  */
 mozc.NaclMozc.prototype.postNaclMozcEvent_ = function(event, opt_callback) {
-  this.postMessage_({'event': event}, opt_callback);
+  this.postMessage_(
+      /** @type {!mozc.Message} */ ({'event': event}),
+      opt_callback);
+};
+
+/**
+ * Posts a SessionCommand to NaCl module.
+ * @param {!mozc.SessionCommand} sessionCommand SessionCommand object to be
+ *    posted to NaCl module.
+ * @param {function(!mozc.Command)=} opt_callback Function to be called with
+ *     results from NaCl module.
+ * @private
+ */
+mozc.NaclMozc.prototype.postMozcSessionCommand_ = function(sessionCommand,
+                                                           opt_callback) {
+  var mozcCommand = this.createMozcCommand_('SEND_COMMAND');
+  mozcCommand.input.id = this.sessionID_;
+  mozcCommand.input.command = sessionCommand;
+  this.postMozcCommand_(mozcCommand, opt_callback);
+};
+
+/**
+ * Processes the response command from NaCl module.
+ * @param {!mozc.Command} mozcCommand Response command object from NaCl module.
+ * @private
+ */
+mozc.NaclMozc.prototype.processResponse_ = function(mozcCommand) {
+  if (!mozcCommand || !mozcCommand.output) {
+    return;
+  }
+  if (mozcCommand.output.deletion_range) {
+    // chrome.input.ime.deleteSurroundingText is available from ChromeOS 27.
+    if (chrome.input.ime.deleteSurroundingText) {
+      chrome.input.ime.deleteSurroundingText({
+          'engineID': this.engine_id_,
+          'contextID': this.context_.contextID,
+          'offset': mozcCommand.output.deletion_range.offset,
+          'length': mozcCommand.output.deletion_range.length
+          },
+          this.outputResponse_.bind(this, mozcCommand.output));
+      return;
+    }
+  }
+  this.outputResponse_(mozcCommand.output);
 };
 
 /**
  * Outputs the response command from NaCl module.
- * @param {Object} mozcCommand Response command object from NaCl module.
+ * @param {!mozc.Output} output mozc.Output object from NaCl module.
  * @private
  */
-mozc.NaclMozc.prototype.outputResponse_ = function(mozcCommand) {
-  if (!mozcCommand || !mozcCommand['output']) {
-    return;
-  }
-  this.updatePreedit_(mozcCommand['output']['preedit'] || null);
-  this.commitResult_(mozcCommand['output']['result'] || null);
-  this.updateCandidates_(mozcCommand['output']['candidates'] || null);
-  if (mozcCommand['output']['mode']) {
-    var new_mode = mozcCommand['output']['mode'];
+mozc.NaclMozc.prototype.outputResponse_ = function(output) {
+  this.updatePreedit_(output.preedit);
+  this.commitResult_(output.result);
+  this.updateCandidates_(output.candidates);
+  if (output.mode) {
+    var new_mode = output.mode;
     if (this.compositionMode_ != new_mode) {
-      this.compositionMode_ = new_mode;
+      this.compositionMode_ = /** @type {mozc.CompositionMode_} */ (new_mode);
       this.updateMenuItems_();
+    }
+  }
+  if (output.callback) {
+    this.callbackCommand_ = output.callback;
+    if (this.callbackCommand_.delay_millisec) {
+      window.setTimeout(
+          this.sendCallbackCommand_.bind(
+              this,
+              this.processResponse_.bind(this)),
+          this.callbackCommand_.delay_millisec);
+    } else {
+      this.sendCallbackCommand_(this.processResponse_.bind(this));
     }
   }
 };
 
 /**
  * Updates preedit composition.
- * @param {Object} mozcPreedit The preedit data passed from NaCl Mozc module.
+ * @param {mozc.Preedit=} opt_mozcPreedit The preedit data passed from NaCl
+ *     Mozc
+ * module.
  * @private
  */
-mozc.NaclMozc.prototype.updatePreedit_ = function(mozcPreedit) {
-  if (!mozcPreedit) {
+mozc.NaclMozc.prototype.updatePreedit_ = function(opt_mozcPreedit) {
+  if (!opt_mozcPreedit) {
     chrome.input.ime.setComposition({
-        'contextID': this.context_.contextID,
-        'text': '',
-        'cursor': 0});
+      'contextID': this.context_.contextID,
+      'text': '',
+      'cursor': 0
+    });
     return;
   }
 
   var preeditString = '';
   var preeditSegments = [];
 
-  for (var i = 0; i < mozcPreedit['segment']['length']; ++i) {
+  for (var i = 0; i < opt_mozcPreedit.segment.length; ++i) {
     var segment = {
       'start': preeditString.length,
-      'end': preeditString.length + mozcPreedit['segment'][i]['value']['length']
+      'end': preeditString.length + opt_mozcPreedit.segment[i].value_length
     };
-    if (mozcPreedit['segment'][i]['annotation'] == 'UNDERLINE') {
+    if (opt_mozcPreedit.segment[i].annotation == 'UNDERLINE') {
       segment.style = 'underline';
-    } else if (mozcPreedit['segment'][i]['annotation'] == 'HIGHLIGHT') {
+    } else if (opt_mozcPreedit.segment[i].annotation == 'HIGHLIGHT') {
       segment.style = 'doubleUnderline';
     }
     preeditSegments.push(segment);
-    preeditString += mozcPreedit['segment'][i]['value'];
+    preeditString += opt_mozcPreedit.segment[i].value;
   }
 
   // We do not use a cursor position obtained from Mozc. It is because the
   // cursor position is used to locate the candidate window.
   var cursor = 0;
-  if (mozcPreedit['highlighted_position'] != undefined) {
-    cursor = mozcPreedit['highlighted_position'];
-  } else if (mozcPreedit['cursor'] != undefined) {
-    cursor = mozcPreedit['cursor'];
+  if (opt_mozcPreedit.highlighted_position != undefined) {
+    cursor = opt_mozcPreedit.highlighted_position;
+  } else if (opt_mozcPreedit.cursor != undefined) {
+    cursor = opt_mozcPreedit.cursor;
   }
 
   chrome.input.ime.setComposition({
-      'contextID': this.context_.contextID,
-      'text': preeditString,
-      'cursor': cursor,
-      'segments': preeditSegments});
+    'contextID': this.context_.contextID,
+    'text': preeditString,
+    'cursor': cursor,
+    'segments': preeditSegments
+  });
 };
 
 /**
@@ -769,8 +727,10 @@ mozc.NaclMozc.prototype.updateCandidateWindowProperties_ =
                        'pageSize',
                        'auxiliaryTextVisible',
                        'auxiliaryText',
-                       'visible'];
+                       'visible',
+                       'windowPosition'];
   var changed = false;
+
   for (var i = 0; i < propertyNames.length; ++i) {
     var name = propertyNames[i];
     if (this.candidateWindowProperties_[name] != properties[name]) {
@@ -781,16 +741,16 @@ mozc.NaclMozc.prototype.updateCandidateWindowProperties_ =
   }
   if (changed) {
     chrome.input.ime.setCandidateWindowProperties({
-        'engineID': this.engine_id_,
-        'properties': diffProperties});
+      'engineID': this.engine_id_,
+      'properties': diffProperties
+    });
   }
 };
 
 /**
  * Checks two objects are the same objects.
- * TODO(horo): Write unit test.
- * @param {Object} object1 The first object to compare.
- * @param {Object} object2 The second object to compare.
+ * @param {!Object} object1 The first object to compare.
+ * @param {!Object} object2 The second object to compare.
  * @return {boolean} Whether object1 and object2 are the same objects.
  * @private
  */
@@ -830,45 +790,45 @@ mozc.NaclMozc.prototype.compareObjects_ = function(object1, object2) {
 
 /**
  * Updates the candidate window.
- * @param {Object} mozcCandidates The candidates data passed from NaCl Mozc
- *     module.
+ * @param {mozc.Candidates=} opt_mozcCandidates The candidates data passed
+ *     from NaCl Mozc module.
  * @private
  */
-mozc.NaclMozc.prototype.updateCandidates_ = function(mozcCandidates) {
-  if (!mozcCandidates) {
+mozc.NaclMozc.prototype.updateCandidates_ = function(opt_mozcCandidates) {
+  if (!opt_mozcCandidates) {
     this.updateCandidateWindowProperties_(
-        {'visible': false, 'auxiliaryTextVisible': false });
+        {'visible': false, 'auxiliaryTextVisible': false});
     return;
   }
 
-  var focusedID = 0;
+  var focusedID = null;
   var newCandidates = [];
   var candidatesIdMap = {};
-  for (var i = 0; i < mozcCandidates['candidate']['length']; ++i) {
-    var item = mozcCandidates['candidate'][i];
-    if (item['index'] == mozcCandidates['focused_index']) {
-      focusedID = item['id'];
+  for (var i = 0; i < opt_mozcCandidates.candidate.length; ++i) {
+    var item = opt_mozcCandidates.candidate[i];
+    if (item.index == opt_mozcCandidates.focused_index) {
+      focusedID = item.id;
     }
     var newCandidate = {
-      'candidate': item['value'],
-      'id': item['id']
+      'candidate': item.value,
+      'id': item.id
     };
-    if (item['annotation']) {
-      newCandidate['annotation'] = item['annotation']['description'];
-      newCandidate['label'] = item['annotation']['shortcut'];
+    if (item.annotation) {
+      newCandidate.annotation = item.annotation.description;
+      newCandidate.label = item.annotation.shortcut;
     }
     newCandidates.push(newCandidate);
-    candidatesIdMap[item['id']] = newCandidate;
+    candidatesIdMap[item.id] = newCandidate;
   }
-  if (mozcCandidates['usages']) {
-    for (var i = 0; i < mozcCandidates['usages']['information']['length'];
+  if (opt_mozcCandidates.usages) {
+    for (var i = 0; i < opt_mozcCandidates.usages.information.length;
           ++i) {
-      var usage = mozcCandidates['usages']['information'][i];
-      for (var j = 0; j < usage['candidate_id']['length']; ++j) {
-        if (candidatesIdMap[usage['candidate_id'][j]]) {
-          candidatesIdMap[usage['candidate_id'][j]]['usage'] = {
-            'title': usage['title'],
-            'body': usage['description']
+      var usage = opt_mozcCandidates.usages.information[i];
+      for (var j = 0; j < usage.candidate_id.length; ++j) {
+        if (candidatesIdMap[usage.candidate_id[j]]) {
+          candidatesIdMap[usage.candidate_id[j]].usage = {
+            'title': usage.title,
+            'body': usage.description
           };
         }
       }
@@ -878,57 +838,70 @@ mozc.NaclMozc.prototype.updateCandidates_ = function(mozcCandidates) {
     // Calls chrome.input.ime.setCandidates() if the candidates has changed.
     chrome.input.ime.setCandidates({
       'contextID': this.context_.contextID,
-      'candidates': newCandidates});
+      'candidates': newCandidates
+    });
     this.candidates_ = newCandidates;
   }
 
+  // We have to call setCursorPosition even if there is no focused candidate.
+  // This is because the last set cusor position will be used to scroll the page
+  // of the candidates if we don't set.
   chrome.input.ime.setCursorPosition({
     'contextID': this.context_.contextID,
-    'candidateID': focusedID});
+    'candidateID': (focusedID != null) ? focusedID : 0});
 
   var auxiliaryText = '';
-  if (mozcCandidates['footer']) {
-    if (mozcCandidates['footer']['label'] != undefined) {
-      auxiliaryText = mozcCandidates['footer']['label'];
-    } else if (mozcCandidates['footer']['sub_label'] != undefined) {
-      auxiliaryText = mozcCandidates['footer']['sub_label'];
+  if (opt_mozcCandidates.footer) {
+    if (opt_mozcCandidates.footer.label != undefined) {
+      auxiliaryText = opt_mozcCandidates.footer.label;
+    } else if (opt_mozcCandidates.footer.sub_label != undefined) {
+      auxiliaryText = opt_mozcCandidates.footer.sub_label;
     }
-    if (mozcCandidates['footer']['index_visible'] &&
-        mozcCandidates['focused_index'] != undefined) {
+    if (opt_mozcCandidates.footer.index_visible &&
+        opt_mozcCandidates.focused_index != undefined) {
       if (auxiliaryText.length != 0) {
         auxiliaryText += ' ';
       }
-      auxiliaryText += (mozcCandidates['focused_index'] + 1) + '/' +
-                       mozcCandidates['size'];
+      auxiliaryText += (opt_mozcCandidates.focused_index + 1) + '/' +
+                       opt_mozcCandidates.size;
     }
   }
 
   var pageSize = mozc.CANDIDATE_WINDOW_PAGE_SIZE_;
-  if (mozcCandidates['category'] == 'SUGGESTION') {
+  if (opt_mozcCandidates.category == 'SUGGESTION') {
     pageSize = Math.min(pageSize,
-                        mozcCandidates['candidate']['length']);
+                        opt_mozcCandidates.candidate.length);
   }
+
+  var windowPosition = (opt_mozcCandidates.category == 'SUGGESTION' ||
+                        opt_mozcCandidates.category == 'PREDICTION') ?
+                       'composition' : 'cursor';
+
   this.updateCandidateWindowProperties_({
     'visible': true,
-    'cursorVisible': true,
+    'cursorVisible': (focusedID != null),
     'vertical': true,
     'pageSize': pageSize,
     'auxiliaryTextVisible': (auxiliaryText.length != 0),
-    'auxiliaryText': auxiliaryText});
+    'auxiliaryText': auxiliaryText,
+    'windowPosition': windowPosition
+  });
 };
 
 /**
  * Commits result string.
- * @param {Object} mozcResult The result data passed from NaCl Mozc module.
+ * @param {mozc.Result=} opt_mozcResult The result data passed from NaCl
+ *     Mozc module.
  * @private
  */
-mozc.NaclMozc.prototype.commitResult_ = function(mozcResult) {
-  if (!mozcResult) {
+mozc.NaclMozc.prototype.commitResult_ = function(opt_mozcResult) {
+  if (!opt_mozcResult) {
     return;
   }
   chrome.input.ime.commitText({
-      'contextID': this.context_.contextID,
-      'text': mozcResult['value']});
+    'contextID': this.context_.contextID,
+    'text': opt_mozcResult.value
+  });
 };
 
 /**
@@ -939,9 +912,9 @@ mozc.NaclMozc.prototype.commitResult_ = function(mozcResult) {
 mozc.NaclMozc.prototype.onActivate_ = function(engineID) {
   this.engine_id_ = engineID;
   // Sets keyboardLayout_.
-  var appDetails = chrome.app.getDetails();
-  if (appDetails) {
-    var input_components = chrome.app.getDetails()['input_components'];
+  var getManifest = chrome.runtime.getManifest;
+  if (getManifest) {
+    var input_components = getManifest()['input_components'];
     for (var i = 0; i < input_components.length; ++i) {
       if (input_components[i].id == engineID) {
         this.keyboardLayout_ = input_components[i]['layouts'][0];
@@ -957,7 +930,7 @@ mozc.NaclMozc.prototype.onActivate_ = function(engineID) {
  * @private
  */
 mozc.NaclMozc.prototype.onDeactivated_ = function(engineID) {
-  this.postNaclMozcEvent_({'type': 'SyncToFile'});
+  this.postNaclMozcEvent_(this.createMozcEvent_('SyncToFile'));
 };
 
 /**
@@ -967,10 +940,25 @@ mozc.NaclMozc.prototype.onDeactivated_ = function(engineID) {
  */
 mozc.NaclMozc.prototype.onFocus_ = function(context) {
   this.context_ = context;
+  var mozcCommand = this.createMozcCommand_('CREATE_SESSION');
+  mozcCommand.input.capability =
+      /** @type {!mozc.Capability} */
+      ({text_deletion: 'DELETE_PRECEDING_TEXT'});
+  mozcCommand.input.application_info =
+      /** @type {!mozc.ApplicationInfo} */
+      ({timezone_offset: -(new Date()).getTimezoneOffset() * 60});
   this.postMozcCommand_(
-      {'input': {'type': 'CREATE_SESSION'}},
+      mozcCommand,
+      /**
+      * @this {!mozc.NaclMozc}
+      * @param {!mozc.Command} response
+      */
       (function(response) {
-        this.sessionID_ = response['output']['id'];
+        if (response.output.id == undefined) {
+          console.error('CREATE_SESSION error');
+          return;
+        }
+        this.sessionID_ = response.output.id;
       }).bind(this));
 };
 
@@ -984,10 +972,10 @@ mozc.NaclMozc.prototype.onBlur_ = function(contextID) {
     console.error('Session has not been created.');
     return;
   }
-  this.postMozcCommand_(
-      {'input': {'type': 'DELETE_SESSION', 'id': this.sessionID_}},
-      this.outputResponse_.bind(this));
-  this.sessionID_ = 0;
+  var mozcCommand = this.createMozcCommand_('DELETE_SESSION');
+  mozcCommand.input.id = this.sessionID_;
+  this.postMozcCommand_(mozcCommand, this.processResponse_.bind(this));
+  this.sessionID_ = '';
 };
 
 /**
@@ -1001,13 +989,11 @@ mozc.NaclMozc.prototype.onInputContextUpdate_ = function(context) {
   this.context_ = context;
 };
 
+
 /**
  * Callback method called when IME catches a new key event.
  * @param {string} engineID ID of the engine.
  * @param {!ChromeKeyboardEvent} keyData key event data.
- * @return {boolean|undefined} True if the keystroke was handled, false if not.
- *     In asynchronous mode the return value can be undefined because it will be
- *     ignored.
  * @private
  */
 mozc.NaclMozc.prototype.onKeyEventAsync_ = function(engineID, keyData) {
@@ -1016,90 +1002,67 @@ mozc.NaclMozc.prototype.onKeyEventAsync_ = function(engineID, keyData) {
     chrome.input.ime.keyEventHandled(keyData.requestId, false);
     return;
   }
-  // Currently we only handle keydown events.
-  // TODO(horo): Handle keyup event of modifier keys.
-  //             See unix/ibus/key_event_handler.cc
-  // TODO(horo): Consider Kana input mode.
-  if (keyData.type != 'keydown') {
-    chrome.input.ime.keyEventHandled(keyData.requestId, false);
-    return;
-  }
 
-  // Do not disturb taking screenshot.
-  if (keyData.ctrlKey && keyData.key == 'ChromeOSSwitchWindow') {
-    chrome.input.ime.keyEventHandled(keyData.requestId, false);
-    return;
-  }
-
-  var keyEvent = {};
-  if (keyData.key.length == 1) {
-    var charCode = keyData.key.charCodeAt(0);
-    if (33 <= charCode && charCode <= 126) {
-      // [33, 126] means printable characters.
-      keyEvent['key_code'] = charCode;
-
-      if (this.preeditMethod_ == 'KANA') {
-        var kana = (this.keyboardLayout_ == 'jp') ?
-                    mozc.KANA_MAP_JP_[keyData.key] :
-                    mozc.KANA_MAP_US_[keyData.key];
-        if (keyData.code == 'IntlYen') {
-          kana = ['\u30FC', '\u30FC'];  // 'ー', 'ー'
-        } else if (keyData.code == 'IntlRo') {
-          kana = ['\u308D', '\u308D'];  // 'ろ', 'ろ'
-        }
-        if (kana != undefined) {
-          keyEvent['key_string'] = keyData.shiftKey ?
-                                   kana[1] : kana[0];
-        }
-      }
-    }
-  }
-  if (mozc.SPECIAL_KEY_MAP_[keyData.key] != undefined) {
-    keyEvent['special_key'] = mozc.SPECIAL_KEY_MAP_[keyData.key];
-  }
-  if ((keyEvent['key_code'] == undefined) &&
-      (keyEvent['special_key'] == undefined)) {
-    chrome.input.ime.keyEventHandled(keyData.requestId, false);
-    return;
-  }
-
-  var modifiersKey = [];
-  if (keyData.altKey) {
-    modifiersKey.push('ALT');
-  }
-  if (keyData.ctrlKey) {
-    modifiersKey.push('CTRL');
-  }
-  if (keyData.shiftKey) {
-    if (keyEvent['special_key'] != undefined) {
-      modifiersKey.push('SHIFT');
-    }
-  }
-  if (modifiersKey.length) {
-    keyEvent['modifier_keys'] = modifiersKey;
-  }
-
-  // TODO(horo): mode switching key handling
-  keyEvent['mode'] = this.compositionMode_;
+  var keyEvent =
+      this.keyTranslator_.translateKeyEvent(keyData,
+                                            this.preeditMethod_ == 'KANA',
+                                            this.keyboardLayout_);
   if (this.compositionMode_ == 'DIRECT') {
+    // TODO(horo): Support custom keymap table.
+    if (keyEvent.special_key == 'HANKAKU' ||
+        keyEvent.special_key == 'HENKAN') {
+      chrome.input.ime.keyEventHandled(keyData.requestId, true);
+      this.switchCompositionMode_(mozc.CompositionMode_.HIRAGANA);
+      this.updateMenuItems_();
+    } else {
+      chrome.input.ime.keyEventHandled(keyData.requestId, false);
+    }
+    return;
+  }
+
+  if (keyEvent.key_code == undefined &&
+      keyEvent.special_key == undefined &&
+      keyEvent.modifier_keys == undefined) {
     chrome.input.ime.keyEventHandled(keyData.requestId, false);
     return;
   }
 
+  // Cancels the callback request.
+  this.callbackCommand_ = /** @type {!mozc.Callback} */ ({});
+
+  keyEvent.mode = this.compositionMode_;
+
+  var context = /** @type {!mozc.Context} */ ({});
+  if (this.surroundingInfo_) {
+    context.preceding_text =
+        this.surroundingInfo_.text.substring(
+            0,
+            Math.min(this.surroundingInfo_.focus,
+                     this.surroundingInfo_.anchor));
+    context.following_text =
+        this.surroundingInfo_.text.substring(
+            Math.max(this.surroundingInfo_.focus,
+                     this.surroundingInfo_.anchor));
+  }
+
+  var mozcCommand = this.createMozcCommand_('SEND_KEY');
+  mozcCommand.input.id = this.sessionID_;
+  mozcCommand.input.key = keyEvent;
+  mozcCommand.input.context = context;
   this.postMozcCommand_(
-      {
-        'input': {
-          'type': 'SEND_KEY',
-          'id': this.sessionID_,
-          'key': keyEvent
-        }
-      },
+      mozcCommand,
+      /**
+      * @this {!mozc.NaclMozc}
+      * @param {string} requestId
+      * @param {!mozc.Command} response
+      */
       (function(requestId, response) {
-        this.outputResponse_(response);
+        this.processResponse_(response);
         chrome.input.ime.keyEventHandled(
             requestId,
-            !!response['output']['consumed']);
+            !!response.output.consumed);
       }).bind(this, keyData.requestId));
+  return;
 };
 
 /**
@@ -1112,18 +1075,10 @@ mozc.NaclMozc.prototype.onKeyEventAsync_ = function(engineID, keyData) {
 mozc.NaclMozc.prototype.onCandidateClicked_ = function(engineID,
                                                        candidateID,
                                                        button) {
-  this.postMozcCommand_(
-      {
-        'input': {
-          'type': 'SEND_COMMAND',
-          'id': this.sessionID_,
-          'command': {
-            'type': 'SELECT_CANDIDATE',
-            'id': candidateID
-          }
-        }
-      },
-      this.outputResponse_.bind(this));
+  var sessionCommand = this.createMozcSessionCommand_('SELECT_CANDIDATE');
+  sessionCommand.id = candidateID;
+  this.postMozcSessionCommand_(sessionCommand,
+                               this.processResponse_.bind(this));
 };
 
 /**
@@ -1144,57 +1099,82 @@ mozc.NaclMozc.prototype.onMenuItemActivated_ = function(engineID, name) {
 };
 
 /**
+ * Callback method called the editable string around caret is changed or when
+ * the caret position is moved. The text length is limited to 100 characters for
+ * each back and forth direction.
+ * @param {string} engineID ID of the engine.
+ * @param {!Object.<{text: string, focus: number, anchor: number}>} info The
+ *     surrounding information.
+ * @private
+ */
+mozc.NaclMozc.prototype.onSurroundingTextChanged_ = function(engineID, info) {
+  this.surroundingInfo_ = info;
+};
+
+/**
+ * Callback method called when Chrome terminates ongoing text input session.
+ * @param {string} engineID ID of the engine.
+ * @private
+ */
+mozc.NaclMozc.prototype.onReset_ = function(engineID) {
+  if (!this.sessionID_) {
+    console.error('Session has not been created.');
+    return;
+  }
+  this.postMozcSessionCommand_(
+      this.createMozcSessionCommand_('RESET_CONTEXT'),
+      /**
+      * @this {!mozc.NaclMozc}
+      * @param {!mozc.Command} response
+      */
+      (function(response) {
+        if (response.output.mode) {
+          // We ignore the mode in the response, because we should still use
+          // the current compositionMode_.
+          response.output.mode = undefined;
+        }
+        this.processResponse_(response);
+      }).bind(this));
+};
+
+/**
  * Switches the composition mode.
- * @param {mozc.CompositionMode} newMode The new composition mode to be set.
+ * @param {mozc.CompositionMode_} newMode The new composition mode to be set.
  * @private
  */
 mozc.NaclMozc.prototype.switchCompositionMode_ = function(newMode) {
   var lastMode = this.compositionMode_;
-  if (lastMode != mozc.CompositionMode.DIRECT &&
-      newMode == mozc.CompositionMode.DIRECT) {
-    this.postMozcCommand_(
-        {
-          'input': {
-            'type': 'SEND_KEY',
-            'id': this.sessionID_,
-            'key': {'special_key': 'OFF'}
-          }
-        });
-  } else if (newMode != mozc.CompositionMode.DIRECT) {
-    if (lastMode == mozc.CompositionMode.DIRECT) {
+  if (lastMode != mozc.CompositionMode_.DIRECT &&
+      newMode == mozc.CompositionMode_.DIRECT) {
+    var mozcCommand = this.createMozcCommand_('SEND_KEY');
+    mozcCommand.input.id = this.sessionID_;
+    mozcCommand.input.key =
+        /** @type {!mozc.KeyEvent} */ ({'special_key': 'OFF'});
+    this.postMozcCommand_(mozcCommand);
+  } else if (newMode != mozc.CompositionMode_.DIRECT) {
+    if (lastMode == mozc.CompositionMode_.DIRECT) {
+      var mozcCommand = this.createMozcCommand_('SEND_KEY');
+      mozcCommand.input.id = this.sessionID_;
+      mozcCommand.input.key =
+          /** @type {!mozc.KeyEvent} */ ({'special_key': 'ON'});
       this.postMozcCommand_(
-          {
-            'input': {
-              'type': 'SEND_KEY',
-              'id': this.sessionID_,
-              'key': {'special_key': 'ON'}
-            }
-          },
+          mozcCommand,
+          /**
+          * @this {!mozc.NaclMozc}
+          * @param {!mozc.CompositionMode_} newMode
+          * @param {!mozc.Command} response
+          */
           (function(newMode, response) {
-            this.postMozcCommand_(
-                {
-                  'input': {
-                    'type': 'SEND_COMMAND',
-                    'id': this.sessionID_,
-                    'command': {
-                      'type': 'SWITCH_INPUT_MODE',
-                      'composition_mode': newMode
-                    }
-                  }
-                });
+            var sessionCommand =
+                this.createMozcSessionCommand_('SWITCH_INPUT_MODE');
+            sessionCommand.composition_mode = newMode;
+            this.postMozcSessionCommand_(sessionCommand);
           }).bind(this, newMode));
     } else {
-      this.postMozcCommand_(
-          {
-            'input': {
-              'type': 'SEND_COMMAND',
-              'id': this.sessionID_,
-              'command': {
-                'type': 'SWITCH_INPUT_MODE',
-                'composition_mode': newMode
-              }
-            }
-          });
+      var sessionCommand =
+          this.createMozcSessionCommand_('SWITCH_INPUT_MODE');
+      sessionCommand.composition_mode = newMode;
+      this.postMozcSessionCommand_(sessionCommand);
     }
   }
   this.compositionMode_ = newMode;
@@ -1209,7 +1189,7 @@ mozc.NaclMozc.prototype.updateMenuItems_ = function() {
   for (var i = 0; i < mozc.COMPOSITION_MENU_TABLE_.length; ++i) {
     menuItems.push({
       'id': mozc.COMPOSITION_MENU_TABLE_[i].menu,
-      'label': mozc.COMPOSITION_MENU_TABLE_[i].label,
+      'label': chrome.i18n.getMessage(mozc.COMPOSITION_MENU_TABLE_[i].labelId),
       'checked': this.compositionMode_ == mozc.COMPOSITION_MENU_TABLE_[i].mode,
       'enabled': true,
       'visible': true
@@ -1227,7 +1207,6 @@ mozc.NaclMozc.prototype.updateMenuItems_ = function() {
  * @private
  */
 mozc.NaclMozc.prototype.onModuleLoad_ = function() {
-  // TODO(horo): Implement this method.
 };
 
 /**
@@ -1236,18 +1215,24 @@ mozc.NaclMozc.prototype.onModuleLoad_ = function() {
  * @private
  */
 mozc.NaclMozc.prototype.onModuleMessage_ = function(message) {
+  if (!message) {
+    console.error('onModuleMessage_ error');
+    return;
+  }
   var mozcResponse = {};
   try {
-    mozcResponse = /** @type {!Object} */ (JSON.parse(message.data));
+    mozcResponse = /** @type {!mozc.Message} */ (JSON.parse(message.data));
   } catch (e) {
     console.error('handleMessage: Error: ' + e.message);
     return;
   }
-  if (mozcResponse['event'] &&
-      mozcResponse['event']['type'] == 'InitializeDone') {
+  if (mozcResponse.event &&
+      mozcResponse.event.type == 'InitializeDone') {
     this.isNaclInitialized_ = true;
-    if (mozcResponse['event']['config']['preedit_method']) {
-      this.setPreeditMethod(mozcResponse['event']['config']['preedit_method']);
+    if (mozcResponse.event.config['preedit_method']) {
+      this.setPreeditMethod(
+        /** @type {mozc.PreeditMethod_} */
+        (mozcResponse.event.config['preedit_method']));
     }
     while (this.initializationCallbacks_.length > 0) {
       this.initializationCallbacks_.shift()();
@@ -1256,13 +1241,13 @@ mozc.NaclMozc.prototype.onModuleMessage_ = function(message) {
     return;
   }
 
-  var callback = this.naclMessageCallbacks_[mozcResponse['id']];
-  delete this.naclMessageCallbacks_[mozcResponse['id']];
+  var callback = this.naclMessageCallbacks_[mozcResponse.id];
+  delete this.naclMessageCallbacks_[mozcResponse.id];
   if (callback) {
-    if (mozcResponse['cmd']) {
-      callback(mozcResponse['cmd']);
-    } else if (mozcResponse['event']) {
-      callback(mozcResponse['event']);
+    if (mozcResponse.cmd) {
+      callback(mozcResponse.cmd);
+    } else if (mozcResponse.event) {
+      callback(mozcResponse.event);
     }
   }
   this.executeWatingEventHandlers_();
@@ -1295,10 +1280,11 @@ mozc.NaclMozc.prototype.onModuleError_ = function() {
 
 /**
  * New option page.
- * @param {!HTMLDocument} domDocument Document object of the option page.
- * @private
+ * @param {!Window} optionWindow Window object of the option page.
+ * @return {!mozc.OptionPage} Option page object.
  */
-mozc.NaclMozc.prototype.newOptionPage_ = function(domDocument) {
-  var optionPage = new mozc.OptionPage(this, domDocument);
+mozc.NaclMozc.prototype.newOptionPage = function(optionWindow) {
+  var optionPage = new mozc.OptionPage(this, optionWindow);
   optionPage.initialize();
+  return optionPage;
 };

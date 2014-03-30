@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,7 @@
 
 #include "base/crash_report_handler.h"
 
-#ifdef OS_WIN
+#if defined(OS_WIN) && defined(GOOGLE_JAPANESE_INPUT_BUILD)
 
 #include <Windows.h>
 #include <ShellAPI.h>  // for CommandLineToArgvW
@@ -48,6 +48,7 @@
 #include "third_party/breakpad/src/client/windows/handler/exception_handler.h"
 
 namespace {
+
 // The prefix of the pipe name which GoogleCrashHandler.exe opens for clients
 // to register them.
 const wchar_t kGoogleCrashHandlerPipePrefix[] =
@@ -82,6 +83,13 @@ int g_reference_count = 0;
 CRITICAL_SECTION *g_critical_section = NULL;
 
 google_breakpad::ExceptionHandler *g_handler = NULL;
+
+struct CrashStateInformation {
+  bool invalid_process_heap_detected;
+  bool loader_lock_detected;
+};
+
+CrashStateInformation g_crash_state_info = { false, false };
 
 // Returns the name of the build mode.
 std::wstring GetBuildMode() {
@@ -144,9 +152,10 @@ google_breakpad::CustomClientInfo* GetCustomInfo() {
 // Returns the pipe name of the GoogleCrashHandler.exe or
 // GoogleCrashHandler64.exe running as a system user.
 wstring GetCrashHandlerPipeName() {
-  return wstring(kGoogleCrashHandlerPipePrefix) +
-         wstring(kSystemPrincipalSid) +
-         wstring(kGoogleCrashHandlerPipePostfix);
+  wstring pipe_name = kGoogleCrashHandlerPipePrefix;
+  pipe_name.append(kSystemPrincipalSid);
+  pipe_name.append(kGoogleCrashHandlerPipePostfix);
+  return pipe_name;
 }
 
 class ScopedCriticalSection {
@@ -162,12 +171,13 @@ class ScopedCriticalSection {
       LeaveCriticalSection(critical_section_);
     }
   }
+
  private:
   CRITICAL_SECTION *critical_section_;
 };
 
 // get the handle to the module containing the given executing address
-static HMODULE GetModuleHandleFromAddress(void *address) {
+HMODULE GetModuleHandleFromAddress(void *address) {
   // address may be NULL
   MEMORY_BASIC_INFORMATION mbi;
   SIZE_T result = VirtualQuery(address, &mbi, sizeof(mbi));
@@ -178,12 +188,12 @@ static HMODULE GetModuleHandleFromAddress(void *address) {
 }
 
 // get the handle to the currently executing module
-static HMODULE GetCurrentModuleHandle() {
+HMODULE GetCurrentModuleHandle() {
   return GetModuleHandleFromAddress(GetCurrentModuleHandle);
 }
 
 // Check to see if an address is in the current module.
-inline bool IsAddressInCurrentModule(void *address) {
+bool IsAddressInCurrentModule(void *address) {
   // address may be NULL
   return GetCurrentModuleHandle() == GetModuleHandleFromAddress(address);
 }
@@ -229,8 +239,23 @@ bool IsCurrentModuleInStack(PCONTEXT context) {
   return false;
 }
 
-static bool FilterHandler(void *context, EXCEPTION_POINTERS *exinfo,
-                          MDRawAssertionInfo *assertion) {
+void UpdateCrashStateInformation() {
+  __try {                                              // NOLINT
+    g_crash_state_info.invalid_process_heap_detected =
+        (::HeapValidate(::GetProcessHeap(), 0, NULL) == FALSE);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {             // NOLINT
+                                                       // ignore exception
+  }
+  __try {                                              // NOLINT
+    mozc::WinUtil::IsDLLSynchronizationHeld(
+        &g_crash_state_info.loader_lock_detected);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {             // NOLINT
+                                                       // ignore exception
+  }
+}
+
+bool FilterHandler(void *context, EXCEPTION_POINTERS *exinfo,
+                   MDRawAssertionInfo *assertion) {
   if (exinfo == NULL) {
     // We do not catch CRT error in release build.
 #ifdef NO_LOGGING
@@ -242,65 +267,30 @@ static bool FilterHandler(void *context, EXCEPTION_POINTERS *exinfo,
 
   // Make sure it's our module which cause the crash.
   if (IsAddressInCurrentModule(exinfo->ExceptionRecord->ExceptionAddress)) {
+    UpdateCrashStateInformation();
     return true;
   }
 
   if (IsCurrentModuleInStack(exinfo->ContextRecord)) {
+    UpdateCrashStateInformation();
     return true;
   }
 
   return false;
 }
 
-// Returns false if the specified named pipe does not exists.
-// This function can not ensure that you can connect the pipe
-// when it returns false because of a race condition.
-bool NamedPipeExist(const wchar_t *pipe_name) {
-  const int kPipeBusyWaitTimeoutMs = 0;
-  if (::WaitNamedPipe(pipe_name, kPipeBusyWaitTimeoutMs)) {
-    // The specified pipe exists.
-    return true;
-  }
-  const int last_error = ::GetLastError();
-  switch (last_error) {
-    case NO_ERROR:
-    case ERROR_FILE_NOT_FOUND:
-      return false;
-    default:
-      // We had an error but the specified pipe probably exists.
-      return true;
-  }
-}
 }  // namespace
 
 
 namespace mozc {
 
 bool CrashReportHandler::Initialize(bool check_address) {
-#if defined(GOOGLE_JAPANESE_INPUT_BUILD)
   ScopedCriticalSection critical_section(g_critical_section);
   DCHECK_GE(g_reference_count, 0);
   ++g_reference_count;
   if (g_reference_count == 1 && g_handler == NULL) {
-    bool lock_held = false;
-    // Give up to use the crash handler if the caller has a loader lock because
-    // we cannot destroy the handler here if it is initialized for in-proc dump
-    // generation.  http://b/1903139
-    if (!WinUtil::IsDLLSynchronizationHeld(&lock_held) || lock_held) {
-      Uninitialize();
-      return false;
-    }
-
-    // Give up to use the crash handler if the named pipe is apparently
-    // unavailable. This is because the crash handler may use in-proc dump
-    // generation if it fails to connect the specified named pipe.
-    if (!NamedPipeExist(GetCrashHandlerPipeName().c_str())) {
-      Uninitialize();
-      return false;
-    }
-
     const string acrashdump_directory =
-      CrashReportUtil::GetCrashReportDirectory();
+        CrashReportUtil::GetCrashReportDirectory();
     // create a crash dump directory if not exist.
     if (!FileUtil::FileExists(acrashdump_directory)) {
       FileUtil::CreateDirectory(acrashdump_directory);
@@ -311,31 +301,24 @@ bool CrashReportHandler::Initialize(bool check_address) {
 
     google_breakpad::ExceptionHandler::FilterCallback filter_callback =
         check_address ? FilterHandler : NULL;
+    const auto kCrashDumpType = static_cast<MINIDUMP_TYPE>(
+        MiniDumpWithUnloadedModules | MiniDumpWithProcessThreadData);
     g_handler = new google_breakpad::ExceptionHandler(
         crashdump_directory.c_str(),
         filter_callback,
         NULL,  // MinidumpCallback
         NULL,  // callback_context
         google_breakpad::ExceptionHandler::HANDLER_ALL,
-        MiniDumpNormal,
+        kCrashDumpType,
         GetCrashHandlerPipeName().c_str(),
         GetCustomInfo());
-
-    // Give up to use the crash handler if the crash handler uses in-proc
-    // dump generation.  We must not destroy the crash handler if it uses
-    // in-proc dump generatio and the caller has a loader lock.
-    // http://b/1903139
-    if (!g_handler->IsOutOfProcess()) {
-      Uninitialize();
-      return false;
-    }
-
+    g_handler->RegisterAppMemory(&g_crash_state_info,
+                                 sizeof(g_crash_state_info));
 #ifdef DEBUG
     g_handler->set_handle_debug_exceptions(true);
 #endif  // DEBUG
     return true;
   }
-#endif  // GOOGLE_JAPANESE_INPUT_BUILD
   return false;
 }
 
@@ -345,7 +328,6 @@ bool CrashReportHandler::IsInitialized() {
 }
 
 bool CrashReportHandler::Uninitialize() {
-#if defined(GOOGLE_JAPANESE_INPUT_BUILD)
   ScopedCriticalSection critical_section(g_critical_section);
   --g_reference_count;
   DCHECK_GE(g_reference_count, 0);
@@ -354,7 +336,6 @@ bool CrashReportHandler::Uninitialize() {
     g_handler = NULL;
     return true;
   }
-#endif  // GOOGLE_JAPANESE_INPUT_BUILD
   return false;
 }
 
@@ -362,14 +343,15 @@ void CrashReportHandler::SetCriticalSection(
     CRITICAL_SECTION *critical_section) {
   g_critical_section = critical_section;
 }
+
 }  // namespace mozc
 
-#elif defined(OS_LINUX)  // OS_WIN
+#else
 
 namespace mozc {
 
-// Dummy implimentation of CrashReportHandler for Linux.
-// TODO(horo): Impliment this when we support official branding build on Linux.
+// Null implementation for platforms where we do not want to enable breakpad.
+
 bool CrashReportHandler::Initialize(bool check_address) {
   return false;
 }
@@ -382,6 +364,12 @@ bool CrashReportHandler::Uninitialize() {
   return false;
 }
 
+#ifdef OS_WIN
+void CrashReportHandler::SetCriticalSection(
+    CRITICAL_SECTION *critical_section) {
+}
+#endif  // OS_WIN
+
 }  // namespace mozc
 
-#endif  // OS_WIN OS_LINUX
+#endif

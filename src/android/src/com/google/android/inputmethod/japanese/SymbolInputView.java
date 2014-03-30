@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -29,13 +29,13 @@
 
 package org.mozc.android.inputmethod.japanese;
 
-import org.mozc.android.inputmethod.japanese.CandidateWordView.CandidateSelectListener;
 import org.mozc.android.inputmethod.japanese.FeedbackManager.FeedbackEvent;
 import org.mozc.android.inputmethod.japanese.emoji.EmojiProviderType;
 import org.mozc.android.inputmethod.japanese.keyboard.BackgroundDrawableFactory;
 import org.mozc.android.inputmethod.japanese.keyboard.BackgroundDrawableFactory.DrawableType;
 import org.mozc.android.inputmethod.japanese.keyboard.KeyEventHandler;
 import org.mozc.android.inputmethod.japanese.model.SymbolCandidateStorage;
+import org.mozc.android.inputmethod.japanese.preference.PreferenceUtil;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidates.CandidateList;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidates.CandidateWord;
 import org.mozc.android.inputmethod.japanese.resources.R;
@@ -49,6 +49,8 @@ import org.mozc.android.inputmethod.japanese.view.RoundRectKeyDrawable;
 import org.mozc.android.inputmethod.japanese.view.SkinType;
 import org.mozc.android.inputmethod.japanese.view.SymbolMajorCategoryButtonDrawableFactory;
 import org.mozc.android.inputmethod.japanese.view.TabSelectedBackgroundDrawable;
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 
 import android.app.AlertDialog;
 import android.content.Context;
@@ -63,6 +65,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
+import android.os.IBinder;
 import android.preference.PreferenceManager;
 import android.support.v4.view.PagerAdapter;
 import android.support.v4.view.ViewPager;
@@ -103,7 +106,7 @@ import java.util.List;
  * Major-Minor relation is defined by using R.layout.symbol_minor_category_*.
  *
  */
-public class SymbolInputView extends InOutAnimatedFrameLayout {
+public class SymbolInputView extends InOutAnimatedFrameLayout implements MemoryManageable {
 
   /**
    * The major category to which the minor categories belong.
@@ -270,34 +273,28 @@ public class SymbolInputView extends InOutAnimatedFrameLayout {
         viewEventListener.onFireFeedbackEvent(FeedbackEvent.INPUTVIEW_EXPAND);
       }
 
-      if (emojiEnabled && emojiProviderType == null) {
-        // Detect the emoji provider. This invocation (indirectly) updates emojiProviderType,
-        // if succeeds. We'll use the detected emoji provider.
-        maybeDetectEmojiProviderType();
-        if (majorCategory == MajorCategory.EMOJI && emojiProviderType == null) {
-          // Here, the detection is failed unfortunately, so ask the user which emoji provider
-          // s/he'd like to use. If the user cancels the dialog, do nothing.
-          maybeInitializeEmojiProviderDialog(getContext());
-          if (emojiProviderDialog != null) {
-            MozcUtil.setWindowToken(getWindowToken(), emojiProviderDialog);
-
-            // If a user selects a provider, the dialog handler will set major category
-            // to EMOJI automatically. If s/he cancels, nothing will be happened.
-            emojiProviderDialog.show();
+      if (emojiEnabled
+          && majorCategory == MajorCategory.EMOJI
+          && emojiProviderType == EmojiProviderType.NONE) {
+        // Ask the user which emoji provider s/he'd like to use.
+        // If the user cancels the dialog, do nothing.
+        maybeInitializeEmojiProviderDialog(getContext());
+        if (emojiProviderDialog != null) {
+          IBinder token = getWindowToken();
+          if (token != null) {
+            MozcUtil.setWindowToken(token, emojiProviderDialog);
+          } else {
+            MozcLog.w("Unknown window token.");
           }
-          return;
+
+          // If a user selects a provider, the dialog handler will set major category
+          // to EMOJI automatically. If s/he cancels, nothing will be happened.
+          emojiProviderDialog.show();
         }
+        return;
       }
 
       setMajorCategory(majorCategory);
-    }
-
-    /**
-     * Simple wrapper of maybeDetectEmojiProviderType to inject some behavior for testing purpose.
-     */
-    void maybeDetectEmojiProviderType() {
-      EmojiProviderType.maybeSetDetectedEmojiProviderType(
-          sharedPreferences, MozcUtil.getTelephonyManager(getContext()));
     }
   }
 
@@ -316,6 +313,8 @@ public class SymbolInputView extends InOutAnimatedFrameLayout {
     private final EmojiProviderType emojiProviderType;
     private final TabHost tabHost;
     private final ViewPager viewPager;
+    private final float candidateTextSize;
+    private final float descriptionTextSize;
 
     private View historyViewCache = null;
     private int scrollState = ViewPager.SCROLL_STATE_IDLE;
@@ -325,7 +324,10 @@ public class SymbolInputView extends InOutAnimatedFrameLayout {
         ViewEventListener viewEventListener, CandidateSelectListener candidateSelectListener,
         MajorCategory majorCategory,
         SkinType skinType, EmojiProviderType emojiProviderType,
-        TabHost tabHost, ViewPager viewPager) {
+        TabHost tabHost, ViewPager viewPager,
+        float candidateTextSize, float descriptionTextSize) {
+      Preconditions.checkNotNull(emojiProviderType);
+
       this.context = context;
       this.symbolCandidateStorage = symbolCandidateStorage;
       this.viewEventListener = viewEventListener;
@@ -335,6 +337,8 @@ public class SymbolInputView extends InOutAnimatedFrameLayout {
       this.emojiProviderType = emojiProviderType;
       this.tabHost = tabHost;
       this.viewPager = viewPager;
+      this.candidateTextSize = candidateTextSize;
+      this.descriptionTextSize = descriptionTextSize;
     }
 
     private void maybeResetHistoryView() {
@@ -417,6 +421,7 @@ public class SymbolInputView extends InOutAnimatedFrameLayout {
           context.getResources().getDimension(majorCategory.minColumnWidthResourceId));
       symbolCandidateView.setSkinType(skinType);
       symbolCandidateView.setEmojiProviderType(emojiProviderType);
+      symbolCandidateView.setCandidateTextDimension(candidateTextSize, descriptionTextSize);
 
       // Set candidate contents.
       if (position == HISTORY_INDEX) {
@@ -526,7 +531,7 @@ public class SymbolInputView extends InOutAnimatedFrameLayout {
           context.getResources().obtainTypedArray(R.array.pref_emoji_provider_type_values);
       String value = typedArray.getString(which);
       sharedPreferences.edit()
-          .putString(EmojiProviderType.EMOJI_PROVIDER_TYPE_PREFERENCE_KEY, value)
+          .putString(PreferenceUtil.PREF_EMOJI_PROVIDER_TYPE, value)
           .commit();
       setMajorCategory(MajorCategory.EMOJI);
     }
@@ -544,10 +549,6 @@ public class SymbolInputView extends InOutAnimatedFrameLayout {
     private View scrollGuideView = null;
     private GestureDetector gestureDetector = null;
 
-    {
-      setBackgroundDrawableType(DrawableType.SYMBOL_CANDIDATE_BACKGROUND);
-    }
-
     public SymbolCandidateView(Context context) {
       super(context, Orientation.VERTICAL);
     }
@@ -562,22 +563,29 @@ public class SymbolInputView extends InOutAnimatedFrameLayout {
 
     // Shared instance initializer.
     {
+      setBackgroundDrawableType(DrawableType.SYMBOL_CANDIDATE_BACKGROUND);
       Resources resources = getResources();
       scroller.setDecayRate(
           resources.getInteger(R.integer.symbol_input_scroller_velocity_decay_rate) / 1000000f);
       scroller.setMinimumVelocity(
           resources.getInteger(R.integer.symbol_input_scroller_minimum_velocity));
+      layouter = new SymbolCandidateLayouter();
+    }
 
-      float valueTextSize = resources.getDimension(R.dimen.candidate_text_size);
+    void setCandidateTextDimension(float textSize, float descriptionTextSize) {
+      Preconditions.checkArgument(textSize > 0);
+      Preconditions.checkArgument(descriptionTextSize > 0);
+
+      Resources resources = getResources();
+
       float valueHorizontalPadding =
           resources.getDimension(R.dimen.candidate_horizontal_padding_size);
-      float descriptionTextSize = resources.getDimension(R.dimen.candidate_description_text_size);
       float descriptionHorizontalPadding =
           resources.getDimension(R.dimen.symbol_description_right_padding);
       float descriptionVerticalPadding =
           resources.getDimension(R.dimen.symbol_description_bottom_padding);
 
-      candidateLayoutRenderer.setValueTextSize(valueTextSize);
+      candidateLayoutRenderer.setValueTextSize(textSize);
       candidateLayoutRenderer.setValueHorizontalPadding(valueHorizontalPadding);
       candidateLayoutRenderer.setValueScalingPolicy(ValueScalingPolicy.UNIFORM);
       candidateLayoutRenderer.setDescriptionTextSize(descriptionTextSize);
@@ -586,13 +594,13 @@ public class SymbolInputView extends InOutAnimatedFrameLayout {
       candidateLayoutRenderer.setDescriptionLayoutPolicy(DescriptionLayoutPolicy.OVERLAY);
 
       SpanFactory spanFactory = new SpanFactory();
-      spanFactory.setValueTextSize(valueTextSize);
+      spanFactory.setValueTextSize(textSize);
       spanFactory.setDescriptionTextSize(descriptionTextSize);
       spanFactory.setDescriptionDelimiter(DESCRIPTION_DELIMITER);
-      SymbolCandidateLayouter symbolCandidateLayouter = new SymbolCandidateLayouter(spanFactory);
-      symbolCandidateLayouter.setRowHeight(
-          resources.getDimensionPixelSize(R.dimen.symbol_view_candidate_height));
-      setCandidateLayouter(symbolCandidateLayouter);
+
+      SymbolCandidateLayouter layouter = SymbolCandidateLayouter.class.cast(this.layouter);
+      layouter.setSpanFactory(spanFactory);
+      layouter.setRowHeight(resources.getDimensionPixelSize(R.dimen.symbol_view_candidate_height));
     }
 
     @Override
@@ -675,12 +683,12 @@ public class SymbolInputView extends InOutAnimatedFrameLayout {
 
   private SymbolCandidateStorage symbolCandidateStorage;
 
-  private MajorCategory currentMajorCategory;
-  private boolean emojiEnabled;
-  private EmojiProviderType emojiProviderType;
+  @VisibleForTesting MajorCategory currentMajorCategory;
+  @VisibleForTesting boolean emojiEnabled;
+  @VisibleForTesting EmojiProviderType emojiProviderType = EmojiProviderType.NONE;
 
-  private SharedPreferences sharedPreferences;
-  private AlertDialog emojiProviderDialog;
+  @VisibleForTesting SharedPreferences sharedPreferences;
+  @VisibleForTesting AlertDialog emojiProviderDialog;
 
   private ViewEventListener viewEventListener;
   private final KeyEventButtonTouchListener deleteKeyEventButtonTouchListener =
@@ -700,6 +708,10 @@ public class SymbolInputView extends InOutAnimatedFrameLayout {
           MAJOR_CATEGORY_PRESSED_BOTTOM_COLOR,
           MAJOR_CATEGORY_SHADOW_COLOR,
           BUTTON_CORNOR_RADIUS * getResources().getDisplayMetrics().density);
+  // Candidate text size in dip.
+  private float candidateTextSize;
+  // Description text size in dip.
+  private float desciptionTextSize;
 
   public SymbolInputView(Context context, AttributeSet attrs, int defStyle) {
     super(context, attrs, defStyle);
@@ -779,7 +791,8 @@ public class SymbolInputView extends InOutAnimatedFrameLayout {
     SymbolTabWidgetViewPagerAdapter adapter = new SymbolTabWidgetViewPagerAdapter(
         getContext(),
         symbolCandidateStorage, viewEventListener, symbolCandidateSelectListener,
-        currentMajorCategory, skinType, emojiProviderType, tabHost, candidateViewPager);
+        currentMajorCategory, skinType, emojiProviderType, tabHost, candidateViewPager,
+        candidateTextSize, desciptionTextSize);
     candidateViewPager.setAdapter(adapter);
     candidateViewPager.setOnPageChangeListener(adapter);
     tabHost.setOnTabChangedListener(adapter);
@@ -996,8 +1009,10 @@ public class SymbolInputView extends InOutAnimatedFrameLayout {
 
   @Override
   public void setVisibility(int visibility) {
+    int previousVisibility = getVisibility();
     super.setVisibility(visibility);
-    if (viewEventListener != null && visibility != View.VISIBLE) {
+    if (viewEventListener != null
+        && previousVisibility == View.VISIBLE && visibility != View.VISIBLE) {
       viewEventListener.onCloseSymbolInputView();
     }
   }
@@ -1008,6 +1023,14 @@ public class SymbolInputView extends InOutAnimatedFrameLayout {
 
   void setKeyEventHandler(KeyEventHandler keyEventHandler) {
     deleteKeyEventButtonTouchListener.setKeyEventHandler(keyEventHandler);
+  }
+
+  void setCandidateTextDimension(float candidateTextSize, float descriptionTextSize) {
+    Preconditions.checkArgument(candidateTextSize > 0);
+    Preconditions.checkArgument(descriptionTextSize > 0);
+
+    this.candidateTextSize = candidateTextSize;
+    this.desciptionTextSize = descriptionTextSize;
   }
 
   /**
@@ -1071,6 +1094,8 @@ public class SymbolInputView extends InOutAnimatedFrameLayout {
   }
 
   void setEmojiProviderType(EmojiProviderType emojiProviderType) {
+    Preconditions.checkNotNull(emojiProviderType);
+
     this.emojiProviderType = emojiProviderType;
     this.symbolCandidateStorage.setEmojiProviderType(emojiProviderType);
     if (!isInflated()) {
@@ -1103,5 +1128,19 @@ public class SymbolInputView extends InOutAnimatedFrameLayout {
     resetTabBackground();
     resetCandidateViewPager();
     resetMajorCategoryBackground();
+  }
+
+  @Override
+  public void trimMemory() {
+    ViewGroup viewGroup = getCandidateViewPager();
+    if (viewGroup == null) {
+      return;
+    }
+    for (int i = 0; i < viewGroup.getChildCount(); ++i) {
+      View view = viewGroup.getChildAt(i);
+      if (view instanceof MemoryManageable) {
+        MemoryManageable.class.cast(view).trimMemory();
+      }
+    }
   }
 }

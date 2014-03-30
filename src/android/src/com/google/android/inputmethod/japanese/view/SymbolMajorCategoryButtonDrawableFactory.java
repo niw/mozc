@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -147,12 +147,12 @@ public class SymbolMajorCategoryButtonDrawableFactory {
         paint.reset();
         paint.setAntiAlias(true);
         paint.setColor(shadowColor);
-        canvas.save();
+        int saveCount = canvas.save();
         try {
           canvas.translate(1, 1);
           canvas.drawPath(path, paint);
         } finally {
-          canvas.restore();
+          canvas.restoreToCount(saveCount);
         }
       }
 
@@ -194,13 +194,13 @@ public class SymbolMajorCategoryButtonDrawableFactory {
       int size = bounds.height() / 3;
       sourceDrawable.setBounds(0, 0, size, size);
 
-      canvas.save();
+      int saveCount = canvas.save();
       try {
         canvas.translate(bounds.right - size - 3, bounds.bottom - size - 3);
         canvas.clipRect(0, 0, size, size);
         sourceDrawable.draw(canvas);
       } finally {
-        canvas.restore();
+        canvas.restoreToCount(saveCount);
       }
     }
   }

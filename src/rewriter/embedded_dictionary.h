@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -31,7 +31,7 @@
 #define MOZC_REWRITER_EMBEDDED_DICTIONARY_H_
 
 #include <string>
-#include "base/base.h"
+#include "base/port.h"
 
 namespace mozc {
 

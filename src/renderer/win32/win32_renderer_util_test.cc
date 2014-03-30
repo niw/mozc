@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -37,12 +37,10 @@
 #include <atlgdi.h>
 #include <atlmisc.h>
 
-#include <list>
-
-#include "base/base.h"
 #include "base/logging.h"
 #include "base/mmap.h"
 #include "base/util.h"
+#include "base/win_font_test_helper.h"
 #include "renderer/renderer_command.pb.h"
 #include "renderer/win32/win32_font_util.h"
 #include "renderer/win32/win32_renderer_util.h"
@@ -281,13 +279,11 @@ class AppInfoUtil {
 class Win32RendererUtilTest : public testing::Test {
  public:
   static string GetMonospacedFontFaceForTest() {
-    // "IPAexゴシック"
-    return "IPAex\343\202\264\343\202\267\343\203\203\343\202\257";
+    return WinFontTestHelper::GetIPAexGothicFontName();
   }
 
   static string GetPropotionalFontFaceForTest() {
-    // "IPAex明朝"
-    return "IPAex\346\230\216\346\234\235";
+    return WinFontTestHelper::GetIPAexMinchoFontName();
   }
 
   static CLogFont GetFont(bool is_proportional, bool is_vertical) {
@@ -977,13 +973,13 @@ class Win32RendererUtilTest : public testing::Test {
     // On Windows XP, the availability of typical Japanese fonts such are as
     // MS Gothic depends on the language edition and language packs.
     // So we will register a private font for unit test.
-    RegisterFonts();
+    EXPECT_TRUE(WinFontTestHelper::Initialize());
   }
 
   static void TearDownTestCase() {
     // Free private fonts although the system automatically frees them when
     // this process is terminated.
-    UnregisterFonts();
+    WinFontTestHelper::Uninitialize();
   }
 
  private:
@@ -1055,75 +1051,7 @@ class Win32RendererUtilTest : public testing::Test {
       area->set_bottom(-781021488);
     }
   }
-
-  static void RegisterFonts() {
-    // We assume the font exists in the local directory.
-    // See comments in renderer.gyp for details. Here we use OSS font so that
-    // developers can freely run these test cases.
-    const wchar_t *kPrivateFonts[] = {
-        L"data\\ipaexg.ttf",
-        L"data\\ipaexm.ttf",
-    };
-    for (size_t i = 0; i < ARRAYSIZE(kPrivateFonts); ++i) {
-      const wchar_t *font_name = kPrivateFonts[i];
-
-      wchar_t w_path[MAX_PATH] = {};
-      const DWORD char_size =
-          ::GetModuleFileNameW(nullptr, w_path, ARRAYSIZE(w_path));
-      const DWORD get_module_file_name_error = ::GetLastError();
-      if (char_size == 0) {
-        LOG(ERROR) << "GetModuleFileNameW failed.  error = "
-                   << get_module_file_name_error;
-        return;
-      } else if (char_size == ARRAYSIZE(w_path)) {
-        LOG(ERROR) << "The result of GetModuleFileNameW was truncated.";
-        return;
-      }
-      if (!::PathRemoveFileSpec(w_path)) {
-        LOG(ERROR) << "PathRemoveFileSpec failed.";
-        return;
-      }
-      if (!::PathAppend(w_path, font_name)) {
-        LOG(ERROR) << "PathAppend failed.";
-        return;
-      }
-      string path;
-      Util::WideToUTF8(w_path, &path);
-
-      Mmap mmap;
-      if (!mmap.Open(path.c_str())) {
-        LOG(ERROR) << "Mmap::Open failed.";
-        return;
-      }
-
-      DWORD num_font = 0;
-      const HANDLE handle =
-          ::AddFontMemResourceEx(mmap.begin(), mmap.size(), nullptr, &num_font);
-      if (handle == nullptr) {
-        const int error = ::GetLastError();
-        LOG(ERROR) << "AddFontMemResourceEx failed. error = " << error;
-        return;
-      }
-      font_handles_.push_back(handle);
-    }
-  }
-
-  static void UnregisterFonts() {
-    list<HANDLE>::const_iterator i = font_handles_.begin();
-    while (i != font_handles_.end()) {
-      if (!::RemoveFontMemResourceEx(*i)) {
-        const int error = ::GetLastError();
-        LOG(ERROR) << "RemoveFontMemResourceEx failed. error = " << error;
-        ++i;
-      } else {
-        i = font_handles_.erase(i);
-      }
-    }
-  }
-  static list<HANDLE> font_handles_;
 };
-
-list<HANDLE> Win32RendererUtilTest::font_handles_;
 
 TEST_F(Win32RendererUtilTest, GetPointInPhysicalCoordsTest) {
   const CPoint kClientOffset(8, 42);
@@ -3583,10 +3511,10 @@ TEST_F(Win32RendererUtilTest, EvernoteEditorComposition) {
   const UINT kClassStyle = CS_DBLCLKS;
   const DWORD kWindowStyle =
       WS_CHILDWINDOW | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
-  COMPILE_ASSERT(kWindowStyle == 0x56000000, EVERNOTE_EDITOR_WINDOW_STYLE);
+  static_assert(kWindowStyle == 0x56000000, "Check actual value");
   const DWORD kWindowExStyle =
       WS_EX_LEFT | WS_EX_LTRREADING | WS_EX_RIGHTSCROLLBAR;
-  COMPILE_ASSERT(kWindowExStyle == 0, EVERNOTE_EDITOR_WINDOW_EX_STYLE);
+  static_assert(kWindowExStyle == 0, "Check actual value");
 
   const CRect kWindowRect(1548, 879, 1786, 1416);
   const CPoint kClientOffset(0, 0);
@@ -3693,13 +3621,13 @@ TEST_F(Win32RendererUtilTest, EvernoteEditorComposition) {
 TEST_F(Win32RendererUtilTest, CrescentEveComposition_Issue3239031) {
   const wchar_t kClassName[] = L"CrescentEditer";
   const UINT kClassStyle = CS_DBLCLKS | CS_BYTEALIGNCLIENT;
-  COMPILE_ASSERT(kClassStyle == 0x00001008, CRESCENTEVE_CLASS_STYLE);
+  static_assert(kClassStyle == 0x00001008, "Check actual value");
   const DWORD kWindowStyle = WS_CHILDWINDOW | WS_VISIBLE | WS_VSCROLL;
-  COMPILE_ASSERT(kWindowStyle == 0x50200000, CRESCENTEVE_WINDOW_STYLE);
+  static_assert(kWindowStyle == 0x50200000, "Check actual value");
   const DWORD kWindowExStyle =
       WS_EX_LEFT | WS_EX_LTRREADING | WS_EX_RIGHTSCROLLBAR |
       WS_EX_ACCEPTFILES | WS_EX_CLIENTEDGE;
-  COMPILE_ASSERT(kWindowExStyle == 0x00000210, CRESCENTEVE_WINDOW_EX_STYLE);
+  static_assert(kWindowExStyle == 0x00000210, "Check actual value");
 
   const CRect kWindowRect(184, 192, 1312, 1426);
   const CPoint kClientOffset(2, 2);
@@ -5246,11 +5174,11 @@ TEST_F(Win32RendererUtilTest, Opera10_Suggest) {
       WS_CAPTION | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN |
       WS_SYSMENU | WS_THICKFRAME | WS_OVERLAPPED | WS_MINIMIZEBOX |
       WS_MAXIMIZEBOX;
-  COMPILE_ASSERT(kWindowStyle == 0x16cf0000, OPERA10_WINDOW_STYLE);
+  static_assert(kWindowStyle == 0x16cf0000, "Check actual value");
   const DWORD kWindowExStyle =
       WS_EX_LEFT | WS_EX_LTRREADING | WS_EX_RIGHTSCROLLBAR |
       WS_EX_ACCEPTFILES | WS_EX_WINDOWEDGE;
-  COMPILE_ASSERT(kWindowExStyle == 0x00000110, OPERA10_WINDOW_EX_STYLE);
+  static_assert(kWindowExStyle == 0x00000110, "Check actual value");
 
   const CRect kWindowRect(538, 229, 2114, 1271);
   const CPoint kClientOffset(8, 0);
@@ -5288,11 +5216,11 @@ TEST_F(Win32RendererUtilTest, Opera10_Convert) {
       WS_CAPTION | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN |
       WS_SYSMENU | WS_THICKFRAME | WS_OVERLAPPED | WS_MINIMIZEBOX |
       WS_MAXIMIZEBOX;
-  COMPILE_ASSERT(kWindowStyle == 0x16cf0000, OPERA10_WINDOW_STYLE);
+  static_assert(kWindowStyle == 0x16cf0000, "Check actual value");
   const DWORD kWindowExStyle =
       WS_EX_LEFT | WS_EX_LTRREADING | WS_EX_RIGHTSCROLLBAR |
       WS_EX_ACCEPTFILES | WS_EX_WINDOWEDGE;
-  COMPILE_ASSERT(kWindowExStyle == 0x00000110, OPERA10_WINDOW_EX_STYLE);
+  static_assert(kWindowExStyle == 0x00000110, "Check actual value");
 
   const CRect kWindowRect(538, 229, 2114, 1271);
   const CPoint kClientOffset(8, 0);
@@ -5333,11 +5261,11 @@ TEST_F(Win32RendererUtilTest, Emacs22) {
       WS_CAPTION | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN |
       WS_SYSMENU | WS_THICKFRAME | WS_OVERLAPPED | WS_MINIMIZEBOX |
       WS_MAXIMIZEBOX;
-  COMPILE_ASSERT(kWindowStyle == 0x16cf0000, EMACS22_WINDOW_STYLE);
+  static_assert(kWindowStyle == 0x16cf0000, "Check actual value");
   const DWORD kWindowExStyle =
       WS_EX_LEFT | WS_EX_LTRREADING | WS_EX_RIGHTSCROLLBAR |
       WS_EX_ACCEPTFILES | WS_EX_OVERLAPPEDWINDOW;
-  COMPILE_ASSERT(kWindowExStyle == 0x00000310, EMACS22_WINDOW_EX_STYLE);
+  static_assert(kWindowExStyle == 0x00000310, "Check actual value");
 
   const CRect kWindowRect(175, 175, 797, 924);
   const CPoint kClientOffset(10, 53);
@@ -5392,11 +5320,11 @@ TEST_F(Win32RendererUtilTest, Meadow3) {
       WS_CAPTION | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN |
       WS_SYSMENU | WS_THICKFRAME | WS_OVERLAPPED | WS_MINIMIZEBOX |
       WS_MAXIMIZEBOX;
-  COMPILE_ASSERT(kWindowStyle == 0x16cf0000, MEADOW_WINDOW_STYLE);
+  static_assert(kWindowStyle == 0x16cf0000, "Check actual value");
   const DWORD kWindowExStyle =
       WS_EX_LEFT | WS_EX_LTRREADING | WS_EX_RIGHTSCROLLBAR |
       WS_EX_ACCEPTFILES | WS_EX_OVERLAPPEDWINDOW;
-  COMPILE_ASSERT(kWindowExStyle == 0x00000310, MEADOW_WINDOW_EX_STYLE);
+  static_assert(kWindowExStyle == 0x00000310, "Check actual value");
 
   const CRect kWindowRect(175, 175, 797, 928);
   const CPoint kClientOffset(10, 53);

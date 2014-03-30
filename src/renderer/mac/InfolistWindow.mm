@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,6 @@
 
 #import "InfolistView.h"
 
-#include "base/base.h"
 #include "base/coordinates.h"
 #include "base/logging.h"
 #include "client/client_interface.h"
@@ -111,7 +110,7 @@ void InfolistWindow::SetCandidates(const Candidates &candidates) {
   [infolist_view setCandidates:&candidates];
   [infolist_view setNeedsDisplay:YES];
   NSSize size = [infolist_view updateLayout];
-  ::SizeWindow(window_, size.width, size.height, YES);
+  ResizeWindow(size.width, size.height);
 }
 
 void InfolistWindow::DelayHide(int delay) {
@@ -148,6 +147,7 @@ void InfolistWindow::Hide() {
   if (visible) {
     SendUsageStatsEvent(command_sender_, SessionCommand::INFOLIST_WINDOW_HIDE);
   }
+  visible_ = false;
 }
 
 void InfolistWindow::Show() {
@@ -156,6 +156,7 @@ void InfolistWindow::Show() {
   if (!visible) {
     SendUsageStatsEvent(command_sender_, SessionCommand::INFOLIST_WINDOW_SHOW);
   }
+  visible_ = true;
 }
 
 void InfolistWindow::onTimer(NSTimer* timer) {

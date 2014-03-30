@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -62,7 +62,6 @@ TARGET_PLATFORM_TO_DIGIT = {
     'Windows': '0',
     'Mac': '1',
     'Linux': '2',
-    'ChromeOS': '2',
     'Android': '3',
     'NaCl': '4',
     }
@@ -77,6 +76,8 @@ VERSION_PROPERTIES = [
     'TARGET_PLATFORM',
     'ANDROID_APPLICATION_ID',
     'ANDROID_SERVICE_NAME',
+    'NACL_DICTIONARY_VERSION',
+    'ANDROID_ARCH',
     ]
 
 MOZC_EPOCH = datetime.date(2009, 5, 24)
@@ -88,10 +89,6 @@ def _GetRevisionForPlatform(revision, target_platform, is_channel_dev):
     logging.critical('REVISION property in template file or channel_dev '
                      'parameter is mandatory')
     sys.exit(1)
-  # ChromeOS build uses a tar ball of OSS version named in the manner
-  # of 'mozc-1.1.773.102.tar.bz2' and depends on the revision number,
-  # so we'd like to use the same revision number between ChromeOS and
-  # OSS GNU/Linux version.
   last_digit = TARGET_PLATFORM_TO_DIGIT.get(target_platform, None)
   if last_digit is None:
     logging.critical('target_platform %s is invalid. Accetable ones are %s',
@@ -116,7 +113,7 @@ def _GetRevisionForPlatform(revision, target_platform, is_channel_dev):
 
 
 def _ParseVersionTemplateFile(template_path, target_platform, is_channel_dev,
-                              android_application_id):
+                              android_application_id, android_arch):
   """Parses a version definition file.
 
   Args:
@@ -125,6 +122,7 @@ def _ParseVersionTemplateFile(template_path, target_platform, is_channel_dev,
     is_channel_dev: True if dev channel. False if stable channel.
       None if you want to use template file's configuration.
     android_application_id: Android application id.
+    android_arch: Android architecture (arm, x86, mips)
   Returns:
     A dictionary generated from the template file.
   """
@@ -155,7 +153,8 @@ def _ParseVersionTemplateFile(template_path, target_platform, is_channel_dev,
   template_dict['TARGET_PLATFORM'] = target_platform
   template_dict['ANDROID_APPLICATION_ID'] = android_application_id
   template_dict['ANDROID_SERVICE_NAME'] = (
-        'org.mozc.android.inputmethod.japanese.MozcService')
+      'org.mozc.android.inputmethod.japanese.MozcService')
+  template_dict['ANDROID_ARCH'] = android_arch
   return template_dict
 
 
@@ -177,7 +176,7 @@ def _GetVersionInFormat(properties, version_format):
 
   result = version_format
   for keyword in VERSION_PROPERTIES:
-    result = result.replace('@%s@' % keyword, properties[keyword])
+    result = result.replace('@%s@' % keyword, properties.get(keyword, ''))
   return result
 
 
@@ -186,7 +185,8 @@ def GenerateVersionFileFromTemplate(template_path,
                                     version_format,
                                     target_platform,
                                     is_channel_dev=None,
-                                    android_application_id=''):
+                                    android_application_id='',
+                                    android_arch='arm'):
   """Generates version file from template file and given parameters.
 
   Args:
@@ -201,10 +201,13 @@ def GenerateVersionFileFromTemplate(template_path,
       If False BUILD becomes 1 digit (e.g. 3 for Android).
       If None BUILD property in the template file is used.
     android_application_id: Android application id.
+    android_arch: Android architecture (arm, x86, mips)
   """
 
   properties = _ParseVersionTemplateFile(template_path, target_platform,
-                                         is_channel_dev, android_application_id)
+                                         is_channel_dev,
+                                         android_application_id,
+                                         android_arch)
   version_definition = _GetVersionInFormat(properties, version_format)
   old_content = ''
   if os.path.exists(output_path):
@@ -221,7 +224,7 @@ def GenerateVersionFileFromTemplate(template_path,
 
 
 def GenerateVersionFile(version_template_path, version_path, target_platform,
-                        is_channel_dev, android_application_id):
+                        is_channel_dev, android_application_id, android_arch):
   """Reads the version template file and stores it into version_path.
 
   This doesn't update the "version_path" if nothing will be changed to
@@ -235,23 +238,29 @@ def GenerateVersionFile(version_template_path, version_path, target_platform,
       None if you want to use template file's configuration.
     android_application_id: [Android Only] application id
       (e.g. org.mozc.android).
+    android_arch: Android architecture (arm, x86, mips)
   """
-  version_format = ('MAJOR=@MAJOR@\n'
-                    'MINOR=@MINOR@\n'
-                    'BUILD=@BUILD@\n'
-                    'REVISION=@REVISION@\n'
-                    'ANDROID_VERSION_CODE=@ANDROID_VERSION_CODE@\n'
-                    'FLAG=@FLAG@\n'
-                    'TARGET_PLATFORM=@TARGET_PLATFORM@\n'
-                    'ANDROID_APPLICATION_ID=@ANDROID_APPLICATION_ID@\n'
-                    'ANDROID_SERVICE_NAME=@ANDROID_SERVICE_NAME@\n')
+  version_format = '\n'.join([
+      'MAJOR=@MAJOR@',
+      'MINOR=@MINOR@',
+      'BUILD=@BUILD@',
+      'REVISION=@REVISION@',
+      'ANDROID_VERSION_CODE=@ANDROID_VERSION_CODE@',
+      'FLAG=@FLAG@',
+      'TARGET_PLATFORM=@TARGET_PLATFORM@',
+      'ANDROID_APPLICATION_ID=@ANDROID_APPLICATION_ID@',
+      'ANDROID_SERVICE_NAME=@ANDROID_SERVICE_NAME@',
+      'NACL_DICTIONARY_VERSION=@NACL_DICTIONARY_VERSION@',
+      'ANDROID_ARCH=@ANDROID_ARCH@'
+  ]) + '\n'
   GenerateVersionFileFromTemplate(
       version_template_path,
       version_path,
       version_format,
       target_platform=target_platform,
       is_channel_dev=is_channel_dev,
-      android_application_id=android_application_id)
+      android_application_id=android_application_id,
+      android_arch=android_arch)
 
 
 class MozcVersion(object):
@@ -316,6 +325,10 @@ class MozcVersion(object):
     """Returns the version string based on the specified format."""
     return _GetVersionInFormat(self._properties, version_format)
 
+  def GetAndroidArch(self):
+    """Returns Android architecture."""
+    return self._properties.get('ANDROID_ARCH', None)
+
 
 def main():
   """Generates version file based on the default format.
@@ -339,6 +352,10 @@ def main():
   parser.add_option('--android_application_id', dest='android_application_id',
                     default='my.application.id',
                     help='Specifies the application id (Android Only).')
+  parser.add_option('--android_arch', dest='android_arch',
+                    default='arm',
+                    help='Specifies Android architecture (arm, x86, mips) '
+                    '(Android Only)')
   (options, args) = parser.parse_args()
   assert not args, 'Unexpected arguments.'
   assert options.template_path, 'No --template_path was specified.'
@@ -350,7 +367,8 @@ def main():
       version_path=options.output,
       target_platform=options.target_platform,
       is_channel_dev=options.channel_dev,
-      android_application_id=options.android_application_id)
+      android_application_id=options.android_application_id,
+      android_arch=options.android_arch)
 
 if __name__ == '__main__':
   main()

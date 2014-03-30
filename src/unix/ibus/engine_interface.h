@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -106,6 +106,11 @@ class EngineInterface {
                                  gint y,
                                  gint w,
                                  gint h) = 0;
+
+  // The interface function for the "set-content-type" signal
+  virtual void SetContentType(IBusEngine *engine,
+                              guint purpose,
+                              guint hints) = 0;
 };
 
 }  // namespace ibus

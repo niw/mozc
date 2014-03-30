@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -31,7 +31,6 @@
 
 #include <string>
 
-#include "base/base.h"
 #include "base/util.h"
 
 namespace mozc {
@@ -91,13 +90,7 @@ inline char32 ConvertVenderSpecificCharacter(char32 c) {
 void ConvertVenderSpecificString(StringPiece input, string *output) {
   output->clear();
   for (ConstChar32Iterator iter(input); !iter.Done(); iter.Next()) {
-    const char32 ucs4 = iter.Get();
-    const char32 new_ucs4 = ConvertVenderSpecificCharacter(ucs4);
-    if (new_ucs4 == ucs4) {  // the same code point
-      iter.GetUtf8().AppendToString(output);
-    } else {
-      Util::UCS4ToUTF8Append(new_ucs4, output);
-    }
+    Util::UCS4ToUTF8Append(ConvertVenderSpecificCharacter(iter.Get()), output);
   }
 }
 

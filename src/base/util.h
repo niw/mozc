@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -187,30 +187,36 @@ class Util {
                            const char *end,
                            size_t *mblen);
 
+  // Returns true if |s| is split into |first_char32| + |rest|.
+  // You can pass NULL to |first_char32| and/or |rest| to ignore the matched
+  // value.
+  // Returns false if an invalid UTF-8 sequence is prefixed. That is, |rest| may
+  // contain any invalid sequence even when this method returns true.
+  static bool SplitFirstChar32(StringPiece s,
+                               char32 *first_char32,
+                               StringPiece *rest);
+
+  // Returns true if |s| is split into |rest| + |last_char32|.
+  // You can pass NULL to |rest| and/or |last_char32| to ignore the matched
+  // value.
+  // Returns false if an invalid UTF-8 sequence is suffixed. That is, |rest| may
+  // contain any invalid sequence even when this method returns true.
+  static bool SplitLastChar32(StringPiece s,
+                              StringPiece *rest,
+                              char32 *last_char32);
+
   static void UCS4ToUTF8(char32 c, string *output);
   static void UCS4ToUTF8Append(char32 c, string *output);
-
-  // The return value overflow if the UTF8-bytes represent the
-  // character with code point >0xFFFF.
-  static uint16 UTF8ToUCS2(const char *begin,
-                           const char *end,
-                           size_t *mblen);
-
-  // Converts UCS2 code point to UTF8 string.
-  static void UCS2ToUTF8(uint16 c, string *output);
-  static void UCS2ToUTF8Append(uint16 c, string *output);
 
 #ifdef OS_WIN
   // Returns how many wide characters are necessary in UTF-16 to represent
   // given UTF-8 string. Note that the result of this method becomes greater
   // than that of Util::CharsLen if |src| contains any character which is
   // encoded by the surrogate-pair in UTF-16.
-  static size_t WideCharsLen(const char *src);
-  static size_t WideCharsLen(const string &src);
+  static size_t WideCharsLen(StringPiece src);
   // Converts the encoding of the specified string from UTF-8 to UTF-16, and
   // vice versa.
-  static int UTF8ToWide(const char *input, wstring *output);
-  static int UTF8ToWide(const string &input, wstring *output);
+  static int UTF8ToWide(StringPiece input, wstring *output);
   static int WideToUTF8(const wchar_t *input, string *output);
   static int WideToUTF8(const wstring &input, string *output);
 #endif  // OS_WIN
@@ -293,6 +299,10 @@ class Util {
   // Return random variable whose range is [0..size-1].
   // This function uses rand() internally, so don't use it for
   // security-sensitive purpose.
+  // Caveats: The returned value does not have good granularity especially
+  // when |size| is larger than |RAND_MAX|.
+  // TODO(yukawa): Improve the granularity.
+  // TODO(yukawa): Clarify the semantics when |size| is 0 or smaller.
   static int Random(int size);
 
   // Set the seed of Util::Random().
@@ -322,6 +332,13 @@ class Util {
   // GetFrequency().
   static uint64 GetTicks();
 
+#ifdef __native_client__
+  // Sets the time difference between local time and UTC time in seconds.
+  // We use this function in NaCl Mozc because we can't know the local timezone
+  // in NaCl environment.
+  static void SetTimezoneOffset(int32 timezone_offset_sec);
+#endif  // __native_client__
+
   // Interface of the helper class.
   // Default implementation is defined in the .cc file.
   class ClockInterface {
@@ -334,6 +351,9 @@ class Util {
     // High accuracy clock.
     virtual uint64 GetFrequency() = 0;
     virtual uint64 GetTicks() = 0;
+#ifdef __native_client__
+    virtual void SetTimezoneOffset(int32 timezone_offset_sec) = 0;
+#endif  // __native_client__
   };
 
   // This function is provided for test.
@@ -499,7 +519,7 @@ class Util {
   // return UNKNOWN_FORM if |str| contains both HALF_WIDTH and FULL_WIDTH.
   static FormType GetFormType(const string &str);
 
-  // Basically, if chraset >= JIX0212, the char is platform dependent char.
+  // Basically, if charset >= JIX0212, the char is platform dependent char.
   enum CharacterSet {
     ASCII,         // ASCII (simply ucs4 <= 0x007F)
     JISX0201,      // defined at least in 0201 (can be in 0208/0212/0213/CP9232)
@@ -527,52 +547,48 @@ class Util {
 // string.
 //
 // Example usage:
-//   string utf8_str;
-//   for (ConstChar32Iterator iter(utf8_str); !iter.Done(); iter.Next()) {
+//   string utf8;
+//   for (ConstChar32Iterator iter(utf8); !iter.Done(); iter.Next()) {
 //     char32 c = iter.Get();
 //     ...
 //   }
 class ConstChar32Iterator {
  public:
-  explicit ConstChar32Iterator(const StringPiece utf8_string) {
-    ptr_ = utf8_string.data();
-    end_ = utf8_string.data() + utf8_string.size();
-    current_ = Util::UTF8ToUCS4(ptr_, end_, &current_char_size_);
-  }
-
-  ConstChar32Iterator(const char *utf8_ptr, size_t size) {
-    ptr_ = utf8_ptr;
-    end_ = utf8_ptr + size;
-    current_ = Util::UTF8ToUCS4(ptr_, end_, &current_char_size_);
-  }
-
-  char32 Get() const {
-    DCHECK(ptr_ < end_);
-    return current_;
-  }
-
-  StringPiece GetUtf8() const {
-    DCHECK(ptr_ < end_);
-    return StringPiece(ptr_, current_char_size_);
-  }
-
-  void Next() {
-    DCHECK(ptr_ < end_);
-    ptr_ += current_char_size_;
-    current_ = Util::UTF8ToUCS4(ptr_, end_, &current_char_size_);
-  }
-
-  bool Done() const {
-    return ptr_ == end_;
-  }
+  explicit ConstChar32Iterator(StringPiece utf8_string);
+  char32 Get() const;
+  void Next();
+  bool Done() const;
 
  private:
-  const char *ptr_;
-  const char *end_;
+  StringPiece utf8_string_;
   char32 current_;
-  size_t current_char_size_;
+  bool done_;
 
   DISALLOW_COPY_AND_ASSIGN(ConstChar32Iterator);
+};
+
+// Const reverse iterator implementation to traverse on a (utf8) string as a
+// char32 string.
+//
+// Example usage:
+//   string utf8;
+//   for (ConstChar32ReverseIterator iter(utf8); !iter.Done(); iter.Next()) {
+//     char32 c = iter.Get();
+//     ...
+//   }
+class ConstChar32ReverseIterator {
+ public:
+  explicit ConstChar32ReverseIterator(StringPiece utf8_string);
+  char32 Get() const;
+  void Next();
+  bool Done() const;
+
+ private:
+  StringPiece utf8_string_;
+  char32 current_;
+  bool done_;
+
+  DISALLOW_COPY_AND_ASSIGN(ConstChar32ReverseIterator);
 };
 
 // Actual definitions of delimiter classes.

@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -29,9 +29,9 @@
 
 #include "dictionary/user_dictionary_session_handler.h"
 
-#include "base/base.h"
 #include "base/file_util.h"
 #include "base/logging.h"
+#include "base/port.h"
 #include "base/scoped_ptr.h"
 #include "base/util.h"
 #include "dictionary/user_dictionary_session.h"
@@ -558,11 +558,6 @@ uint64 UserDictionarySessionHandler::CreateNewSessionId() const {
   uint64 id = kInvalidSessionId;
   while (true) {
     Util::GetRandomSequence(reinterpret_cast<char *>(&id), sizeof(id));
-#ifdef  __native_client__
-    // Because JavaScript does not support uint64.
-    // So we downsize the session id range from uint64 to uint32 in NaCl.
-    id = static_cast<uint32>(id);
-#endif  // __native_client__
 
     if (id != kInvalidSessionId &&
         (session_.get() == NULL || session_id_ != id)) {

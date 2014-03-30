@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -38,6 +38,7 @@ import org.mozc.android.inputmethod.japanese.emoji.EmojiProviderType;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidates.Annotation;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidates.CandidateList;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidates.CandidateWord;
+import com.google.common.base.Preconditions;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -131,7 +132,7 @@ public class SymbolCandidateStorage {
   }
 
   private final SymbolHistoryStorage symbolHistoryStorage;
-  private EmojiProviderType emojiProviderType = null;
+  private EmojiProviderType emojiProviderType = EmojiProviderType.NONE;
   private EmojiDescriptionSet emojiDescriptionSet = EmojiDescriptionSet.NULL_INSTANCE;
   private Map<String, String> emojiDescriptionMap = null;
 
@@ -140,6 +141,8 @@ public class SymbolCandidateStorage {
   }
 
   public void setEmojiProviderType(EmojiProviderType emojiProviderType) {
+    Preconditions.checkNotNull(emojiProviderType);
+
     if (this.emojiProviderType == emojiProviderType) {
       // No change.
       return;

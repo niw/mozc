@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -75,6 +75,7 @@ class QualityRegressionUtil {
                       string *actual_value);
 
   void SetRequest(const commands::Request &request);
+  static string GetPlatformString(uint32 platform_bitfiled);
 
  private:
   ConverterInterface *converter_;

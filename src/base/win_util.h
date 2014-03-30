@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -70,7 +70,7 @@ class WinUtil {
       const wstring &base_filename);
 
   // Retrieve whether the calling thread hold loader lock or not.
-  // Return true if the state is retrieved successfuly.
+  // Return true if the state is retrieved successfully.
   // Otherwise, the state of loader lock is unknown.
   // NOTE: |lock_held| may be false if the DLL is loaded as
   // implicit link.
@@ -115,6 +115,11 @@ class WinUtil {
   static bool IsProcessImmersive(HANDLE process_handle, bool *is_immersive);
 
   // Returns true if succeeds to determine whether the process specified by
+  // |process_handle| is running with RestrictedToken or not. Otherwise,
+  // returns false.
+  static bool IsProcessRestricted(HANDLE process_handle, bool *is_restricted);
+
+  // Returns true if succeeds to determine whether the process specified by
   // |process_handle| is running under AppContainer sandbox environment or not.
   // Otherwise, returns false.
   static bool IsProcessInAppContainer(HANDLE process_handle,
@@ -145,8 +150,14 @@ class WinUtil {
   // Returns true if the process specified by |pid| exists and its *initial*
   // NT path is retrieved as |nt_path|. Note that even when the process path is
   // renamed after the process is launched, the *initial* path is retrieved.
-  // This is important whem MSI changes paths of executables.
+  // This is important when MSI changes paths of executables.
   static bool GetProcessInitialNtPath(DWORD pid, wstring *nt_path);
+
+  // Returns true if input settings is shared among applications on Windows 8.
+  // Returns false otherwise.
+  // http://msdn.microsoft.com/en-us/library/windows/desktop/hh994466.aspx
+  // http://msdn.microsoft.com/en-us/library/windows/desktop/ms724947.aspx
+  static bool IsPerUserInputSettingsEnabled();
 
  private:
   // Compares |lhs| with |rhs| by CompareStringOrdinal and returns the result
@@ -202,6 +213,7 @@ class ScopedCOMInitializer {
  private:
   DISALLOW_COPY_AND_ASSIGN(ScopedCOMInitializer);
 };
+
 }  // namespace mozc
 
 #endif  // OS_WIN

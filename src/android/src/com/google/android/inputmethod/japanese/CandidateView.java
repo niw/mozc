@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,6 @@
 
 package org.mozc.android.inputmethod.japanese;
 
-import org.mozc.android.inputmethod.japanese.CandidateWordView.CandidateSelectListener;
 import org.mozc.android.inputmethod.japanese.keyboard.BackgroundDrawableFactory.DrawableType;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidates.CandidateList;
 import org.mozc.android.inputmethod.japanese.protobuf.ProtoCandidates.CandidateWord;
@@ -45,21 +44,20 @@ import org.mozc.android.inputmethod.japanese.ui.ScrollGuideView;
 import org.mozc.android.inputmethod.japanese.ui.SpanFactory;
 import org.mozc.android.inputmethod.japanese.view.MozcDrawableFactory;
 import org.mozc.android.inputmethod.japanese.view.SkinType;
+import com.google.common.base.Preconditions;
 
 import android.content.Context;
 import android.content.res.Resources;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
-import android.view.View;
 import android.view.animation.Animation;
 import android.widget.CompoundButton;
-import android.widget.FrameLayout;
 
 /**
  * The view to show candidates.
  *
  */
-public class CandidateView extends InOutAnimatedFrameLayout {
+public class CandidateView extends InOutAnimatedFrameLayout implements MemoryManageable {
 
   /**
    * Adapter for conversion candidate selection.
@@ -105,6 +103,7 @@ public class CandidateView extends InOutAnimatedFrameLayout {
 
     {
       setBackgroundDrawableType(DrawableType.CANDIDATE_BACKGROUND);
+      layouter = new ConversionCandidateLayouter();
     }
 
     public ConversionCandidateWordView(Context context, AttributeSet attributeSet) {
@@ -114,18 +113,23 @@ public class CandidateView extends InOutAnimatedFrameLayout {
           resources.getInteger(R.integer.candidate_scroller_velocity_decay_rate) / 1000000f);
       scroller.setMinimumVelocity(
           resources.getInteger(R.integer.candidate_scroller_minimum_velocity));
+    }
 
-      float valueTextSize = resources.getDimension(R.dimen.candidate_text_size);
+    void setCandidateTextDimension(float candidateTextSize, float descriptionTextSize) {
+      Preconditions.checkArgument(candidateTextSize > 0);
+      Preconditions.checkArgument(descriptionTextSize > 0);
+
+      Resources resources = getResources();
+
       float valueHorizontalPadding =
           resources.getDimension(R.dimen.candidate_horizontal_padding_size);
       float valueVerticalPadding = resources.getDimension(R.dimen.candidate_vertical_padding_size);
-      float descriptionTextSize = resources.getDimension(R.dimen.candidate_description_text_size);
       float descriptionHorizontalPadding =
           resources.getDimension(R.dimen.symbol_description_right_padding);
       float descriptionVerticalPadding =
           resources.getDimension(R.dimen.symbol_description_bottom_padding);
 
-      candidateLayoutRenderer.setValueTextSize(valueTextSize);
+      candidateLayoutRenderer.setValueTextSize(candidateTextSize);
       candidateLayoutRenderer.setValueHorizontalPadding(valueHorizontalPadding);
       candidateLayoutRenderer.setValueScalingPolicy(ValueScalingPolicy.HORIZONTAL);
       candidateLayoutRenderer.setDescriptionTextSize(descriptionTextSize);
@@ -134,7 +138,7 @@ public class CandidateView extends InOutAnimatedFrameLayout {
       candidateLayoutRenderer.setDescriptionLayoutPolicy(DescriptionLayoutPolicy.EXCLUSIVE);
 
       SpanFactory spanFactory = new SpanFactory();
-      spanFactory.setValueTextSize(valueTextSize);
+      spanFactory.setValueTextSize(candidateTextSize);
       spanFactory.setDescriptionTextSize(descriptionTextSize);
       spanFactory.setDescriptionDelimiter(DESCRIPTION_DELIMITER);
 
@@ -144,16 +148,16 @@ public class CandidateView extends InOutAnimatedFrameLayout {
       float candidateTextMinimumWidth =
           resources.getDimension(R.dimen.candidate_text_minimum_width);
       float candidateChunkMinimumWidth =
-          resources.getDimension(R.dimen.keyboard_folding_icon_size);
+          candidateTextSize + resources.getDimension(R.dimen.candidate_vertical_padding_size) * 2;
 
-      setCandidateLayouter(new ConversionCandidateLayouter(
-          spanFactory,
-          candidateWidthCompressionRate,
-          candidateTextMinimumWidth,
-          candidateChunkMinimumWidth,
-          valueTextSize,
-          valueHorizontalPadding,
-          valueVerticalPadding));
+      ConversionCandidateLayouter layouter = ConversionCandidateLayouter.class.cast(this.layouter);
+      layouter.setSpanFactory(spanFactory);
+      layouter.setValueWidthCompressionRate(candidateWidthCompressionRate);
+      layouter.setMinValueWidth(candidateTextMinimumWidth);
+      layouter.setMinChunkWidth(candidateChunkMinimumWidth);
+      layouter.setValueHeight(candidateTextSize);
+      layouter.setValueHorizontalPadding(valueHorizontalPadding);
+      layouter.setValueVerticalPadding(valueVerticalPadding);
     }
 
     @Override
@@ -252,23 +256,6 @@ public class CandidateView extends InOutAnimatedFrameLayout {
     reset();
   }
 
-  @Override
-  protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
-    super.onLayout(changed, left, top, right, bottom);
-
-    View inputFrameFoldButton = getInputFrameFoldButton();
-    if (inputFrameFoldButton.getVisibility() != VISIBLE) {
-      return;
-    }
-    FrameLayout.LayoutParams params =
-        FrameLayout.LayoutParams.class.cast(inputFrameFoldButton.getLayoutParams());
-    ConversionCandidateLayouter layouter = getConversionCandidateWordView().getCandidateLayouter();
-    params.setMargins(
-        0, (layouter.getRowHeight() - inputFrameFoldButton.getMeasuredHeight()) / 2,
-        ((int) layouter.getChunkWidth() - inputFrameFoldButton.getMeasuredWidth()) / 2, 0);
-    inputFrameFoldButton.setLayoutParams(params);
-  }
-
   CompoundButton getInputFrameFoldButton() {
     return CompoundButton.class.cast(findViewById(R.id.input_frame_fold_button));
   }
@@ -332,9 +319,22 @@ public class CandidateView extends InOutAnimatedFrameLayout {
     getConversionCandidateWordView().setSkinType(skinType);
   }
 
+  void setCandidateTextDimension(float candidateTextSize, float descriptionTextSize) {
+    Preconditions.checkArgument(candidateTextSize > 0);
+    Preconditions.checkArgument(descriptionTextSize > 0);
+
+    getConversionCandidateWordView().setCandidateTextDimension(candidateTextSize,
+                                                               descriptionTextSize);
+  }
+
   void setNarrowMode(boolean narrowMode) {
     getInputFrameFoldButton().setVisibility(narrowMode ? GONE : VISIBLE);
     getConversionCandidateWordView().getCandidateLayouter()
         .reserveEmptySpanForInputFoldButton(!narrowMode);
+  }
+
+  @Override
+  public void trimMemory() {
+    getConversionCandidateWordView().trimMemory();
   }
 }

@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -31,12 +31,14 @@
 #define MOZC_RENDERER_RENDERER_CLIENT_H_
 
 #include <string>
-#include "base/base.h"
+#include "base/port.h"
+#include "base/scoped_ptr.h"
 #include "renderer/renderer_interface.h"
 
 namespace mozc {
 
 class IPCClientFactoryInterface;
+class IPCClientInterface;
 
 namespace renderer {
 
@@ -122,6 +124,8 @@ class RendererClient : public RendererInterface {
   void set_suppress_error_dialog(bool suppress);
 
  private:
+  IPCClientInterface *CreateIPCClient() const;
+
   bool is_window_visible_;
   bool disable_renderer_path_check_;
   int  version_mismatch_nums_;

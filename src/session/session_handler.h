@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -52,6 +52,7 @@
 #endif  // OS_ANDROID || __native_client__
 
 namespace mozc {
+class EngineInterface;
 #ifndef MOZC_DISABLE_SESSION_WATCHDOG
 class SessionWatchDog;
 #else  // MOZC_DISABLE_SESSION_WATCHDOG
@@ -66,15 +67,10 @@ class Command;
 }  // namespace commands
 
 namespace session {
-class SessionFactoryInterface;
 class SessionInterface;
 class SessionObserverHandler;
 class SessionObserverInterface;
 }  // namespace session
-
-namespace sync {
-class SyncHandler;
-}  // namespace sync
 
 namespace user_dictionary {
 class UserDictionarySessionHandler;
@@ -82,7 +78,8 @@ class UserDictionarySessionHandler;
 
 class SessionHandler : public SessionHandlerInterface {
  public:
-  SessionHandler();
+  // This class doesn't take an ownership of |engine|.
+  explicit SessionHandler(EngineInterface *engine);
   virtual ~SessionHandler();
 
   // Returns true if SessionHandle is available.
@@ -98,8 +95,6 @@ class SessionHandler : public SessionHandlerInterface {
   session::SessionInterface *NewSession();
 
   virtual void AddObserver(session::SessionObserverInterface *observer);
-
-  virtual void SetSyncHandler(sync::SyncHandler *sync_handler);
 
  private:
   FRIEND_TEST(SessionHandlerTest, StorageTest);
@@ -128,10 +123,6 @@ class SessionHandler : public SessionHandlerInterface {
   bool SetStoredConfig(commands::Command *command);
   bool SetImposedConfig(commands::Command *command);
   bool SetRequest(commands::Command *command);
-  bool StartCloudSync(commands::Command *command);
-  bool ClearCloudSync(commands::Command *command);
-  bool GetCloudSyncStatus(commands::Command *command);
-  bool AddAuthCode(commands::Command *command);
 
   bool InsertToStorage(commands::Command *command);
   bool ReadAllFromStorage(commands::Command *command);
@@ -157,11 +148,8 @@ class SessionHandler : public SessionHandlerInterface {
   uint64 last_cleanup_time_;
   uint64 last_create_session_time_;
 
-  session::SessionFactoryInterface *session_factory_;
+  EngineInterface *engine_;
   scoped_ptr<session::SessionObserverHandler> observer_handler_;
-#ifdef ENABLE_CLOUD_SYNC
-  sync::SyncHandler *sync_handler_;
-#endif  // ENABLE_CLOUD_SYNC
   scoped_ptr<Stopwatch> stopwatch_;
   scoped_ptr<user_dictionary::UserDictionarySessionHandler>
       user_dictionary_session_handler_;

@@ -1,4 +1,4 @@
-// Copyright 2010-2013, Google Inc.
+// Copyright 2010-2014, Google Inc.
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -53,21 +53,23 @@ class TransliterationRewriter : public RewriterInterface  {
   virtual bool Rewrite(const ConversionRequest &request,
                        Segments *segments) const;
 
+  virtual void Finish(const ConversionRequest &request, Segments *segments) {}
+
  private:
-  void InitT13NCandidate(const string &key,
+  void InitT13nCandidate(const string &key,
                          const string &value,
                          uint16 lid,
                          uint16 rid,
                          Segment::Candidate *cand) const;
-  // Set transliteration values into segment.  If t13ns is invalid,
+  // Sets transliteration values into segment.  If t13ns is invalid,
   // false is returned.
   bool SetTransliterations(const vector<string> &t13ns,
                            const string &key,
                            Segment *segment) const;
-  bool FillT13NsFromComposer(const ConversionRequest &request,
+  bool FillT13nsFromComposer(const ConversionRequest &request,
                              Segments *segments) const;
-  bool FillT13NsFromKey(Segments *segments) const;
-  bool AddRawNumberT13NCandidates(const ConversionRequest &request,
+  bool FillT13nsFromKey(Segments *segments) const;
+  bool AddRawNumberT13nCandidates(const ConversionRequest &request,
                                   Segments *segments) const;
 
   const uint16 unknown_id_;

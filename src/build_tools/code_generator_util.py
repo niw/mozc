@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Copyright 2010-2013, Google Inc.
+# Copyright 2010-2014, Google Inc.
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -140,10 +140,10 @@ def ParseColumnStream(stream, num_column=None, delimiter=None):
   """Returns parsed columns read from stream."""
   if num_column is None:
     for line in stream:
-      yield line.split(delimiter)
+      yield line.rstrip('\n').split(delimiter)
   else:
     for line in stream:
-      yield line.split(delimiter)[:num_column]
+      yield line.rstrip('\n').split(delimiter)[:num_column]
 
 
 def SelectColumn(stream, column_index):
