@@ -17,7 +17,7 @@ Build Instructions for Android on Mac
 To build Mozc for Android, for now, we need to use Ubuntu 12.04 but setting up such development environment takes long time and many hassles.
 This repository provides an additional [Vagrant](http://www.vagrantup.com/) configuration and a [Puppet](https://puppetlabs.com/) manifest so that we can build Mozc for Android quickly.
 
- 1. Install the latest [Vagrant](http://www.vagrantup.com/), [VirtualBox](https://www.virtualbox.org/wiki/Downloads) and VirualBox Extension Pack. I've tested with Vagrant 1.1.4, VirtualBox 4.2.10 and Extension Pack
+ 1. Install the latest [Vagrant](http://www.vagrantup.com/), [VirtualBox](https://www.virtualbox.org/wiki/Downloads) and VirualBox Extension Pack. I've tested with Vagrant 1.5.2, VirtualBox 4.3.10 and Extension Pack
  1. Checkout source code from this repository using `git` command.
  1. Run `vagrant up` in the repository directory.
  1. Grab a cup of coffee. This command will download Ubuntu 12.04, setup a virtual machine, install packages, Android SDK and NDK, etc, etc which will take a long time.
@@ -67,13 +67,13 @@ Build Instructions for Mac
 
         # Checkout dependencies.
         % python checkout_externals.py mac
-         
+        
         # Build Mozc itself.
         % cd src
         % python build_mozc.py clean && python build_mozc.py gyp --noqt
         % python build_mozc.py build_tools -c Debug
         % python build_mozc.py build -c Debug mac/mac.gyp:GoogleJapaneseInput mac/mac.gyp:gen_launchd_confs
-         
+        
         # Then, install Mozc into /Library then kill existing processes.
         # which requires root priviledge.
         % sudo sh ../install_mac.sh
