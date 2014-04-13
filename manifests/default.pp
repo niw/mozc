@@ -47,7 +47,7 @@ exec {
   "update android-sdk":
     # Run android update command on expect to answer license agreement.
     # NOTE -u to not use GUI, -t to install minimum requirements.
-    command => "/usr/bin/expect -c 'set timeout -1; spawn /opt/android/android-sdk-linux/tools/android update sdk -u -t tool,platform-tool,build-tools-17.0.0,android-17,extra-android-support; while { true } { expect \"y/n\" { send \"y\\r\" } eof { catch wait r; exit [lindex \$r 3] }; }'",
+    command => "/usr/bin/expect -c 'set timeout -1; spawn /opt/android/android-sdk-linux/tools/android update sdk -u -t tool,platform-tool,build-tools-19.0.3,android-18,extra-android-support; while { true } { expect \"y/n\" { send \"y\\r\" } eof { catch wait r; exit [lindex \$r 3] }; }'",
     user => $user,
     # Disable timeout, this command takes really long time at first run.
     timeout => 0,

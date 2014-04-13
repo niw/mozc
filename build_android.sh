@@ -3,7 +3,7 @@ set -e
 
 PATH="/opt/android/android-sdk-linux/tools:$PATH"
 PATH="/opt/android/android-sdk-linux/platform-tools:$PATH"
-PATH="/opt/android/android-ndk-r8c:$PATH"
+PATH="/opt/android/android-ndk-r9d:$PATH"
 export PATH
 export JAVA_HOME="/usr/lib/jvm/default-java"
 
@@ -53,6 +53,6 @@ key.store.password=android
 key.alias.password=android
 EOF
 fi
-android update project -s -p android --target android-17
+android update project -s -p android --target android-18
 
 python build_mozc.py build android/android.gyp:apk -c "${ANDROID_BUILD_MODE}_Android"
