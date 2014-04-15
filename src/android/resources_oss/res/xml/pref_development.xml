@@ -49,4 +49,9 @@
         android:title="Logging protocol buffers" android:defaultValue="false"
         android:summary="Enable if you want verbose log of protocol buffers. This makes the performance far slower." />
   </PreferenceCategory>
+  <PreferenceCategory android:title="Hack">
+    <CheckBoxPreference android:key="pref_tweak_quick_switch_to_latin"
+        android:title="Quick switch to English keyboard" android:defaultValue="true"
+        android:summary="Enable if you want to switch to system English keyboard quicly. This overrides the left-down key to toggle between mozc/system English keyboard." />
+  </PreferenceCategory>
 </PreferenceScreen>
