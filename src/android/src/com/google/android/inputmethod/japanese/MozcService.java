@@ -266,6 +266,11 @@ public class MozcService extends InputMethodService {
     }
 
     @Override
+    public void onSwitchInputMethodQuickly(String id) {
+      switchInputMethod(id);
+    }
+
+    @Override
     public void onUndo(List<? extends TouchEvent> touchEventList) {
       sessionExecutor.undoOrRewind(touchEventList, renderResultCallback);
     }

@@ -72,6 +72,11 @@ public abstract class ViewEventDelegator implements ViewEventListener {
   }
 
   @Override
+  public void onSwitchInputMethodQuickly(String id) {
+    delegated.onSwitchInputMethodQuickly(id);
+  }
+
+  @Override
   public void onUndo(List<? extends TouchEvent> touchEventList) {
     delegated.onUndo(touchEventList);
   }

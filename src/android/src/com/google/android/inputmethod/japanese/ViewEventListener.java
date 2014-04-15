@@ -124,4 +124,6 @@ public interface ViewEventListener {
    * Called when the key for editor action is pressed.
    */
   public void onActionKey();
+
+  public void onSwitchInputMethodQuickly(String id);
 }
